@@ -1,3 +1,3 @@
 # Docs
 
-`PLAN.md` lands here once the research pass completes.
+- `PLAN.md`: design plan (awaiting approval).
