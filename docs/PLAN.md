@@ -335,9 +335,9 @@ The contracts are documented here as OpenAPI (`docs/PUBLIC_API.md`, `docs/ADMIN_
 - bonus cargo CRUD;
 - recalculate one job or all jobs;
 - issue and revoke player tokens;
-- publish config versions and release manifests (rule 0).
+- publish config versions and release manifests (rule 0), and schedule revocations (effective 21 days after announcement).
 - **Auth:** a bot service token plus the acting admin's Discord user ID on every call. That ID goes into the audit log.
-- **Webhooks:** signed POSTs (`job.needs_review`, `job.scored`, `job.discarded`) to a URL the bot registers.
+- **Webhooks:** signed POSTs (`job.needs_review`, `job.scored`, `job.discarded`, `player.notification`, `version.revocation_scheduled`) to a URL the bot registers.
 - **Gap and late-start jobs are held for admin approval** (`review_policy = "hold"`).
 
 **Map basemap (decided; built and hosted in the site repo):**
@@ -444,15 +444,16 @@ I cannot run the games in this session, so the following steps need a real game 
 11. **Multiplayer:** all of it is tracked. For Singleplayer Division users, TruckersMP jobs are discarded (§6b).
 12. **Profiles:** separate timelines per profile (§6b).
 13. **Bonuses:** only the greatest bonus applies, and it stacks with the 0.85× penalty (§6).
-14. **License:** PolyForm Noncommercial 1.0.0, which allows reuse and modification but no commercial use (`LICENSE.md`, `NOTICE`).
+14. **License:** PolyForm Noncommercial 1.0.0 is a **placeholder**. The final license will be settled with the client you are building this for.
 15. **Hosting:** deferred.
 
-## 12. Open questions (none block stage 1)
+16. **Notifications also go to Discord DMs.** The server emits a signed `player.notification` webhook (Invalid delivery, speed penalty activated), and the bot DMs the player. The server applies its own random 5–30 s delay before sending it. The server only learns of the penalty once the chunk containing it is uploaded.
+17. **Revocation.** Admins can revoke a release or config version, and it takes effect **21 days after it is announced**.
+    - When revocation is scheduled, the server emits `version.revocation_scheduled`, and the bot DMs every player whose latest session used that version.
+    - Jobs captured before the effective time are unaffected. Jobs captured with the revoked version after it are discarded (rule 0).
+18. **DLC-gated map areas:** you own all DLC and will handle this in the tile generation and the site repo.
+19. **Discord bot:** it will be written afterwards by parallel agents against `docs/ADMIN_API.md`, which this repo defines in stage 4.
 
-1. **Revocation.** Should the server be able to revoke an old release or config version, so that jobs captured with it are discarded too?
-2. **Discord bot contract.**
-   - Does the bot already exist with an API shape I should match? If not, I'll define `docs/ADMIN_API.md` and you build the bot against it.
-   - Does the bot also issue player tokens, for example via a `/register` command?
-3. **Notification channel.** I've assumed desktop notifications from the client. Should they also go out as a webhook event, so the bot can DM the player?
-4. **DLC-gated map areas.** Shown or hidden on the public map? This is decided in the site repo.
-5. **Licensor name.** `NOTICE` uses your git name, "Ari Kotler". Should it be a team or VTC name instead?
+## 12. Open questions
+
+None are blocking. Hosting and the final license are deferred to you.
