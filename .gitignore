@@ -1,0 +1,20 @@
+# Rust
+/target/
+**/*.rs.bk
+
+# CMake / plugin builds
+/plugin/build*/
+/build*/
+
+# Local runtime data
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+/config/plasmatrack.toml
+/captures/
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

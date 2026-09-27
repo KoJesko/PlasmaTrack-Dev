@@ -1,0 +1,13 @@
+[workspace]
+resolver = "2"
+members = ["crates/pt-core"]
+
+[workspace.package]
+edition = "2021"
+rust-version = "1.80"
+publish = false
+
+[workspace.dependencies]
+serde = { version = "1", features = ["derive"] }
+toml = "0.8"
+thiserror = "1"
