@@ -1,0 +1,6 @@
+; Exports for the Windows DLL (same form as the SDK's examples/telemetry/telemetry.def,
+; without the LIBRARY line so the output name is free). Listing exports here also
+; turns off GNU ld's auto-export of every other symbol.
+EXPORTS
+    scs_telemetry_init
+    scs_telemetry_shutdown

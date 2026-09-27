@@ -1,0 +1,8 @@
+/* Linux .so: export only the SDK entry points. */
+{
+  global:
+    scs_telemetry_init;
+    scs_telemetry_shutdown;
+  local:
+    *;
+};
