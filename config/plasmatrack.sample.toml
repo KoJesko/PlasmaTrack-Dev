@@ -67,19 +67,21 @@ min_rate_l_per_s = 0.5
 max_rate_l_per_s = 200.0
 
 # ---------------------------------------------------------------------------
-# Review policy for situations the spec routes to the admin queue.
-#   "hold" = pending review, points held until an admin approves/rejects
-#   "flag" = scores, but shown to admins
-#   "off"  = not raised
+# Review policy. Every flag in PlasmaTrack means MANUAL REVIEW: the job is
+# pending and its points are held until an admin approves or rejects it
+# (via the Discord bot). This includes rule 4 (negative fuel).
+#   "review" = send to manual review
+#   "off"    = not raised
 # ---------------------------------------------------------------------------
 [review_policy]
-gap = "hold"          # forward load / untracked stretch inside a job
-late_start = "hold"   # job first seen mid-job; distance comes from job.delivered distance.km
+gap = "review"          # forward load / untracked stretch inside a job
+late_start = "review"   # job first seen mid-job; distance comes from job.delivered distance.km
+trace_checks = "review" # trace-measured mismatches: sample timing, seq gaps, hello vs data (§6a)
 # Gaps smaller than BOTH of these are ignored (e.g. a brief socket hiccup).
 min_gap_distance_mi = 0.1
 min_gap_duration_s = 5.0
 
-# Extra heuristics: review flags only, never invalidation, OFF by default.
+# Extra heuristics: manual review only (never invalidation), OFF by default.
 [review_flags]
 teleport_without_ferry_train_load = false
 odometer_jump = false
@@ -108,6 +110,28 @@ ferry_train_explain_window_wall_s = 10.0
 match_position_tolerance_m = 50.0
 match_fuel_tolerance_l = 1.0
 match_game_time_tolerance_min_game = 2
+
+# ---------------------------------------------------------------------------
+# Player notifications (desktop notification from the client).
+# Sent for: a delivery marked Invalid (rule 2) and the moment the speed
+# penalty (rule 5) activates. Each is delayed by a uniformly random time in
+# [delay_min_wall_s, delay_max_wall_s] with microsecond resolution.
+# ---------------------------------------------------------------------------
+[notifications]
+enabled = true
+delay_min_wall_s = 5.0
+delay_max_wall_s = 30.0
+
+# ---------------------------------------------------------------------------
+# Multiplayer. All multiplayer is tracked (TruckersMP, other MP mods, Convoy).
+# Convoy is detected from multiplayer.time.offset != 0
+# (common/scssdk_telemetry_common_channels.h:287-300). The SDK cannot identify
+# TruckersMP, so the plugin reports whether any of these module file names is
+# loaded in the game process. PROVISIONAL: empty until confirmed by capture.
+# Users with the "Singleplayer Division" flag have TruckersMP jobs discarded.
+# ---------------------------------------------------------------------------
+[multiplayer]
+truckersmp_module_names = []
 
 # ---------------------------------------------------------------------------
 # Plugin <-> client transport (localhost only).

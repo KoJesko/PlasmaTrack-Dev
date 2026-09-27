@@ -22,3 +22,7 @@ Status: foundation only. The design plan (`docs/PLAN.md`) is awaiting approval.
 Requires a stable Rust toolchain (https://rustup.rs).
 
     cargo test --workspace
+
+## License
+
+PolyForm Noncommercial 1.0.0: reuse and modification allowed, no commercial use. See `LICENSE.md` and `NOTICE`. Third-party components keep their own licenses.

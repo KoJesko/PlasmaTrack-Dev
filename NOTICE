@@ -1,0 +1,7 @@
+Required Notice: Copyright (c) 2026 Ari Kotler
+
+PlasmaTrack is licensed under the PolyForm Noncommercial License 1.0.0 (LICENSE.md).
+Reuse and modification are allowed for noncommercial purposes only.
+
+Third-party components keep their own licenses:
+- third_party/scssdk-1.14: SCS SDK, MIT (third_party/scssdk-1.14/sdk_license.txt)

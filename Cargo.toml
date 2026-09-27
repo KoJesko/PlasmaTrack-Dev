@@ -6,6 +6,7 @@ members = ["crates/pt-core"]
 edition = "2021"
 rust-version = "1.80"
 publish = false
+license = "PolyForm-Noncommercial-1.0.0"
 
 [workspace.dependencies]
 serde = { version = "1", features = ["derive"] }

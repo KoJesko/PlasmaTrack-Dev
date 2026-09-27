@@ -195,10 +195,10 @@ This model incorporates the red-team findings. All thresholds are in `[timeline]
 | Load, same job, loaded point inside the kept timeline | Truncate to the matching point. Matching uses odometer, game time, position and fuel together. Everything after it, gaps included, is reverted. Recording continues. |
 | Load, same job, loaded point matches **previously reverted** material | Restore that branch up to the loaded point and score it normally, overspeed included. This closes the "revert, then restore" exploit, where overspeed would otherwise be laundered into a gap. |
 | Load, same job, loaded point beyond anything seen | **Gap** from the last kept point to the loaded point. Resume. Goes to review (`review_policy.gap`). |
-| Load to a no-job save or a different job's save | Current job → **Suspended**: not cancelled, not flagged, no penalty. The other job is resumed (if suspended), tracked (if new, as a late start), or stopped (if already delivered). |
+| Load to a no-job save or a different job's save | Current job → **Suspended**: not cancelled, not sent to review, no penalty. The other job is resumed (if suspended), tracked (if new, as a late start), or stopped (if already delivered). |
 | Suspended job's fingerprint comes back | Resume, using the three "Load, same job" rows above. |
 | Load brings back a **cancelled** job (decided) | Resume it; the cancellation is reverted. Exception: if that fingerprint was ever delivered, stop tracking. |
-| Load into an **already delivered** job | **Stop tracking** until the fingerprint changes. The server also rejects a second delivery of the same fingerprint for the same player. |
+| Load into an **already delivered** job | **Stop tracking** until the fingerprint changes. The server also rejects a second delivery of the same fingerprint for the same player. **Exception (decided): a delivery that was Invalid is reopened**, because the invalidity may come from falling through the map. The Invalid delivery is marked `reverted_by_save_load`, the job resumes, and a later delivery replaces it. |
 | Client restart | The plugin's journal and snapshot are compared with SQLite's last-seen state, then the same rows apply. |
 | Game crash | The new plugin session is context. The loaded autosave is handled by the same rows. |
 
@@ -226,18 +226,18 @@ This model incorporates the red-team findings. All thresholds are in `[timeline]
 1. Negative kept-timeline distance → Discard.
 2. Sustained speed over `invalid_over_mph` → Invalid.
 3. Driven distance over 3000 mi → Pending review.
-4. Fuel used below −tolerance → Flag. Also flag every mid-run fuel jump outside a detected refuel, with its timestamp.
+4. Fuel used below −tolerance → **manual review** (points held). Also send every mid-run fuel jump outside a detected refuel to manual review, with its timestamp.
 5. Sustained speed over `penalty_over_mph` → accepted distance = 0.85 × driven.
 6. 1 point per accepted mile.
-7. Bonus cargo.
+7. Bonus cargo (decided): among all matching bonuses, **only the greatest applies**, meaning the one that yields the most points. It stacks with the 0.85× speed penalty: bonus applied to the accepted distance. Flat and multiplier bonuses never stack with each other. The date window is checked at delivery time on the server clock.
 - Final points = floor(total).
 
 **Evaluation**
 - **Overspeed:** eligible samples exclude paused time and ferry/train transfer windows. The record keeps peak mph and time over each threshold.
 - **Refuel (decided):** the SDK has no refuel event, so a refuel is a **heuristic** episode: the fuel rises while the truck is stationary, at a plausible rate (`[rules.refuel]`). Only litres are tracked. Fuel cost is never calculated.
 - **Fuel across save loads (decided):** a fuel change across a load is most likely a save edit, and it is **ignored**. There's no flag and no rule 4, because fuel is only summed within tracked runs.
-- **Late-start and gap review:** applied through `review_policy` (hold, flag or off; default hold).
-- **Other heuristics:** teleport, odometer jump and impossible delivery time exist only as review flags, **off by default**. Diagnostics (unexplained Δodometer, derived vs. reported speed, fuel against capacity) are always *stored* for admins but never flag anything.
+- **Manual review everywhere (decided): every "flag" means manual review**, with the job pending and its points held until an admin approves or rejects it via the Discord bot. `review_policy` values are `review` or `off`. Gap, late-start and trace checks default to `review`.
+- **Other heuristics:** teleport, odometer jump and impossible delivery time exist only as manual-review triggers, **off by default**. Diagnostics (unexplained Δodometer, derived vs. reported speed, fuel against capacity) are always *stored* for admins but never trigger review.
 - **Record:** every rule result is stored, and a job can carry any number of flags.
 - **Recalculation:** each job records the config version and bonus set it was scored with. Admin recalculation replays the raw trace.
 
@@ -262,16 +262,39 @@ This model incorporates the red-team findings. All thresholds are in `[timeline]
 - Release builds produce a manifest, which an admin publishes on the server (`release_manifests`).
 - Any file that matches no published release, a missing or extra PlasmaTrack file, or a disagreement between the plugin's self-hash and the manifest → **Discard (rule 0)**.
 
-**Limit.** A modified client can upload clean hashes while running tampered code, so rule 0 raises the cost of cheating but cannot prove integrity. The server therefore also measures the trace itself: real sample intervals against the declared `sample_rate_hz`, sequence continuity, and whether `hello` agrees with the data. These trace checks are **review flags, not discards**. At low FPS the game legitimately delivers fewer samples than configured (they are emitted at frame end), so discarding on them would lose honest jobs (see open question 11).
+**Limit.** A modified client can upload clean hashes while running tampered code, so rule 0 raises the cost of cheating but cannot prove integrity. The server therefore also measures the trace itself: real sample intervals against the declared `sample_rate_hz`, sequence continuity, and whether `hello` agrees with the data. These trace checks send the job to **manual review (decided), not discard**. At low FPS the game legitimately delivers fewer samples than configured (they are emitted at frame end), so discarding on them would lose honest jobs.
+
+## 6b. Profiles, multiplayer and notifications (decided)
+
+**Profiles are separate timelines.** Different profiles have different jobs, trucks and progress, so all timeline state (§5) is keyed by (player, game, **profile_key**).
+- A profile switch is never treated as a save load within one timeline. The job of the profile you left stays suspended in its own timeline.
+- **The SDK has no profile identifier** (§3), so `profile_key` must come from outside the SDK. The client will read candidate sources, and the captures (§9) decide which is reliable:
+  - the game's own log file;
+  - which profile folder under the game's documents directory is being written.
+  - Neither is confirmed yet. Under Proton these files live inside the Wine prefix, and the client will locate them.
+- Until confirmed, the key is `unknown`, and profile switches fall back to load handling.
+
+**Multiplayer is tracked** in every form: TruckersMP, other multiplayer mods, and Convoy.
+- **Convoy** is detected from `multiplayer.time.offset ≠ 0` (common_channels.h:287-300).
+- **TruckersMP** cannot be identified by the SDK. The plugin reports whether any module named in `[multiplayer] truckersmp_module_names` is loaded in the game process. That list stays empty until a capture confirms the names.
+- **Singleplayer Division:** a user flag, set through the admin API. For these users, jobs detected as TruckersMP are **discarded**, with the reason shown. Convoy and other multiplayer remain allowed.
+- Each job stores its multiplayer kind.
+
+**Player notifications** (desktop notification from the client, via `notify-rust`, MIT/Apache):
+- Sent when a delivery is marked **Invalid**.
+- Sent when the **0.85× speed penalty activates** during a job.
+- Each notification fires after a uniformly random delay between 5 and 30 s, drawn at microsecond resolution from the OS random source (`[notifications]`).
+- These are provisional client-side results. The server's result is authoritative.
+- Windows focus assist / "do not disturb while gaming" can hold toasts until you leave the fullscreen game.
 
 ## 7. Data model (server SQLite; the client mirrors raw frames, jobs and upload queue)
 
 | Table | Contents |
 |---|---|
-| `users` | id, name, role (player/admin), token_sha256, password_argon2 (admins only), disabled |
+| `users` | id, name, role (player/admin), token_sha256, discord_user_id, **singleplayer_division** flag, disabled |
 | `plugin_sessions` | sess, user, game, game_version, first/last seq |
 | `raw_chunks` | sess, seq_from, seq_to, zstd blob, received_at. Append-only and idempotent on (sess, seq) |
-| `jobs` | user, **game**, fingerprint, state, start_kind (tracked/late_start), config snapshot fields, truck_key, start/end odometer and fuel, refuelled_l, driven/accepted mi, points, peak mph, seconds over each threshold, delivered attributes, outcome (discarded / invalid / pending / flagged / valid / approved / rejected / voided), config_version |
+| `jobs` | user, **game**, fingerprint, state, start_kind (tracked/late_start), config snapshot fields, truck_key, start/end odometer and fuel, refuelled_l, driven/accepted mi, points, peak mph, seconds over each threshold, delivered attributes, outcome (discarded / invalid / pending_review / valid / approved / rejected / voided), review_reasons[], multiplayer (none / convoy / truckersmp / other), profile_key, config_version |
 | `job_segments` | kind (tracked / gap / reverted / restored), seq range, load timestamps |
 | `rule_results` | job, rule, triggered, details JSON |
 | `bonus_cargo` | game, match (exact or glob), type (flat/multiplier), amount, active_from/to |
@@ -306,7 +329,7 @@ The contracts are documented here as OpenAPI (`docs/PUBLIC_API.md`, `docs/ADMIN_
 - Unit tests use four known points (Paris, Crete, London, Las Vegas).
 
 **Admin API for the Discord bot** (`/api/v1/admin/...`):
-- review queue: pending, flagged, invalid, gap and late-start jobs;
+- review queue: every job pending manual review (with its reasons), plus invalid jobs;
 - job detail with every rule result, the full trace (reverted parts marked), and speed/fuel series and route GeoJSON, so the bot or a site review page can chart and map them;
 - approve, reject or void, each with a **required reason**;
 - bonus cargo CRUD;
@@ -339,6 +362,8 @@ I cannot run the games in this session, so the following steps need a real game 
   - quick-job accept (teleport plus truck swap)
   - truck purchase
   - repair/service teleport
+  - profile switch with a job active in each profile (to confirm the source of `profile_key`)
+  - a TruckersMP session (to confirm its module names) and a Convoy session
 - **Use of the captures.** They become fixtures and calibrate every PROVISIONAL value.
 - **Loopback check.** A `loopcheck` DLL/exe plus the steps from the research: compare `/proc/<pid>/ns/net` of the game and wineserver with the host, then run `loopcheck.dll` in the real game.
   - Needs one native-Steam and one Flatpak-Steam Linux box.
@@ -388,6 +413,12 @@ I cannot run the games in this session, so the following steps need a real game 
 - Load into an already-delivered job.
 - A late-start job.
 - An Invalid status cleared by a load.
+- A delivered Invalid job reopened by a load, then delivered clean.
+- Greatest-bonus selection, combined with the 0.85× penalty.
+- A Singleplayer Division user on TruckersMP (discarded) vs. on Convoy (scored).
+- A profile switch mid-job (separate timelines, nothing suspended across profiles).
+- A trace-check mismatch (manual review).
+- Negative fuel (manual review, points held).
 
 *Red-team cases*
 - Pressing Esc repeatedly during overspeed.
@@ -400,30 +431,28 @@ I cannot run the games in this session, so the following steps need a real game 
 
 ## 11. Decisions (2026-09-27)
 
-1. **Map:** you generate the tiles yourself with truckermudgeon/maps. This is allowed for modding as long as nothing is sold, so PlasmaTrack stays non-commercial (§8).
+1. **Map:** you generate the tiles yourself with truckermudgeon/maps. This is allowed for modding as long as nothing is sold, so PlasmaTrack stays non-commercial. The tiles are rendered in the separate site repo (§8).
 2. **Refuel:** the heuristic is accepted. Fuel cost is never calculated. Fuel spikes across save loads are treated as save edits and ignored (§6).
 3. **Captures:** you will run the capture protocol in both games (§9).
 4. **Cancelled job brought back by a load:** resume it, unless that job was already delivered (§5).
-5. **Review:** gap and late-start jobs are held for admin approval. All admin actions run through your Discord bot in a separate repo, and this repo provides the admin API and webhooks (§8).
-6. **Minimum patch:** 1.36. Earlier versions are unsupported.
-7. **Integrity:** rule 0 discards jobs whose config or install files match no published version (§6a).
-8. **Public site:** a separate repo. This repo exposes the JSON API and projected route GeoJSON only (§8).
+5. **Review:** every "flag" means manual review, with points held until an admin approves. This applies to gap, late-start, trace checks and rule 4. All admin actions run through your Discord bot in a separate repo (§6, §8).
+6. **Minimum patch:** 1.36. Earlier versions are unsupported. Manual submissions go to a website you'll provide later.
+7. **Integrity:** rule 0 discards jobs whose config or install files match no published version. Trace checks send the job to manual review (§6a).
+8. **Public site:** a separate repo, which doesn't exist yet. This repo exposes the JSON API and projected route GeoJSON only (§8).
+9. **Delivered-but-Invalid job brought back by a load:** it is reopened, because falling through the map can cause it (§5).
+10. **Notifications:** desktop notifications for an Invalid delivery and for the speed penalty activating, each delayed by a random 5–30 s at µs resolution (§6b).
+11. **Multiplayer:** all of it is tracked. For Singleplayer Division users, TruckersMP jobs are discarded (§6b).
+12. **Profiles:** separate timelines per profile (§6b).
+13. **Bonuses:** only the greatest bonus applies, and it stacks with the 0.85× penalty (§6).
+14. **License:** PolyForm Noncommercial 1.0.0, which allows reuse and modification but no commercial use (`LICENSE.md`, `NOTICE`).
+15. **Hosting:** deferred.
 
 ## 12. Open questions (none block stage 1)
 
-1. **Delivered while Invalid, then a mid-job save is loaded.** I recommend keeping "stop tracking", since a delivery is final and an admin can review it in Discord. Or should an Invalid delivery be reopenable?
-2. **Multiplayer (TruckersMP / Convoy).** Track these jobs or not? If yes, load detection is turned off while `multiplayer.time.offset ≠ 0`, since loads can't happen in multiplayer.
-3. **Manual submission for patches below 1.36.** Is this part of the Discord bot, or should the server offer a submission endpoint? If the server does, every submission goes to review.
-4. **Profiles.** The SDK has no profile ID, so a profile switch looks like a save load. Is one timeline per player per game acceptable?
-5. **Bonus cargo.** Can a flat bonus and a multiplier stack? Is the date window checked at delivery time on the server clock?
-6. **Integrity details.**
-   - Should trace-measured mismatches stay review flags (recommended) or discard?
-   - Should the server be able to revoke old releases or config versions?
-7. **Site repo.** Does the site repo exist yet, and what origin will it be served from (for CORS)? Should DLC-gated areas be shown? That choice affects which features the API exposes only if the tiles are also filtered there.
-8. **Hosting and license.**
-   - Where will the server run (domain, TLS)?
-   - What license should PlasmaTrack use? It must stay non-commercial.
-   - For GitHub, send me an empty private repo URL, or install `gh`.
-9. **Discord bot contract.**
+1. **Revocation.** Should the server be able to revoke an old release or config version, so that jobs captured with it are discarded too?
+2. **Discord bot contract.**
    - Does the bot already exist with an API shape I should match? If not, I'll define `docs/ADMIN_API.md` and you build the bot against it.
    - Does the bot also issue player tokens, for example via a `/register` command?
+3. **Notification channel.** I've assumed desktop notifications from the client. Should they also go out as a webhook event, so the bot can DM the player?
+4. **DLC-gated map areas.** Shown or hidden on the public map? This is decided in the site repo.
+5. **Licensor name.** `NOTICE` uses your git name, "Ari Kotler". Should it be a team or VTC name instead?

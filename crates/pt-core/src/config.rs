@@ -21,6 +21,8 @@ pub struct Config {
     pub review_policy: ReviewPolicy,
     pub review_flags: ReviewFlags,
     pub timeline: Timeline,
+    pub notifications: Notifications,
+    pub multiplayer: Multiplayer,
     pub plugin: Plugin,
     pub sync: Sync,
     /// Per-driver settings; the only part excluded from the integrity hash.
@@ -90,10 +92,9 @@ pub struct RefuelHeuristic {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum ReviewAction {
-    /// Pending review: points held until an admin approves or rejects.
-    Hold,
-    /// Scores normally, shown to admins.
-    Flag,
+    /// Manual review: the job is pending and its points are held until an
+    /// admin approves or rejects it. Every "flag" in PlasmaTrack means this.
+    Review,
     Off,
 }
 
@@ -102,6 +103,7 @@ pub enum ReviewAction {
 pub struct ReviewPolicy {
     pub gap: ReviewAction,
     pub late_start: ReviewAction,
+    pub trace_checks: ReviewAction,
     pub min_gap_distance_mi: f64,
     pub min_gap_duration_s: f64,
 }
@@ -148,6 +150,33 @@ pub struct Plugin {
 #[serde(deny_unknown_fields)]
 pub struct Sync {
     pub retry_interval_wall_s: f64,
+}
+
+/// Desktop notifications for a delivery marked Invalid (rule 2) and for the
+/// speed penalty (rule 5) activating. The client draws each delay uniformly
+/// from [min, max] at microsecond resolution (pt-core itself has no RNG).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Notifications {
+    pub enabled: bool,
+    pub delay_min_wall_s: f64,
+    pub delay_max_wall_s: f64,
+}
+
+impl Notifications {
+    /// Inclusive delay range in whole microseconds.
+    pub fn delay_range_us(&self) -> (u64, u64) {
+        let us = |s: f64| (s * 1_000_000.0).round() as u64;
+        (us(self.delay_min_wall_s), us(self.delay_max_wall_s))
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Multiplayer {
+    /// Module file names whose presence in the game process means TruckersMP.
+    /// PROVISIONAL: filled in from captures (the SDK cannot identify TruckersMP).
+    pub truckersmp_module_names: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -226,6 +255,13 @@ impl Config {
         if r.fuel.negative_fuel_tolerance_l < 0.0 || r.fuel.mid_job_jump_tolerance_l < 0.0 {
             errs.push("rules.fuel tolerances must be >= 0".into());
         }
+        let n = &self.notifications;
+        if !(n.delay_min_wall_s >= 0.0 && n.delay_min_wall_s <= n.delay_max_wall_s && n.delay_max_wall_s.is_finite()) {
+            errs.push(format!(
+                "notifications: need 0 <= delay_min_wall_s ({}) <= delay_max_wall_s ({})",
+                n.delay_min_wall_s, n.delay_max_wall_s
+            ));
+        }
         if r.refuel.min_rate_l_per_s > r.refuel.max_rate_l_per_s {
             errs.push("rules.refuel.min_rate_l_per_s must not exceed max_rate_l_per_s".into());
         }
@@ -260,6 +296,19 @@ mod tests {
         assert!(!c.review_flags.teleport_without_ferry_train_load);
         assert!(!c.review_flags.odometer_jump);
         assert!(!c.review_flags.impossible_delivery_time);
+        assert_eq!(c.review_policy.gap, ReviewAction::Review);
+        assert_eq!(c.review_policy.late_start, ReviewAction::Review);
+        assert_eq!(c.review_policy.trace_checks, ReviewAction::Review);
+        assert!(c.notifications.enabled);
+        assert_eq!(c.notifications.delay_range_us(), (5_000_000, 30_000_000));
+    }
+
+    #[test]
+    fn old_flag_action_is_rejected() {
+        let bad = SAMPLE.replace("gap = \"review\"", "gap = \"flag\"");
+        assert!(matches!(Config::from_toml_str(&bad), Err(ConfigError::Parse(_))));
+        let bad = SAMPLE.replace("delay_min_wall_s = 5.0", "delay_min_wall_s = 31.0");
+        assert!(matches!(Config::from_toml_str(&bad), Err(ConfigError::Invalid(_))));
     }
 
     #[test]
@@ -288,7 +337,8 @@ mod tests {
             ("sustained_window_s = 3.0", "sustained_window_s = 3.5"),
             ("invalid_over_mph = 150.0", "invalid_over_mph = 250.0"),
             ("negative_fuel_tolerance_l = 0.5", "negative_fuel_tolerance_l = 50.0"),
-            ("gap = \"hold\"", "gap = \"off\""),
+            ("gap = \"review\"", "gap = \"off\""),
+            ("delay_max_wall_s = 30.0", "delay_max_wall_s = 60.0"),
             ("odometer_jump = false", "odometer_jump = true"),
             ("sample_rate_hz = 20.0", "sample_rate_hz = 5.0"),
             ("retry_interval_wall_s = 20.0", "retry_interval_wall_s = 60.0"),
