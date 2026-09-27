@@ -219,6 +219,9 @@ This model incorporates the red-team findings. All thresholds are in `[timeline]
 **Comparison precision:** values are quantized to `compare_precision_*` before comparing. So exactly 105.0 mph is not over 105, and 3000.0 mi is not over 3000.
 
 **Rules**
+0. **Integrity** (added at your request; runs first; overrides the spec's "no other auto-invalidation"). The job is **discarded** (0 pts, reason and diff visible to admins, not approvable) if either check fails (§6a):
+   - the uploaded config's integrity hash matches no server-published config version;
+   - the uploaded install manifest matches no published release.
 1. Negative kept-timeline distance → Discard.
 2. Sustained speed over `invalid_over_mph` → Invalid.
 3. Driven distance over 3000 mi → Pending review.
@@ -236,6 +239,29 @@ This model incorporates the red-team findings. All thresholds are in `[timeline]
 - **Record:** every rule result is stored, and a job can carry any number of flags.
 - **Recalculation:** each job records the config version and bonus set it was scored with. Admin recalculation replays the raw trace.
 
+## 6a. Integrity: config and install files
+
+**Config**
+- Every plugin session's upload carries the client's full effective config and its `integrity_hash`.
+- The hash is SHA-256 of canonical sorted-key JSON of everything except `[local]`. It is implemented in `pt-core::config` and tested.
+- `[local]` holds `listen_address`, `port` and `server_url`. These may differ per driver and are the only keys excluded. Every other key must match.
+- The server checks the hash against `config_versions`:
+  - current version: OK;
+  - any earlier published version: OK, recorded as outdated, and the client is told to update;
+  - no match: **Discard (rule 0)**.
+- The job stores the hash, the matched version and a key-by-key diff against the current version.
+
+**Install files**
+- Every session upload carries a **manifest**: SHA-256 of every installed PlasmaTrack file.
+  - the plugin DLL/.so found in each Steam library, including Flatpak paths;
+  - the client binary;
+  - the config file.
+- The plugin also hashes its own module file and reports it in `hello`. That hash must agree with the manifest.
+- Release builds produce a manifest, which an admin publishes on the server (`release_manifests`).
+- Any file that matches no published release, a missing or extra PlasmaTrack file, or a disagreement between the plugin's self-hash and the manifest → **Discard (rule 0)**.
+
+**Limit.** A modified client can upload clean hashes while running tampered code, so rule 0 raises the cost of cheating but cannot prove integrity. The server therefore also measures the trace itself: real sample intervals against the declared `sample_rate_hz`, sequence continuity, and whether `hello` agrees with the data. These trace checks are **review flags, not discards**. At low FPS the game legitimately delivers fewer samples than configured (they are emitted at frame end), so discarding on them would lose honest jobs (see open question 11).
+
 ## 7. Data model (server SQLite; the client mirrors raw frames, jobs and upload queue)
 
 | Table | Contents |
@@ -248,7 +274,9 @@ This model incorporates the red-team findings. All thresholds are in `[timeline]
 | `rule_results` | job, rule, triggered, details JSON |
 | `bonus_cargo` | game, match (exact or glob), type (flat/multiplier), amount, active_from/to |
 | `audit_log` | actor, action, target, **required reason**, before/after JSON, time |
-| `config_versions` | TOML text, author, time |
+| `config_versions` | TOML text, integrity hash, author, time, current flag |
+| `release_manifests` | release version, platform, file path pattern, SHA-256, published_at, revoked flag |
+| `job_integrity` | job, config hash, matched config version (or none), config diff JSON, manifest JSON, manifest result, trace-check results |
 
 **Uploads**
 - The client uploads raw chunks to `POST /api/v1/chunks` with its bearer token.
@@ -369,4 +397,7 @@ I cannot run the games in this session, so the following steps need a real game 
 8. **Manual submission for patches below 1.36.** Add a portal form where every submission goes to review, or is that handled elsewhere?
 9. **Profiles.** The SDK has no profile ID, so switching profiles is indistinguishable from loading a save. Is one timeline per player per game acceptable?
 10. **Bonus cargo.** Can a flat bonus and a multiplier stack? Is the date window checked at delivery time on the server clock?
-11. **Hosting and license.** Where will the server run (domain, TLS)? What license, if any, should PlasmaTrack itself use? For GitHub, create an empty private repo and send me the URL, or install `gh`.
+11. **Integrity details.**
+    - Should trace-measured mismatches (sample rate, sequence gaps, `hello` vs. data) stay review flags, as recommended, or also discard?
+    - Should the server be able to **revoke** an old release or config version, so that jobs captured with it are discarded too?
+12. **Hosting and license.** Where will the server run (domain, TLS)? What license, if any, should PlasmaTrack itself use? For GitHub, create an empty private repo and send me the URL, or install `gh`.

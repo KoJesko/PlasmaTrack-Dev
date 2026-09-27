@@ -23,6 +23,8 @@ pub struct Config {
     pub timeline: Timeline,
     pub plugin: Plugin,
     pub sync: Sync,
+    /// Per-driver settings; the only part excluded from the integrity hash.
+    pub local: Local,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -138,8 +140,6 @@ pub struct Timeline {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Plugin {
-    pub listen_address: String,
-    pub port: u16,
     pub sample_rate_hz: f64,
     pub replay_buffer_wall_s: f64,
 }
@@ -147,8 +147,15 @@ pub struct Plugin {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Sync {
-    pub server_url: String,
     pub retry_interval_wall_s: f64,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Local {
+    pub listen_address: String,
+    pub port: u16,
+    pub server_url: String,
 }
 
 impl Config {
@@ -156,6 +163,29 @@ impl Config {
         let cfg: Config = toml::from_str(s)?;
         cfg.validate()?;
         Ok(cfg)
+    }
+
+    /// Canonical JSON of every setting that must match a server-published
+    /// config version: everything except `[local]`. Keys are sorted (serde_json
+    /// `Value` maps are ordered), so formatting, comments and key order in the
+    /// TOML file do not affect it.
+    pub fn integrity_canonical_json(&self) -> String {
+        let mut v = serde_json::to_value(self).expect("config always serializes");
+        v.as_object_mut()
+            .expect("config serializes to an object")
+            .remove("local");
+        v.to_string()
+    }
+
+    /// SHA-256 (lowercase hex) of [`Self::integrity_canonical_json`]. The client
+    /// uploads it; the server discards jobs whose hash matches no published
+    /// version (rule 0).
+    pub fn integrity_hash(&self) -> String {
+        use sha2::{Digest, Sha256};
+        Sha256::digest(self.integrity_canonical_json().as_bytes())
+            .iter()
+            .map(|b| format!("{b:02x}"))
+            .collect()
     }
 
     pub fn validate(&self) -> Result<(), ConfigError> {
@@ -199,8 +229,8 @@ impl Config {
         if r.refuel.min_rate_l_per_s > r.refuel.max_rate_l_per_s {
             errs.push("rules.refuel.min_rate_l_per_s must not exceed max_rate_l_per_s".into());
         }
-        if self.plugin.listen_address != "127.0.0.1" && self.plugin.listen_address != "::1" {
-            errs.push("plugin.listen_address must be a loopback address".into());
+        if self.local.listen_address != "127.0.0.1" && self.local.listen_address != "::1" {
+            errs.push("local.listen_address must be a loopback address".into());
         }
         if errs.is_empty() {
             Ok(())
@@ -230,6 +260,44 @@ mod tests {
         assert!(!c.review_flags.teleport_without_ferry_train_load);
         assert!(!c.review_flags.odometer_jump);
         assert!(!c.review_flags.impossible_delivery_time);
+    }
+
+    #[test]
+    fn integrity_hash_ignores_local_and_formatting() {
+        let base = Config::from_toml_str(SAMPLE).unwrap();
+        let h = base.integrity_hash();
+        assert_eq!(h.len(), 64);
+
+        let local_changed = SAMPLE
+            .replace("port = 30455", "port = 40000")
+            .replace("https://plasmatrack.example.invalid", "https://other.invalid");
+        assert_eq!(Config::from_toml_str(&local_changed).unwrap().integrity_hash(), h);
+
+        let reformatted = SAMPLE.replace("sustained_window_s = 3.0", "sustained_window_s   =   3.00 # same");
+        assert_eq!(Config::from_toml_str(&reformatted).unwrap().integrity_hash(), h);
+        let canon = base.integrity_canonical_json();
+        for local_key in ["\"local\"", "\"listen_address\"", "\"server_url\"", "\"port\""] {
+            assert!(!canon.contains(local_key), "{local_key} leaked into the integrity hash");
+        }
+    }
+
+    #[test]
+    fn integrity_hash_detects_any_compared_change() {
+        let h = Config::from_toml_str(SAMPLE).unwrap().integrity_hash();
+        for (from, to) in [
+            ("sustained_window_s = 3.0", "sustained_window_s = 3.5"),
+            ("invalid_over_mph = 150.0", "invalid_over_mph = 250.0"),
+            ("negative_fuel_tolerance_l = 0.5", "negative_fuel_tolerance_l = 50.0"),
+            ("gap = \"hold\"", "gap = \"off\""),
+            ("odometer_jump = false", "odometer_jump = true"),
+            ("sample_rate_hz = 20.0", "sample_rate_hz = 5.0"),
+            ("retry_interval_wall_s = 20.0", "retry_interval_wall_s = 60.0"),
+        ] {
+            let changed = SAMPLE.replace(from, to);
+            assert_ne!(changed, SAMPLE, "fixture did not apply: {from}");
+            let c = Config::from_toml_str(&changed).unwrap();
+            assert_ne!(c.integrity_hash(), h, "change not detected: {to}");
+        }
     }
 
     #[test]

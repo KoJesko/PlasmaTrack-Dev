@@ -8,7 +8,8 @@
 # Unit conversions are fixed by the spec and are NOT configurable:
 #   1 km = 0.621371 mi, mph = m/s x 2.23694 (see crates/pt-core/src/units.rs).
 #
-# Copy to config/plasmatrack.toml (git-ignored) to override locally.
+# Copy to config/plasmatrack.toml (git-ignored). Only [local] may differ per
+# driver; everything else must match a server-published config version.
 # Values marked PROVISIONAL must be calibrated from real game captures.
 
 config_version = 1
@@ -112,8 +113,6 @@ match_game_time_tolerance_min_game = 2
 # Plugin <-> client transport (localhost only).
 # ---------------------------------------------------------------------------
 [plugin]
-listen_address = "127.0.0.1"
-port = 30455
 sample_rate_hz = 20.0
 # Frames kept in memory for a reconnecting client (samples only; gameplay and
 # config events are journaled to disk until the client acknowledges them).
@@ -123,6 +122,15 @@ replay_buffer_wall_s = 120.0
 # Client -> server sync.
 # ---------------------------------------------------------------------------
 [sync]
-server_url = "https://plasmatrack.example.invalid"
 # Failed uploads are retried at this fixed interval, forever, until they succeed.
 retry_interval_wall_s = 20.0
+
+# ---------------------------------------------------------------------------
+# Per-driver settings. This is the ONLY section excluded from the integrity
+# check: every other key must match a config version published by the server,
+# or the job is discarded (rule 0).
+# ---------------------------------------------------------------------------
+[local]
+listen_address = "127.0.0.1"
+port = 30455
+server_url = "https://plasmatrack.example.invalid"
