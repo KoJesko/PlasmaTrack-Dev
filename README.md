@@ -14,7 +14,6 @@ Status: foundation only. The design plan (`docs/PLAN.md`) is awaiting approval.
 | `crates/pt-core/` | Shared Rust core used by client **and** server: units, config, timeline, rules |
 | `config/plasmatrack.sample.toml` | Every threshold, with units in the key names |
 | `fixtures/` | Replay-harness traces and expected results |
-| `web/` | Public job map, leaderboards, admin panel (static assets served by the server) |
 | `scripts/` | Build / install / verification helpers |
 | `docs/` | Plan and design notes |
 

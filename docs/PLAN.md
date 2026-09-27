@@ -21,7 +21,8 @@ Requirement changes folded in from our conversation:
 | Client | **Rust**, headless background app with a small status/settings page on `127.0.0.1` | The overlay is gone, so a webview is unnecessary. This avoids Tauri's proprietary MSVC Build Tools and WebView2. The GNU Rust toolchain is already installed. The client runs the exact same `pt-core` code as the server. |
 | Server | **Rust**: axum + tokio + **rusqlite (SQLite, WAL)** | Same language and same `pt-core` crate. SQLite keeps it a single binary. **rusqlite on both sides** avoids the `libsqlite3-sys` `links` conflict that sqlx-sqlite + rusqlite hit in one workspace. Postgres remains possible later. |
 | Shared | `pt-core`: pure, with no I/O, no clock and no RNG | Deterministic. Client and server produce bit-identical results. The replay harness uses it directly. |
-| Web | Server-rendered HTML + no-build vendored ES modules. **Leaflet** (BSD-2), **uPlot** (MIT) for speed/fuel charts | No Node toolchain needed. Everything is FOSS. |
+| Web | **Not in this repo.** The public site (MapLibre GL JS + pmtiles, self-generated tiles) lives in a separate repo and consumes this server's public JSON API | Your decision. This repo owns the API contract and route projection. |
+| Admin | Admin API + signed webhooks consumed by your **Discord bot (separate repo)** | Your decision; this repo only owns the API contract. |
 | Auth | Admins: argon2id password + session cookie. Players: 256-bit server-issued token, stored as SHA-256 | As specified. |
 
 Rejected alternatives:
@@ -44,7 +45,6 @@ crates/pt-replay/          CLI: replay a trace file through pt-core, diff agains
 crates/pt-client/          binary: plugin listener, SQLite log, uploader, status page
 crates/pt-server/          binary: ingest API, scoring, public pages, admin panel
 fixtures/                  *.trace.jsonl + *.expected.json (one per rule / boundary / load scenario)
-web/                       static assets (map, charts, admin)
 config/                    plasmatrack.sample.toml
 scripts/                   install (Windows / Proton / Flatpak), loopback verification, capture tooling
 docs/                      this plan, capture protocol, install guide
@@ -197,6 +197,7 @@ This model incorporates the red-team findings. All thresholds are in `[timeline]
 | Load, same job, loaded point beyond anything seen | **Gap** from the last kept point to the loaded point. Resume. Goes to review (`review_policy.gap`). |
 | Load to a no-job save or a different job's save | Current job → **Suspended**: not cancelled, not flagged, no penalty. The other job is resumed (if suspended), tracked (if new, as a late start), or stopped (if already delivered). |
 | Suspended job's fingerprint comes back | Resume, using the three "Load, same job" rows above. |
+| Load brings back a **cancelled** job (decided) | Resume it; the cancellation is reverted. Exception: if that fingerprint was ever delivered, stop tracking. |
 | Load into an **already delivered** job | **Stop tracking** until the fingerprint changes. The server also rejects a second delivery of the same fingerprint for the same player. |
 | Client restart | The plugin's journal and snapshot are compared with SQLite's last-seen state, then the same rows apply. |
 | Game crash | The new plugin session is context. The loaded autosave is handled by the same rows. |
@@ -233,7 +234,8 @@ This model incorporates the red-team findings. All thresholds are in `[timeline]
 
 **Evaluation**
 - **Overspeed:** eligible samples exclude paused time and ferry/train transfer windows. The record keeps peak mph and time over each threshold.
-- **Refuel:** the SDK has no refuel event, so a refuel is a **heuristic** episode: the fuel rises while the truck is stationary, at a plausible rate (`[rules.refuel]`).
+- **Refuel (decided):** the SDK has no refuel event, so a refuel is a **heuristic** episode: the fuel rises while the truck is stationary, at a plausible rate (`[rules.refuel]`). Only litres are tracked. Fuel cost is never calculated.
+- **Fuel across save loads (decided):** a fuel change across a load is most likely a save edit, and it is **ignored**. There's no flag and no rule 4, because fuel is only summed within tracked runs.
 - **Late-start and gap review:** applied through `review_policy` (hold, flag or off; default hold).
 - **Other heuristics:** teleport, odometer jump and impossible delivery time exist only as review flags, **off by default**. Diagnostics (unexplained Δodometer, derived vs. reported speed, fuel against capacity) are always *stored* for admins but never flag anything.
 - **Record:** every rule result is stored, and a job can carry any number of flags.
@@ -283,27 +285,42 @@ This model incorporates the red-team findings. All thresholds are in `[timeline]
 - Chunks are queued in SQLite. Failures retry every `sync.retry_interval_wall_s` (20 s) until they succeed.
 - The server derives all jobs itself. A client-computed result is never an input.
 
-## 8. Public site and admin panel
+## 8. Server APIs (the public site and the Discord bot live in separate repos)
 
-**Public site**
-- Per-game job list and leaderboard at `/ets2/...` and `/ats/...`. Games are never combined.
-- **One public page per job**, showing the route on the map, stats and outcome. Reverted material is never shown publicly.
+This repo ships **no HTML**. The server exposes versioned JSON APIs, and two separate repos consume them:
+- the **public site repo**: per-job map pages and leaderboards;
+- the **Discord bot repo**: all admin actions.
 
-**Route projection.** Game world X/Z (metres) → lon/lat on the server. It is implemented independently from the game's `def/climate.sii` parameters and standard Lambert conformal conic maths. No GPL code is copied. truckermudgeon is credited for the ETS2 UK correction.
+The contracts are documented here as OpenAPI (`docs/PUBLIC_API.md`, `docs/ADMIN_API.md`), with contract tests.
+
+**Public read API** (`/api/v1/public/...`, CORS limited to the site's origin, configured on the server):
+- Per-game job list and leaderboard: `/ets2/...` and `/ats/...`. Games are never combined.
+- Job detail: stats, outcome, rule results that are safe to show publicly.
+- **Route as GeoJSON** in lon/lat, already projected, split into LineStrings at ferries, trains, pauses and gaps.
+- Reverted material is never exposed publicly.
+
+**Route projection** stays in this repo (`pt-core::projection`, server-side), so the site only draws GeoJSON.
+- Game world X/Z (metres) → lon/lat. Implemented independently from the game's `def/climate.sii` parameters and standard Lambert conformal conic maths. No GPL code is copied; truckermudgeon is credited for the ETS2 UK correction.
 - ATS: inverse LCC (lat₁ 33, lat₂ 45, lat₀ 39, lon₀ −96).
 - ETS2: offset (−16660, −4150), a UK box scaled 0.75 around (15550, 2750), then LCC (37, 65, 50, 15).
 - Unit tests use four known points (Paris, Crete, London, Las Vegas).
-- Routes are split at ferries, trains, pauses and gaps.
 
-**Admin panel**
-- Bonus cargo create, read, update and delete (CRUD).
-- A review queue of pending, flagged, invalid, gap and late-start jobs. Each job shows the full trace (reverted parts greyed), a uPlot speed/fuel chart, the route, and every rule result.
-- Actions: approve, reject, void. Each requires a reason and is written to the audit log.
-- Recalculate one job or all jobs.
-- Issue and revoke player tokens.
+**Admin API for the Discord bot** (`/api/v1/admin/...`):
+- review queue: pending, flagged, invalid, gap and late-start jobs;
+- job detail with every rule result, the full trace (reverted parts marked), and speed/fuel series and route GeoJSON, so the bot or a site review page can chart and map them;
+- approve, reject or void, each with a **required reason**;
+- bonus cargo CRUD;
+- recalculate one job or all jobs;
+- issue and revoke player tokens;
+- publish config versions and release manifests (rule 0).
+- **Auth:** a bot service token plus the acting admin's Discord user ID on every call. That ID goes into the audit log.
+- **Webhooks:** signed POSTs (`job.needs_review`, `job.scored`, `job.discarded`) to a URL the bot registers.
+- **Gap and late-start jobs are held for admin approval** (`review_policy = "hold"`).
 
-**Map basemap.** Blocked on a decision: see open question 1.
-
+**Map basemap (decided; built and hosted in the site repo):**
+- You generate ETS2 and ATS vector tiles (PMTiles) with truckermudgeon/maps (GPL-3.0) from your own game install. This is allowed for modding as long as nothing is sold, so **PlasmaTrack must stay non-commercial**.
+- The site repo renders them with MapLibre GL JS + pmtiles (both BSD-3) and self-hosts them. No hotlinking.
+- Before publishing: strip features flagged hidden or secret, and credit SCS Software (not affiliated), truckermudgeon/maps, MapLibre and PMTiles.
 ## 9. Verification that needs your game install
 
 I cannot run the games in this session, so the following steps need a real game install. The research found ETS2 and ATS installed under `C:\Program Files (x86)\Steam\steamapps\common` on this PC.
@@ -343,8 +360,8 @@ I cannot run the games in this session, so the following steps need a real game 
 3. **Validation.**
    - `pt-core` timeline and rules, and the `pt-replay` harness.
    - Every fixture: spec boundaries, load scenarios and red-team exploit cases.
-4. **Server and admin.** Ingest, scoring, auth, review queue, audit log, recalculation.
-5. **Public map.** Per-job pages with the projection and the approved basemap.
+4. **Server APIs.** Ingest, scoring, rule 0, auth, the public read API, the admin API and webhooks for the Discord bot, audit log, recalculation, and OpenAPI contract tests.
+5. **Route projection and GeoJSON endpoint.** The pages themselves are built in the separate site repo.
 
 **Fixtures.** One fixture per bullet below.
 
@@ -381,23 +398,32 @@ I cannot run the games in this session, so the following steps need a real game 
 - A truck swap.
 - Pausing in a menu after a load.
 
-## 11. Open questions
+## 11. Decisions (2026-09-27)
 
-1. **Map: stop condition triggered.** No source licenses ETS2/ATS map data for public display.
-   - The best tooling is truckermudgeon/maps (GPL-3.0). It generates vector tiles from *your* game files. Its hosted tiles have CORS restricted to its own site and grant no license, so they must not be hotlinked or proxied.
-   - The generated tiles are SCS game-derived data. SCS publishes no fan-content or map-data licence, and I could not read the EULA.
-   - **Option (a):** self-generate tiles and publish them, accepting the risk, ideally after asking SCS for written permission.
-   - **Option (b)** (recommended now): a public-domain Natural Earth basemap with the routes projected onto real geography, adding the game road layer only if SCS approves. Which do you want?
-2. **Refuel.** The SDK has no refuel event, so "detected paid refuel" can only be a heuristic (the fuel rises while stationary at a plausible rate). A slow fake refuel while parked would pass. Is that acceptable?
-3. **Captures.** Can you run the capture protocol in both games on this PC once stage 1 exists? The save-load thresholds cannot be finalized without it.
-4. **Cancelled job brought back by a load.** Resume it (the cancel is reverted; recommended) or stop tracking it like a delivered job?
-5. **Delivered while Invalid, then a mid-job save is loaded.** I recommend keeping your "stop tracking" rule, since a delivery is final, and letting admins review. Or should an Invalid delivery be reopenable?
-6. **Review policy defaults.** Confirm that gaps and late starts are **held**, meaning no points until an admin approves, rather than flagged.
-7. **Multiplayer (TruckersMP / Convoy).** Should these jobs be tracked? Loads are impossible in multiplayer, so load detection would be off when `multiplayer.time.offset ≠ 0`.
-8. **Manual submission for patches below 1.36.** Add a portal form where every submission goes to review, or is that handled elsewhere?
-9. **Profiles.** The SDK has no profile ID, so switching profiles is indistinguishable from loading a save. Is one timeline per player per game acceptable?
-10. **Bonus cargo.** Can a flat bonus and a multiplier stack? Is the date window checked at delivery time on the server clock?
-11. **Integrity details.**
-    - Should trace-measured mismatches (sample rate, sequence gaps, `hello` vs. data) stay review flags, as recommended, or also discard?
-    - Should the server be able to **revoke** an old release or config version, so that jobs captured with it are discarded too?
-12. **Hosting and license.** Where will the server run (domain, TLS)? What license, if any, should PlasmaTrack itself use? For GitHub, create an empty private repo and send me the URL, or install `gh`.
+1. **Map:** you generate the tiles yourself with truckermudgeon/maps. This is allowed for modding as long as nothing is sold, so PlasmaTrack stays non-commercial (§8).
+2. **Refuel:** the heuristic is accepted. Fuel cost is never calculated. Fuel spikes across save loads are treated as save edits and ignored (§6).
+3. **Captures:** you will run the capture protocol in both games (§9).
+4. **Cancelled job brought back by a load:** resume it, unless that job was already delivered (§5).
+5. **Review:** gap and late-start jobs are held for admin approval. All admin actions run through your Discord bot in a separate repo, and this repo provides the admin API and webhooks (§8).
+6. **Minimum patch:** 1.36. Earlier versions are unsupported.
+7. **Integrity:** rule 0 discards jobs whose config or install files match no published version (§6a).
+8. **Public site:** a separate repo. This repo exposes the JSON API and projected route GeoJSON only (§8).
+
+## 12. Open questions (none block stage 1)
+
+1. **Delivered while Invalid, then a mid-job save is loaded.** I recommend keeping "stop tracking", since a delivery is final and an admin can review it in Discord. Or should an Invalid delivery be reopenable?
+2. **Multiplayer (TruckersMP / Convoy).** Track these jobs or not? If yes, load detection is turned off while `multiplayer.time.offset ≠ 0`, since loads can't happen in multiplayer.
+3. **Manual submission for patches below 1.36.** Is this part of the Discord bot, or should the server offer a submission endpoint? If the server does, every submission goes to review.
+4. **Profiles.** The SDK has no profile ID, so a profile switch looks like a save load. Is one timeline per player per game acceptable?
+5. **Bonus cargo.** Can a flat bonus and a multiplier stack? Is the date window checked at delivery time on the server clock?
+6. **Integrity details.**
+   - Should trace-measured mismatches stay review flags (recommended) or discard?
+   - Should the server be able to revoke old releases or config versions?
+7. **Site repo.** Does the site repo exist yet, and what origin will it be served from (for CORS)? Should DLC-gated areas be shown? That choice affects which features the API exposes only if the tiles are also filtered there.
+8. **Hosting and license.**
+   - Where will the server run (domain, TLS)?
+   - What license should PlasmaTrack use? It must stay non-commercial.
+   - For GitHub, send me an empty private repo URL, or install `gh`.
+9. **Discord bot contract.**
+   - Does the bot already exist with an API shape I should match? If not, I'll define `docs/ADMIN_API.md` and you build the bot against it.
+   - Does the bot also issue player tokens, for example via a `/register` command?
