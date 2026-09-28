@@ -61,7 +61,12 @@ odometer_epsilon_km = 0.005
 # the job goes to manual review. PROVISIONAL until a
 # delivery capture (C7) shows how closely they agree.
 delivered_vs_trace_tolerance_pct = 1.0
-delivered_vs_trace_tolerance_min_world_mi = 30.0
+delivered_vs_trace_tolerance_min_game_mi = 30.0
+# The floor and the short-job limit are GAME miles (odometer, as shown in game);
+# the floor is converted to world miles with the job's own world/game ratio.
+# Jobs shorter than short_job_under_game_mi are hard-capped at short_job_max_pct.
+delivered_vs_trace_short_job_under_game_mi = 100.0
+delivered_vs_trace_short_job_max_pct = 5.0
 
 [rules.fuel]
 # Rule 4: job fuel used below -tolerance is flagged (float noise stays silent).
