@@ -1,0 +1,6 @@
+# Windows builds use the gnullvm target with llvm-mingw (the same toolchain as the
+# plugin), so bundled C code (SQLite) and Rust share one UCRT-based toolchain and
+# no proprietary MSVC tools are needed. Link libunwind and the C++ runtime
+# statically so binaries import only Windows system DLLs.
+[target.x86_64-pc-windows-gnullvm]
+rustflags = ["-C", "target-feature=+crt-static"]

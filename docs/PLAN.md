@@ -21,7 +21,7 @@ Requirement changes folded in from our conversation:
 | Client | **Rust**, headless background app with a small status/settings page on `127.0.0.1` | The overlay is gone, so a webview is unnecessary. This avoids Tauri's proprietary MSVC Build Tools and WebView2. The GNU Rust toolchain is already installed. The client runs the exact same `pt-core` code as the server. |
 | Server | **Rust**: axum + tokio + **rusqlite (SQLite, WAL)** | Same language and same `pt-core` crate. SQLite keeps it a single binary. **rusqlite on both sides** avoids the `libsqlite3-sys` `links` conflict that sqlx-sqlite + rusqlite hit in one workspace. Postgres remains possible later. |
 | Shared | `pt-core`: pure, with no I/O, no clock and no RNG | Deterministic. Client and server produce bit-identical results. The replay harness uses it directly. |
-| Web | **Not in this repo.** The public site (MapLibre GL JS + pmtiles, self-generated tiles) lives in a separate repo and consumes this server's public JSON API | Your decision. This repo owns the API contract and route projection. |
+| Web | **None.** There is no website. All public info (per-job route maps, leaderboards) and all admin actions go through the **Discord bot (separate repo)**, which consumes this server's JSON API | Your decision. This repo owns the API contract and route projection. |
 | Admin | Admin API + signed webhooks consumed by your **Discord bot (separate repo)** | Your decision; this repo only owns the API contract. |
 | Auth | Admins: argon2id password + session cookie. Players: 256-bit server-issued token, stored as SHA-256 | As specified. |
 
@@ -316,15 +316,15 @@ This model incorporates the red-team findings. All thresholds are in `[timeline]
 - Chunks are queued in SQLite. Failures retry every `sync.retry_interval_wall_s` (20 s) until they succeed.
 - The server derives all jobs itself. A client-computed result is never an input.
 
-## 8. Server APIs (the public site and the Discord bot live in separate repos)
+## 8. Server APIs (all consumed by the Discord bot, a separate repo; there is no website)
 
 This repo ships **no HTML**. The server exposes versioned JSON APIs, and two separate repos consume them:
-- the **public site repo**: per-job map pages and leaderboards;
+- the **Discord bot repo**: everything user-facing. That covers public job info, per-job route maps and leaderboards, plus all admin actions.
 - the **Discord bot repo**: all admin actions.
 
 The contracts are documented here as OpenAPI (`docs/PUBLIC_API.md`, `docs/ADMIN_API.md`), with contract tests.
 
-**Public read API** (`/api/v1/public/...`, CORS limited to the site's origin, configured on the server):
+**Public read API** (`/api/v1/public/...`, authenticated with the bot service token; no browser CORS needed):
 - Per-game job list and leaderboard: `/ets2/...` and `/ats/...`. Games are never combined.
 - Job detail: stats, outcome, rule results that are safe to show publicly.
 - **Route as GeoJSON** in lon/lat, already projected, split into LineStrings at ferries, trains, pauses and gaps.
@@ -338,7 +338,7 @@ The contracts are documented here as OpenAPI (`docs/PUBLIC_API.md`, `docs/ADMIN_
 
 **Admin API for the Discord bot** (`/api/v1/admin/...`):
 - review queue: every job pending manual review (with its reasons), plus invalid jobs;
-- job detail with every rule result, the full trace (reverted parts marked), and speed/fuel series and route GeoJSON, so the bot or a site review page can chart and map them;
+- job detail with every rule result, the full trace (reverted parts marked), and speed/fuel series and route GeoJSON, so the bot can chart and map them;
 - approve, reject or void, each with a **required reason**;
 - bonus cargo CRUD;
 - recalculate one job or all jobs;
@@ -348,9 +348,9 @@ The contracts are documented here as OpenAPI (`docs/PUBLIC_API.md`, `docs/ADMIN_
 - **Webhooks:** signed POSTs (`job.needs_review`, `job.scored`, `job.discarded`, `player.notification`, `version.revocation_scheduled`) to a URL the bot registers.
 - **Gap and late-start jobs are held for admin approval** (`review_policy = "hold"`).
 
-**Map basemap (decided; built and hosted in the site repo):**
+**Map basemap (decided; built and used in the bot repo):**
 - You generate ETS2 and ATS vector tiles (PMTiles) with truckermudgeon/maps (GPL-3.0) from your own game install. This is allowed for modding as long as nothing is sold, so **PlasmaTrack must stay non-commercial**.
-- The site repo renders them with MapLibre GL JS + pmtiles (both BSD-3) and self-hosts them. No hotlinking.
+- Discord cannot show interactive maps, so the **bot renders each route to an image**, using your PMTiles and the route GeoJSON from this server. No hotlinking.
 - Before publishing: strip features flagged hidden or secret, and credit SCS Software (not affiliated), truckermudgeon/maps, MapLibre and PMTiles.
 ## 9. Verification that needs your game install
 
@@ -394,7 +394,7 @@ I cannot run the games in this session, so the following steps need a real game 
    - `pt-core` timeline and rules, and the `pt-replay` harness.
    - Every fixture: spec boundaries, load scenarios and red-team exploit cases.
 4. **Server APIs.** Ingest, scoring, rule 0, auth, the public read API, the admin API and webhooks for the Discord bot, audit log, recalculation, and OpenAPI contract tests.
-5. **Route projection and GeoJSON endpoint.** The pages themselves are built in the separate site repo.
+5. **Route projection and GeoJSON endpoint.** Rendering route images happens in the bot repo.
 
 **Fixtures.** One fixture per bullet below.
 
@@ -446,7 +446,7 @@ I cannot run the games in this session, so the following steps need a real game 
 5. **Review:** every "flag" means manual review, with points held until an admin approves. This applies to gap, late-start, trace checks and rule 4. All admin actions run through your Discord bot in a separate repo (§6, §8).
 6. **Minimum patch:** 1.36. Earlier versions are unsupported. Manual submissions go to a website you'll provide later.
 7. **Integrity:** rule 0 discards jobs whose config or install files match no published version. Trace checks send the job to manual review (§6a).
-8. **Public site:** a separate repo, which doesn't exist yet. This repo exposes the JSON API and projected route GeoJSON only (§8).
+8. **No website:** all user-facing info and admin actions go through the Discord bot (separate repo). This repo exposes the JSON API and projected route GeoJSON only (§8).
 9. **Delivered-but-Invalid job brought back by a load:** it is reopened, because falling through the map can cause it (§5).
 10. **Notifications:** desktop notifications for an Invalid delivery and for the speed penalty activating, each delayed by a random 5–30 s at µs resolution (§6b).
 11. **Multiplayer:** all of it is tracked. For Singleplayer Division users, TruckersMP jobs are discarded (§6b).
@@ -459,9 +459,11 @@ I cannot run the games in this session, so the following steps need a real game 
 17. **Revocation.** Admins can revoke a release or config version, and it takes effect **21 days after it is announced**.
     - When revocation is scheduled, the server emits `version.revocation_scheduled`, and the bot DMs every player whose latest session used that version.
     - Jobs captured before the effective time are unaffected. Jobs captured with the revoked version after it are discarded (rule 0).
-18. **DLC-gated map areas:** you own all DLC and will handle this in the tile generation and the site repo.
+18. **DLC-gated map areas:** you own all DLC and will handle this in the tile generation and the bot repo.
 19. **Discord bot:** it will be written afterwards by parallel agents against `docs/ADMIN_API.md`, which this repo defines in stage 4.
 
 ## 12. Open questions
 
-None are blocking. Hosting and the final license are deferred to you.
+1. **Route images.** I assume the bot repo renders route images from the GeoJSON, because it holds the tiles. Should this server render the PNGs instead?
+
+Hosting and the final license are deferred to you.
