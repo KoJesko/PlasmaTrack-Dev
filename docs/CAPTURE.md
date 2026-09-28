@@ -42,6 +42,19 @@ PROVISIONAL in `config/plasmatrack.sample.toml` gets calibrated from them.
 | C17 | Convoy session | One short drive in Convoy (multiplayer time offset). |
 | C18 | Falling under the map | Only if it happens naturally. Note it if it does. |
 
+### Save edits (one change per recording, all mid-job)
+
+For each: save on a job, exit to the main menu, edit that save, load it, and drive about 1 km.
+Note the times and exactly what you changed. If saves aren't plain text, `uset g_save_format "2"`
+in `config.cfg` should make the game write them that way (unverified).
+
+| # | Edit | What it settles |
+|---|---|---|
+| C19 | Change the job's cargo, keeping the route | What a `cargo_switch` looks like, which is sent to review. |
+| C20 | Change the truck | That a truck change mid-job is followed correctly, since it is allowed. |
+| C21 | Raise the fuel | That fuel spikes across loads are ignored. |
+| C22 | Change the truck odometer | That distance never depends on the absolute odometer value. |
+
 ## After capturing
 
 1. Set `capture = 0` again. Capture files grow quickly, roughly 60 samples per second.

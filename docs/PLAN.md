@@ -192,6 +192,17 @@ This model incorporates the red-team findings. All thresholds are in `[timeline]
 
 **Job identity.** The fingerprint is: game, `cargo.id`, source and destination city and company ids, the absolute `delivery.time` deadline, `income`, `cargo.mass`, `cargo.unit.count`, `planned_distance.km`, `job.market`, `is.special.job`. Values are typed, and a missing attribute is encoded as absent. Captures must confirm that the fingerprint is byte-identical across loads.
 
+The fingerprint has two parts:
+- **Route key:** game, source and destination city and company ids, the `delivery.time` deadline, `planned_distance.km`, `job.market`, `is.special.job`.
+- **Cargo key:** `cargo.id`, `cargo.mass`, `cargo.unit.count`, `income`.
+
+**Truck changes (decided):** allowed mid-job. The truck is not part of the fingerprint. Distance is measured per truck segment as an odometer difference, so a new truck's odometer never counts as distance driven.
+
+**Cargo switch (decided):** a job config whose route key matches the current or a suspended job but whose cargo key differs is a `cargo_switch`, never a new job. The game offers no way to change cargo mid-job, so this can only come from a save edit.
+- The job keeps its identity and goes to manual review with reason `cargo_switch`.
+- Until an admin decides, the bonus (rule 7) is evaluated on the cargo the job was first tracked with.
+- Both cargo keys are kept as evidence for the admin.
+
 **States.** Tracking, Suspended, Delivered, Cancelled, Stopped (replay of a delivered job).
 
 **Kept timeline.** An ordered list of tracked runs and gaps. Reverted material is kept in the trace and marked `reverted_by_save_load(load wall/sim time)`.
@@ -461,6 +472,7 @@ I cannot run the games in this session, so the following steps need a real game 
     - Jobs captured before the effective time are unaffected. Jobs captured with the revoked version after it are discarded (rule 0).
 18. **DLC-gated map areas:** you own all DLC and will handle this in the tile generation and the bot repo.
 19. **Discord bot:** it will be written afterwards by parallel agents against `docs/ADMIN_API.md`, which this repo defines in stage 4.
+20. **Truck vs cargo changes (2026-09-28):** switching trucks mid-job is allowed. A mid-job cargo change (same route, different cargo) is treated as a save edit and goes to manual review with reason `cargo_switch`; the bonus uses the original cargo until an admin decides (§5).
 
 ## 12. Open questions
 
