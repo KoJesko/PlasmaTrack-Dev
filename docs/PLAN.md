@@ -155,11 +155,11 @@ Other events:
 
   **TruckersMP runs its own server-side clock (you, 2026-09-28).** A sleep or a ferry sometimes skips game time and sometimes does not. So on TruckersMP, `game.time` is neither evidence of a load nor evidence against a transport, and a missing time skip is never suspicious.
   
-  Both happened inside a pause, and the odometer was unchanged. You identified them:
-- **The 1.76 km / 118-minute jump was a ferry trip**, taken right after an autosave load. It raised **no `player.use.ferry` event**, while the earlier ferry at 25:40 did. TruckyTelemetry logged no "Transport Used" for it either, so the game did not send the event; the plugin did not miss it.
-- **The 6.47 km jump was F7 (call for help)**, with no event and no game-time skip.
+  Both happened inside a pause, and the odometer was unchanged. What they were:
+- **The 1.76 km / 118-minute jump was F7 (call for help).** Its order was: ferry at 25:40 (with its event) → autosave load at 26:17, back to before the ferry (odometer −35.8 km) → F7 at 26:47 → the game saved right after.
+- **The 6.47 km jump** (27:44, after the cancel, while browsing the Olympia job; no game time skipped) is still unidentified.
 
-A ferry can therefore arrive without its event. Nothing may depend on transport events being present: a teleport is never a load, never adds distance, and is never suspicious by itself. Under the old rule, a position jump (R) plus a pause bracket (C) would have been **misclassified as a load**. This is fixed in §5.
+Every ferry in this capture raised its event. Nothing depends on transport events anyway: a teleport is never a load, never adds distance, and is never suspicious by itself. Under the old rule, a position jump (R) plus a pause bracket (C) would have been **misclassified as a load**. This is fixed in §5.
 - **Samples stop while paused.** Frames continue, and heartbeats keep coming.
 
 Profile and TruckersMP:
