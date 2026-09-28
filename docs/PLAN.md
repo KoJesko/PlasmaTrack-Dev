@@ -338,14 +338,18 @@ The fingerprint has two parts:
     - If `distance.km` and the tracked game distance disagree by more than the greater of 1% and 30 mi, **hard-capped at 5% for jobs under 100 mi**, all measured in game miles on the SDK-reported delivery distance (`delivered_vs_trace_*`; PROVISIONAL), the job goes to **manual review** with both values shown. The Chicago job differed by 0.28 km (0.4%), well inside the tolerance. This is a trace check (§6a), so a save edit or a patched game cannot quietly inflate the figure.
   - Save loads need no special handling: the game restores its own job distance with the save, which matches the kept timeline.
 - **Game distance (shown, not scored):** the odometer difference, meaning what the truck's odometer, the job list and the in-game map show. The bot shows both values: "12.3 mi driven (1:1), 146 mi in game".
-- Both distances count **loaded** driving only, meaning kept segments where the job config has `cargo.loaded=true`.
+- Both distances count **loaded, hitched** driving only (decided 2026-09-28): kept segments where the job config has `cargo.loaded=true` **and** `trailer.0.connected` is true.
+  - `trailer.0.connected` is the first trailer, the one hitched to the truck (trailer_common_channels.h:16-36). The plugin samples it from this change on; earlier captures lack it.
+  - So neither the empty drive to the pickup nor **bobtailing** (driving with the trailer unhooked) earns anything.
+  - **Exception: World of Trucks jobs** (`job.market` = `external_contracts` / `external_market`, configs.h:633-637). For them, all driving during the job counts, empty and bobtail included.
+  - If the game's `distance.km` turns out to include uncounted legs, the tracked uncounted distance is subtracted before scoring.
 
 **Which rules use which distance:**
 - The empty drive to the pickup earns nothing. It happens with an owned trailer on the cargo market; the first capture shows `cargo.loaded` flipping at the pickup.
 - Rules 1, 5 and 6 use the loaded **world** distance. The speed rules were already 1:1: `truck.speed` is world m/s, which is what the speedometer shows.
 - Rule 3 uses the loaded **world** distance too, with its threshold rescaled for 1:1: over **150 world km** (`manual_review_over_world_km`) goes to review. It replaces the spec's 3000 mi (decided 2026-09-28).
 - Speed rules 2 and 5 and fuel rule 4 still watch the **whole job**, from accept to delivery, empty leg included. (This is my default.)
-- World of Trucks jobs (`job.market` = `external_contracts` / `external_market`, configs.h:633-637) might later earn points for the empty leg. That exception is **deferred**; for now they follow the same rule.
+- World of Trucks jobs count their empty and bobtail driving too (see above).
 
 **Rules**
 0. **Integrity** (added at your request; runs first; overrides the spec's "no other auto-invalidation"). The job is **discarded** (0 pts, reason and diff visible to admins, not approvable) if either check fails (§6a):
@@ -358,7 +362,7 @@ The fingerprint has two parts:
 5. Sustained speed over `penalty_over_mph` → accepted distance = 0.85 × driven.
 6. 1 point per accepted mile.
 7. Bonus cargo (decided): among all matching bonuses, **only the greatest applies**, meaning the one that yields the most points. It stacks with the 0.85× speed penalty: bonus applied to the accepted distance. Flat and multiplier bonuses never stack with each other. The date window is checked at delivery time on the server clock.
-- Final points = floor(total).
+- Final points = the total floored to `points_decimals` places, 1 by default: 3.79 → 3.7, never rounded up (decided 2026-09-28, replacing the spec's whole-number floor).
 
 **Evaluation**
 - **Overspeed:** eligible samples exclude paused time and ferry/train transfer windows. The record keeps peak mph and time over each threshold.
@@ -591,7 +595,8 @@ I cannot run the games in this session, so the following steps need a real game 
 18. **DLC-gated map areas:** you own all DLC and will handle this in the tile generation and the bot repo.
 19. **Discord bot:** it will be written afterwards by parallel agents against `docs/ADMIN_API.md`, which this repo defines in stage 4.
 20. **Truck vs cargo changes (2026-09-28):** switching trucks mid-job is allowed. A mid-job cargo change (same route, different cargo) is treated as a save edit and goes to manual review with reason `cargo_switch`; the bonus uses the original cargo until an admin decides (§5).
-21. **Empty driving earns no points (2026-09-28):** only distance driven with `cargo.loaded=true` is scored. The World of Trucks exception is deferred (§6).
+21. **Empty driving and bobtailing earn no points (2026-09-28):** only distance driven with `cargo.loaded=true` and the trailer hitched (`trailer.0.connected`) is scored. The exception is World of Trucks jobs, where all job driving counts (§6).
+23. **Points keep one decimal (2026-09-28):** totals are floored to 0.1 (`points_decimals`) rather than to whole points.
 22. **Count 1:1 (2026-09-28):** points come from the **physical world distance**, the distance the truck actually moved at 1:1 scale, like real driving. This is unique among trackers. The **in-game (odometer) distance is reported as a second value**, so players see both.
     - In the first capture, 79.5 game km equals 7.9 world km.
     - World distance = the game's `job.delivered` `distance.km` at the delivery point. That figure is in game scale (measured), so it is converted to 1:1 with the job's own tracked world/game ratio. The tracked odometer distance cross-checks it, and a mismatch goes to review (§6).

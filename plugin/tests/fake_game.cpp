@@ -271,6 +271,7 @@ struct Game {
                 else if (c.name == SCS_TELEMETRY_TRUCK_CHANNEL_world_placement) v.value_dplacement.position = {x, 50.0, -1000.0};
                 else if (c.name == SCS_TELEMETRY_CHANNEL_game_time) v.value_u32.value = 4000;
                 else if (c.name == SCS_TELEMETRY_CHANNEL_local_scale) v.value_float.value = float(scale);
+                else if (c.name == "trailer.0.connected") v.value_bool.value = 1;
                 c.cb(c.name.c_str(), SCS_U32_NIL, pv, c.ctx);
             }
         }
@@ -372,7 +373,7 @@ int main(int argc, char** argv) {
     REQUIRE(init(SCS_TELEMETRY_VERSION_1_01, &params) == SCS_RESULT_ok);
     CHECK(g_mock.events.count(SCS_TELEMETRY_EVENT_gameplay) == 1);
     CHECK(g_mock.events.count(SCS_TELEMETRY_EVENT_configuration) == 1);
-    CHECK(g_mock.channels.size() == 13);
+    CHECK(g_mock.channels.size() == 14);
     for (const auto& c : g_mock.channels)
         CHECK(c.flags == (SCS_TELEMETRY_CHANNEL_FLAG_each_frame | SCS_TELEMETRY_CHANNEL_FLAG_no_value));
     for (const auto& c : g_mock.channels)
@@ -458,6 +459,7 @@ int main(int argc, char** argv) {
         CHECK(s->json.find("\"truck.speed\":20") != std::string::npos);
         CHECK(s->json.find("\"truck.world.placement\":{\"position\":{\"x\":") != std::string::npos);
         CHECK(s->json.find("\"local.scale\":19") != std::string::npos);
+        CHECK(s->json.find("\"trailer.0.connected\":true") != std::string::npos);
 
         // Scale changes are durable messages: the first value, then 19 -> 3.
         std::vector<const Message*> scales;

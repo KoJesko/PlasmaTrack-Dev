@@ -28,8 +28,11 @@ manual_review_over_world_km = 150.0
 # Rule 5: accepted distance = driven distance x this factor when penalized.
 speed_penalty_factor = 0.85
 # Rule 6: points per accepted WORLD mile (physical 1:1 distance = odometer /
-# local.scale, PLAN §6). The job total is floored once, at the end.
+# local.scale, PLAN §6).
 points_per_world_mi = 1.0
+# The job total is floored once, at the end, to this many decimals
+# (3.79 -> 3.7 with 1). Never rounds up.
+points_decimals = 1
 
 [rules.speed]
 # "Over X" means strictly over X for longer than this window (single-sample

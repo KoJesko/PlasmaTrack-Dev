@@ -24,6 +24,7 @@
 #include "common/scssdk_telemetry_common_configs.h"
 #include "common/scssdk_telemetry_common_gameplay_events.h"  // not included by the ATS header
 #include "common/scssdk_telemetry_job_common_channels.h"
+#include "common/scssdk_telemetry_trailer_common_channels.h"
 #include "common/scssdk_telemetry_truck_common_channels.h"
 #include "eurotrucks2/scssdk_eut2.h"
 #include "eurotrucks2/scssdk_telemetry_eut2.h"
@@ -37,6 +38,9 @@
 
 namespace pt {
 namespace {
+
+// "trailer." -> "trailer.0." for the first trailer (trailer_common_channels.h:18-24).
+constexpr const char* kTrailer0Connected = "trailer.0.connected";
 
 struct Channel {
     const char* name;
@@ -66,7 +70,7 @@ public:
     SharedCounters counters;
     std::unique_ptr<Sender> sender;
 
-    Channel channels[13] = {
+    Channel channels[14] = {
         make_channels_table(SCS_TELEMETRY_TRUCK_CHANNEL_speed, SCS_VALUE_TYPE_float),
         make_channels_table(SCS_TELEMETRY_TRUCK_CHANNEL_odometer, SCS_VALUE_TYPE_float),
         make_channels_table(SCS_TELEMETRY_TRUCK_CHANNEL_fuel, SCS_VALUE_TYPE_float),
@@ -80,6 +84,9 @@ public:
         make_channels_table(SCS_TELEMETRY_TRUCK_CHANNEL_navigation_time, SCS_VALUE_TYPE_float),
         make_channels_table(SCS_TELEMETRY_TRUCK_CHANNEL_engine_enabled, SCS_VALUE_TYPE_bool),
         make_channels_table(SCS_TELEMETRY_TRUCK_CHANNEL_parking_brake, SCS_VALUE_TYPE_bool),
+        // First trailer (the one hitched to the truck): trailer_common_channels.h:16-36.
+        // Distance driven without it (bobtailing) is not scored (PLAN §6).
+        make_channels_table(kTrailer0Connected, SCS_VALUE_TYPE_bool),
     };
 
     scs_telemetry_frame_start_t frame{};

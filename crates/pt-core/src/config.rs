@@ -36,6 +36,7 @@ pub struct Rules {
     pub manual_review_over_world_km: f64,
     pub speed_penalty_factor: f64,
     pub points_per_world_mi: f64,
+    pub points_decimals: u32,
     pub speed: SpeedRules,
     pub distance: DistanceRules,
     pub fuel: FuelRules,
@@ -76,6 +77,15 @@ pub struct DistanceRules {
     pub delivered_vs_trace_tolerance_min_mi: f64,
     pub delivered_vs_trace_short_job_under_mi: f64,
     pub delivered_vs_trace_short_job_max_pct: f64,
+}
+
+impl Rules {
+    /// Floors a job's point total to `points_decimals` places (never rounds up).
+    /// Rounds away float noise first, so 3.7 stays 3.7 rather than 3.6999… -> 3.6.
+    pub fn floor_points(&self, total: f64) -> f64 {
+        let scale = 10f64.powi(self.points_decimals as i32);
+        ((total * scale * 1e6).round() / 1e6).floor() / scale
+    }
 }
 
 impl DistanceRules {
@@ -335,6 +345,9 @@ impl Config {
                 r.speed_penalty_factor
             ));
         }
+        if r.points_decimals > 6 {
+            errs.push(format!("rules.points_decimals must be 0..=6 (got {})", r.points_decimals));
+        }
         if r.distance.delivered_vs_trace_short_job_max_pct < r.distance.delivered_vs_trace_tolerance_pct {
             errs.push("rules.distance.delivered_vs_trace_short_job_max_pct must be >= delivered_vs_trace_tolerance_pct".into());
         }
@@ -403,6 +416,17 @@ mod tests {
         assert_eq!(ats.classify(Some(1.0)), ScaleClass::OneToOne);
         assert_eq!(ats.classify(Some(10.0)), ScaleClass::Nonstandard);
         assert_eq!(ats.classify(None), ScaleClass::Unknown);
+    }
+
+    #[test]
+    fn points_floor_to_one_decimal() {
+        let r = Config::from_toml_str(SAMPLE).unwrap().rules;
+        assert_eq!(r.points_decimals, 1);
+        assert_eq!(r.floor_points(3.70), 3.7);
+        assert_eq!(r.floor_points(3.79), 3.7);
+        assert_eq!(r.floor_points(0.1 + 0.2), 0.3); // 0.30000000000000004
+        assert_eq!(r.floor_points(3.0 * 1.1), 3.3); // 3.3000000000000003
+        assert_eq!(r.floor_points(0.0), 0.0);
     }
 
     #[test]
