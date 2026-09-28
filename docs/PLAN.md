@@ -140,7 +140,7 @@ Loads:
   4. `started`.
   5. The first sample jumps in position, odometer and fuel. `game.time` jumps too, backwards or forwards.
 - **No `timer_restart` on any in-session load.** `paused_simulation_time` and `simulation_time` keep increasing across loads. So `timer_restart` and a time reset cannot be relied on as load signals.
-- **Forward loads carry no rollback evidence.** For example, loading slot 143 after slot 139 moved the odometer +4.548 km and the position 201 m, with zero simulated time between them. The R + C rule (§5) could not classify that as a load; this is fixed in §5.
+- **Forward loads carry no rollback evidence.** For example, loading slot 143 after slot 139 moved the odometer +4.548 km and the position 201 world m, with zero simulated time between them. The R + C rule (§5) could not classify that as a load; this is fixed in §5.
 
 Job details:
 - **Byte-identical across loads:** the job config was identical after all six loads.
@@ -148,18 +148,22 @@ Job details:
 
 Other events:
 - **Cancel:** `job` is re-sent empty, `truck` and `trailer` are re-sent full, and then `job.cancelled` arrives (with `cancel.penalty`), all in one pause.
-- **Ferry:** the order is `paused` → `player.use.ferry` (with source/target ids and names and `pay.amount`) → `started`. The next sample jumps 1.3 km in position and 36 game minutes. **The odometer does not change** on a ferry.
+- **Ferry:** the order is `paused` → `player.use.ferry` (with source/target ids and names and `pay.amount`) → `started`. The next sample jumps 1.3 world km in position (about 26 game km at scale 20) and 36 game minutes. **The odometer does not change** on a ferry.
 - **Two teleports with no event and no config change**:
-  - 1.76 km with 118 game minutes skipped;
-  - 6.47 km with no game time skipped.
+  - 1.76 world km with 118 game minutes skipped;
+  - 6.47 world km with no game time skipped.
 
   **TruckersMP runs its own server-side clock (you, 2026-09-28).** A sleep or a ferry sometimes skips game time and sometimes does not. So on TruckersMP, `game.time` is neither evidence of a load nor evidence against a transport, and a missing time skip is never suspicious.
   
   Both happened inside a pause, and the odometer was unchanged. What they were:
-- **The 1.76 km / 118-minute jump was F7 (call for help).** Its order was: ferry at 25:40 (with its event) → autosave load at 26:17, back to before the ferry (odometer −35.8 km) → F7 at 26:47 → the game saved right after.
-- **The 6.47 km jump** (27:44, after the cancel, while browsing the Olympia job; no game time skipped) is still unidentified.
+- **The 1.76 world km / 118-minute jump was F7 (call for help).** Its order was: ferry at 25:40 (with its event) → autosave load at 26:17, back to before the ferry (odometer −35.8 game km) → F7 at 26:47 → the game saved right after.
+- **The 6.47 world km jump** (27:44, after the cancel, while browsing the Olympia job; no game time skipped) is still unidentified.
 
 Every ferry in this capture raised its event. Nothing depends on transport events anyway: a teleport is never a load, never adds distance, and is never suspicious by itself. Under the old rule, a position jump (R) plus a pause bracket (C) would have been **misclassified as a load**. This is fixed in §5.
+- **Units (measured over 70k samples):** `truck.world.placement` is in world metres. `truck.odometer` advances at world distance × `local.scale`: the ratio was 2.98 at scale 3 (cities) and 20.00 at scale 20 (open road).
+  - The odometer is therefore in the game's own kilometres, the same scale as job distances and the map. Points (rule 6) are scored on it.
+  - `truck.speed` is world m/s, which is what the speedometer shows. Speed rules 2 and 5 use it.
+  - Position thresholds in the config are named `_world_m`. Never compare position distances with odometer distances without multiplying by `local.scale`.
 - **Samples stop while paused.** Frames continue, and heartbeats keep coming.
 
 Profile and TruckersMP:
@@ -525,6 +529,7 @@ I cannot run the games in this session, so the following steps need a real game 
 19. **Discord bot:** it will be written afterwards by parallel agents against `docs/ADMIN_API.md`, which this repo defines in stage 4.
 20. **Truck vs cargo changes (2026-09-28):** switching trucks mid-job is allowed. A mid-job cargo change (same route, different cargo) is treated as a save edit and goes to manual review with reason `cargo_switch`; the bonus uses the original cargo until an admin decides (§5).
 21. **Empty driving earns no points (2026-09-28):** only distance driven with `cargo.loaded=true` is scored. The World of Trucks exception is deferred (§6).
+22. **Count 1:1 with the game (2026-09-28):** distance is exactly what the game's odometer shows, the same scale as job distances and the in-game map. It is never converted to real-world scale, so a 235 km job scores about 235 km (146 mi). World coordinates are used only for detection (teleports, load matching), never for points (§3 units).
 
 ## 12. Open questions
 

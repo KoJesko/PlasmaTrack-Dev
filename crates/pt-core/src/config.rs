@@ -120,7 +120,7 @@ pub struct ReviewFlags {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ReviewFlagParams {
-    pub teleport_min_distance_m: f64,
+    pub teleport_min_distance_world_m: f64,
     pub odometer_jump_min_km: f64,
     pub min_plausible_avg_speed_mph: f64,
     pub max_plausible_avg_speed_mph: f64,
@@ -134,7 +134,7 @@ pub struct Timeline {
     pub bracket_wall_cap_wall_s: f64,
     pub gameplay_event_explain_window_wall_s: f64,
     pub ferry_train_explain_window_wall_s: f64,
-    pub match_position_tolerance_m: f64,
+    pub match_position_tolerance_world_m: f64,
     pub match_fuel_tolerance_l: f64,
     pub match_game_time_tolerance_min_game: u32,
 }
