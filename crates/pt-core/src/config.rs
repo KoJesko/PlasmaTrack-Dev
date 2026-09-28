@@ -72,27 +72,22 @@ pub struct DistanceRules {
     pub compare_precision_km: f64,
     pub odometer_epsilon_km: f64,
     pub delivered_vs_trace_tolerance_pct: f64,
-    pub delivered_vs_trace_tolerance_min_game_mi: f64,
-    pub delivered_vs_trace_short_job_under_game_mi: f64,
+    pub delivered_vs_trace_tolerance_min_mi: f64,
+    pub delivered_vs_trace_short_job_under_mi: f64,
     pub delivered_vs_trace_short_job_max_pct: f64,
 }
 
 impl DistanceRules {
-    /// Allowed difference, in world (1:1) miles, between the game's `job.delivered`
-    /// distance and the tracker's own world figure.
-    ///
-    /// `larger_world_mi` is the larger of the two world figures; `trace_world_mi` and
-    /// `trace_game_mi` are the tracker's loaded distance at 1:1 and on the odometer.
-    /// The floor and the short-job limit are in game miles; the floor is converted
-    /// to world miles with this job's own world/game ratio. The result is the greater
-    /// of the percentage and the floor, except that a job shorter than
-    /// `short_job_under_game_mi` is hard-capped at `short_job_max_pct`.
-    pub fn delivered_vs_trace_tolerance_world_mi(&self, larger_world_mi: f64, trace_world_mi: f64, trace_game_mi: f64) -> f64 {
-        let ratio = if trace_game_mi > 0.0 { trace_world_mi / trace_game_mi } else { 0.0 };
-        let floor_world_mi = self.delivered_vs_trace_tolerance_min_game_mi * ratio;
-        let t = (larger_world_mi * self.delivered_vs_trace_tolerance_pct / 100.0).max(floor_world_mi);
-        if trace_game_mi < self.delivered_vs_trace_short_job_under_game_mi {
-            t.min(larger_world_mi * self.delivered_vs_trace_short_job_max_pct / 100.0)
+    /// Allowed difference, in miles, between the game's `job.delivered` distance and
+    /// the tracker's own figure. Everything is measured on the SDK-reported delivery
+    /// distance (`delivered_mi`, i.e. `distance.km` in miles): the greater of the
+    /// percentage and the floor, except that a job shorter than `short_job_under_mi`
+    /// is hard-capped at `short_job_max_pct`.
+    pub fn delivered_vs_trace_tolerance_mi(&self, delivered_mi: f64) -> f64 {
+        let t = (delivered_mi * self.delivered_vs_trace_tolerance_pct / 100.0)
+            .max(self.delivered_vs_trace_tolerance_min_mi);
+        if delivered_mi < self.delivered_vs_trace_short_job_under_mi {
+            t.min(delivered_mi * self.delivered_vs_trace_short_job_max_pct / 100.0)
         } else {
             t
         }
@@ -261,8 +256,8 @@ impl Config {
             ("rules.distance.compare_precision_km", r.distance.compare_precision_km),
             ("rules.distance.odometer_epsilon_km", r.distance.odometer_epsilon_km),
             ("rules.distance.delivered_vs_trace_tolerance_pct", r.distance.delivered_vs_trace_tolerance_pct),
-            ("rules.distance.delivered_vs_trace_tolerance_min_game_mi", r.distance.delivered_vs_trace_tolerance_min_game_mi),
-            ("rules.distance.delivered_vs_trace_short_job_under_game_mi", r.distance.delivered_vs_trace_short_job_under_game_mi),
+            ("rules.distance.delivered_vs_trace_tolerance_min_mi", r.distance.delivered_vs_trace_tolerance_min_mi),
+            ("rules.distance.delivered_vs_trace_short_job_under_mi", r.distance.delivered_vs_trace_short_job_under_mi),
             ("rules.distance.delivered_vs_trace_short_job_max_pct", r.distance.delivered_vs_trace_short_job_max_pct),
             ("plugin.sample_rate_hz", self.plugin.sample_rate_hz),
             ("sync.retry_interval_wall_s", self.sync.retry_interval_wall_s),
@@ -344,17 +339,14 @@ mod tests {
     #[test]
     fn delivered_vs_trace_tolerance() {
         let d = Config::from_toml_str(SAMPLE).unwrap().rules.distance;
-        // Open road, scale 20: world = game / 20.
-        let t = |game_mi: f64| d.delivered_vs_trace_tolerance_world_mi(game_mi / 20.0, game_mi / 20.0, game_mi);
-        // Under 100 game mi: the floor (30 game mi = 1.5 world mi) is hard-capped at 5%.
-        assert!((t(60.0) - 0.15).abs() < 1e-9); // 5% of 3 world mi
-        assert!((t(99.0) - 0.2475).abs() < 1e-9);
-        // From 100 game mi: greater of 1% and 30 game mi (1.5 world mi).
-        assert!((t(100.0) - 1.5).abs() < 1e-9);
-        assert!((t(3000.0) - 1.5).abs() < 1e-9);
-        assert!((t(20000.0) - 10.0).abs() < 1e-9); // 1% of 1000 world mi
-        // No game distance tracked (e.g. all empty): no floor, only the percentage.
-        assert!((d.delivered_vs_trace_tolerance_world_mi(10.0, 0.0, 0.0) - 0.1).abs() < 1e-9);
+        let t = |mi: f64| d.delivered_vs_trace_tolerance_mi(mi);
+        // Delivered distance under 100 mi: the 30 mi floor is hard-capped at 5%.
+        assert!((t(10.0) - 0.5).abs() < 1e-9);
+        assert!((t(99.0) - 4.95).abs() < 1e-9);
+        // From 100 mi: greater of 1% and 30 mi.
+        assert_eq!(t(100.0), 30.0);
+        assert_eq!(t(2999.0), 30.0);
+        assert!((t(5000.0) - 50.0).abs() < 1e-9);
     }
 
     #[test]

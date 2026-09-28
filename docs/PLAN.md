@@ -299,7 +299,7 @@ The fingerprint has two parts:
     - The first capture shows this matches the actual movement exactly: the ratio is 2.98 at scale 3 and 20.00 at scale 20.
     - If the game does not provide `local.scale`, which only a 1:1 map would do (common_channels.h:14-19), the scale is 1.
     - **ETS2 uses 1:19 on open roads** (you, 2026-09-28), against 20 in ATS. Nothing is hard-coded: the reported `local.scale` is used per run. The first ETS2 capture should show 19 on roads (and presumably 3 in cities).
-    - If `distance.km` and the trace figure disagree by more than the greater of 1% and 30 **game** mi (converted to world miles with the job's own ratio), **hard-capped at 5% for jobs under 100 game mi** (`delivered_vs_trace_*`; PROVISIONAL), the job goes to **manual review** with both values shown. This is a trace check (§6a), so a save edit or a patched game cannot quietly inflate the figure.
+    - If `distance.km` and the trace figure disagree by more than the greater of 1% and 30 mi, **hard-capped at 5% for jobs under 100 mi**, all measured on the SDK-reported delivery distance (`delivered_vs_trace_*`; PROVISIONAL), the job goes to **manual review** with both values shown. This is a trace check (§6a), so a save edit or a patched game cannot quietly inflate the figure.
   - Save loads need no special handling: the game restores its own job distance with the save, which matches the kept timeline.
 - **Game distance (shown, not scored):** the odometer difference, meaning what the truck's odometer, the job list and the in-game map show. The bot shows both values: "12.3 mi driven (1:1), 146 mi in game".
 - Both distances count **loaded** driving only, meaning kept segments where the job config has `cargo.loaded=true`.
@@ -552,9 +552,20 @@ I cannot run the games in this session, so the following steps need a real game 
     - World distance = the game's `job.delivered` `distance.km` at the delivery point. The tracker's own odometer ÷ `local.scale` figure cross-checks it, and a mismatch goes to review (§6).
     - Rule 3 moves to world distance too: over **150 world km** goes to review (§6).
     - ETS2 uses 1:19 on roads and ATS 1:20; both are read from `local.scale`.
+    - **Purpose: it must work with 1:1 scale mods** (you, 2026-09-28). Nothing assumes vanilla scale.
+      - The scored distance is the game's own delivery figure.
+      - The cross-check divides by whatever `local.scale` the game reports.
+      - The distance-tolerance thresholds are measured on the delivery distance.
+      
+      Open points under a 1:1 mod:
+      - Rule 3's 150 km would send most normal-length jobs to review.
+      - Route GeoJSON will not line up with vanilla-map tiles (§12).
 
 ## 12. Open questions
 
 1. **Route images.** I assume the bot repo renders route images from the GeoJSON, because it holds the tiles. Should this server render the PNGs instead?
+2. **1:1 scale mods.**
+   - Rule 3 (over 150 km goes to review): should the threshold differ when a 1:1 mod is in use? The mod could be detected by `local.scale` staying at 1.
+   - Route maps: a 1:1 map has different world coordinates, so routes cannot be drawn on vanilla tiles. What should happen with them?
 
 Hosting and the final license are deferred to you.
