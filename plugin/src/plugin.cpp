@@ -91,6 +91,45 @@ public:
     double next_sample_due_us = 0.0;  // paused-simulation time of the next scheduled sample
     std::int64_t last_emit_ms = 0;
 
+    // Map scale tracking (PLAN §6): every change of local.scale is reported as a
+    // durable "scale" message, checked each frame, so the server can split a job
+    // into constant-scale runs and the route map can colour them.
+    Channel* local_scale = nullptr;
+    bool scale_reported = false;
+    bool scale_was_available = false;
+    float scale_value = 0.0f;
+
+    Channel* find_channel(const char* name) {
+        for (Channel& c : channels)
+            if (std::string(c.name) == name) return &c;
+        return nullptr;
+    }
+
+    void track_scale() {
+        if (!local_scale || !local_scale->registered || !local_scale->updated) return;
+        const bool avail = local_scale->available;
+        const float v = avail ? local_scale->value.value_float.value : 0.0f;
+        if (scale_reported && avail == scale_was_available && (!avail || v == scale_value)) return;
+        const bool had = scale_reported && scale_was_available;
+        const float prev = scale_value;
+        emit(Kind::Scale, [&](JsonWriter& w) {
+            w.key("local_scale");
+            if (avail) w.f64(v); else w.null();
+            w.key("previous");
+            if (had) w.f64(prev); else w.null();
+            // Where the change happened, for splitting distance and drawing the map.
+            for (const char* n : {SCS_TELEMETRY_TRUCK_CHANNEL_odometer, SCS_TELEMETRY_TRUCK_CHANNEL_world_placement}) {
+                const Channel* c = find_channel(n);
+                w.key(n);
+                if (c && c->available) write_value(w, c->value); else w.null();
+            }
+        });
+        scale_reported = true;
+        scale_was_available = avail;
+        scale_value = v;
+        force_sample = true;
+    }
+
     // Allocates a seq, lets `fill` add fields to the envelope, and pushes the
     // message. A full ring drops the message (counted); the game never waits.
     template <typename F>
@@ -166,6 +205,7 @@ SCSAPI_VOID on_frame_end(const scs_event_t, const void* const, const scs_context
     Plugin* p = g_plugin;
     if (!p) return;
     try {
+        p->track_scale();
         if (!p->paused) {
             const double rate = p->settings.capture ? 0.0 : p->settings.sample_rate_hz;
             const scs_timestamp_t now = p->frame.paused_simulation_time;
@@ -190,6 +230,8 @@ SCSAPI_VOID on_frame_end(const scs_event_t, const void* const, const scs_context
         if (steady_ms() - p->last_emit_ms >= 1000) {
             p->emit(Kind::Heartbeat, [p](JsonWriter& w) {
                 w.key("paused").boolean(p->paused);
+                w.key("local_scale");
+                if (p->scale_reported && p->scale_was_available) w.f64(p->scale_value); else w.null();
                 w.key("ring_dropped").u64(p->counters.ring_dropped.load(std::memory_order_relaxed));
             });
         }
@@ -312,6 +354,7 @@ SCSAPI_RESULT scs_telemetry_init(const scs_u32_t version, const scs_telemetry_in
                                                           SCS_TELEMETRY_CHANNEL_FLAG_no_value,
                                                       on_channel, &c) == SCS_RESULT_ok;
         }
+        p->local_scale = p->find_channel(SCS_TELEMETRY_CHANNEL_local_scale);
 
         p->emit(Kind::Init, [&](JsonWriter& w) {
             w.key("api_version").str("1.01");

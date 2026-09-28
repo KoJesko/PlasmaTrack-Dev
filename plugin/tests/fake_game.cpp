@@ -247,6 +247,8 @@ struct Game {
     }
 
     // One physics frame (SDK order: frame_start, gameplay, channels, frame_end).
+    double scale = 19.0;  // local.scale reported by the next frames
+
     void frame(bool paused, double speed_mps, double odo_km, double fuel_l, double x,
                scs_u32_t flags = 0, bool fuel_available = true,
                const scs_telemetry_gameplay_event_t* gameplay = nullptr) {
@@ -268,7 +270,7 @@ struct Game {
                 else if (c.name == SCS_TELEMETRY_TRUCK_CHANNEL_fuel) { v.value_float.value = float(fuel_l); if (!fuel_available) pv = nullptr; }
                 else if (c.name == SCS_TELEMETRY_TRUCK_CHANNEL_world_placement) v.value_dplacement.position = {x, 50.0, -1000.0};
                 else if (c.name == SCS_TELEMETRY_CHANNEL_game_time) v.value_u32.value = 4000;
-                else if (c.name == SCS_TELEMETRY_CHANNEL_local_scale) v.value_float.value = 19.0f;
+                else if (c.name == SCS_TELEMETRY_CHANNEL_local_scale) v.value_float.value = float(scale);
                 c.cb(c.name.c_str(), SCS_U32_NIL, pv, c.ctx);
             }
         }
@@ -415,6 +417,7 @@ int main(int argc, char** argv) {
     double odo = 100.0;
     for (int i = 0; i < 120; ++i) {  // 2 s of simulation at 60 Hz
         odo += 20.0 * 0.016667 / 1000.0;
+        if (i == 80) game.scale = 3.0;  // drive into a city
         game.frame(false, 20.0, odo, 300.0 - i * 0.01, 1000.0 + i, 0, i != 60, i == 100 ? &delivered : nullptr);
     }
     game.event(SCS_TELEMETRY_EVENT_paused);
@@ -455,6 +458,18 @@ int main(int argc, char** argv) {
         CHECK(s->json.find("\"truck.speed\":20") != std::string::npos);
         CHECK(s->json.find("\"truck.world.placement\":{\"position\":{\"x\":") != std::string::npos);
         CHECK(s->json.find("\"local.scale\":19") != std::string::npos);
+
+        // Scale changes are durable messages: the first value, then 19 -> 3.
+        std::vector<const Message*> scales;
+        for (const auto& m : client.received)
+            if (m.sess == sess1 && m.kind == "scale") scales.push_back(&m);
+        CHECK(scales.size() == 2);
+        if (scales.size() == 2) {
+            CHECK(scales[0]->json.find("\"local_scale\":19,\"previous\":null") != std::string::npos);
+            CHECK(scales[1]->json.find("\"local_scale\":3,\"previous\":19") != std::string::npos);
+            CHECK(scales[1]->json.find("\"truck.odometer\":") != std::string::npos);
+            CHECK(scales[1]->json.find("\"truck.world.placement\":{\"position\"") != std::string::npos);
+        }
     }
 
     // ---- ack part, disconnect, keep playing, reconnect: durable replay ----------
@@ -489,6 +504,7 @@ int main(int argc, char** argv) {
     std::this_thread::sleep_for(std::chrono::milliseconds(1100));
     game.frame(true, 0, 0, 0, 0);
     CHECK(client.wait_for([&](auto& v) { return has_kind(v, "heartbeat", sess1); }, 2000));
+    CHECK(find_kind(client.received, "heartbeat", sess1)->json.find("\"local_scale\":3") != std::string::npos);
 
     // Logs are flushed on the game thread only.
     game.frame(true, 0, 0, 0, 0);

@@ -21,6 +21,7 @@ pub struct Config {
     pub review_policy: ReviewPolicy,
     pub review_flags: ReviewFlags,
     pub timeline: Timeline,
+    pub map: Map,
     pub notifications: Notifications,
     pub multiplayer: Multiplayer,
     pub plugin: Plugin,
@@ -176,6 +177,62 @@ pub struct Sync {
 /// Desktop notifications for a delivery marked Invalid (rule 2) and for the
 /// speed penalty (rule 5) activating. The client draws each delay uniformly
 /// from [min, max] at microsecond resolution (pt-core itself has no RNG).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Map {
+    pub scale: MapScales,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct MapScales {
+    pub ats: VanillaScale,
+    pub ets2: VanillaScale,
+}
+
+impl MapScales {
+    pub fn vanilla(&self, game: Game) -> &VanillaScale {
+        match game {
+            Game::Ats => &self.ats,
+            Game::Ets2 => &self.ets2,
+        }
+    }
+}
+
+/// The `local.scale` values the unmodded game uses (common_channels.h:13-23).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct VanillaScale {
+    pub city_local_scale: f64,
+    pub road_local_scale: f64,
+}
+
+/// How a stretch of route is coloured on the map (PLAN §8).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ScaleClass {
+    City,
+    Road,
+    OneToOne,
+    Nonstandard,
+    Unknown,
+}
+
+impl VanillaScale {
+    pub fn classify(&self, local_scale: Option<f64>) -> ScaleClass {
+        let Some(s) = local_scale else { return ScaleClass::Unknown };
+        if s == self.city_local_scale {
+            ScaleClass::City
+        } else if s == self.road_local_scale {
+            ScaleClass::Road
+        } else if s == 1.0 {
+            ScaleClass::OneToOne
+        } else {
+            ScaleClass::Nonstandard
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Notifications {
@@ -334,6 +391,20 @@ mod tests {
         assert_eq!(c.review_policy.trace_checks, ReviewAction::Review);
         assert!(c.notifications.enabled);
         assert_eq!(c.notifications.delay_range_us(), (5_000_000, 30_000_000));
+    }
+
+    #[test]
+    fn scale_classes() {
+        let c = Config::from_toml_str(SAMPLE).unwrap();
+        let ats = c.map.scale.vanilla(Game::Ats);
+        let ets2 = c.map.scale.vanilla(Game::Ets2);
+        assert_eq!(ats.classify(Some(20.0)), ScaleClass::Road);
+        assert_eq!(ets2.classify(Some(19.0)), ScaleClass::Road);
+        assert_eq!(ets2.classify(Some(20.0)), ScaleClass::Nonstandard);
+        assert_eq!(ats.classify(Some(3.0)), ScaleClass::City);
+        assert_eq!(ats.classify(Some(1.0)), ScaleClass::OneToOne);
+        assert_eq!(ats.classify(Some(10.0)), ScaleClass::Nonstandard);
+        assert_eq!(ats.classify(None), ScaleClass::Unknown);
     }
 
     #[test]

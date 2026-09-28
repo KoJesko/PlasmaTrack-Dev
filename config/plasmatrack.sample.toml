@@ -142,6 +142,21 @@ match_game_time_tolerance_min_game = 2
 # penalty (rule 5) activates. Each is delayed by a uniformly random time in
 # [delay_min_wall_s, delay_max_wall_s] with microsecond resolution.
 # ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# Route map scale classes (PLAN §8). Each stretch of a route is coloured by the
+# local.scale it was driven at: 1 = one_to_one (1:1 mod), these vanilla values =
+# city / road, anything else = nonstandard (modded). Display only: scale never
+# sends a job to review by itself. ATS values measured in the first capture;
+# ETS2 road = 19 per the maintainer, ETS2 city PROVISIONAL until an ETS2 capture.
+# ---------------------------------------------------------------------------
+[map.scale.ats]
+city_local_scale = 3.0
+road_local_scale = 20.0
+
+[map.scale.ets2]
+city_local_scale = 3.0
+road_local_scale = 19.0
+
 [notifications]
 enabled = true
 delay_min_wall_s = 5.0

@@ -29,7 +29,7 @@ Every message except `hello` and `snapshot` carries these fields:
 | `sim_us` | u64 | `paused_simulation_time` of the latest `frame_start`, µs (scssdk_telemetry_event.h:132-136). It stops while physics is paused (absent on messages created by the sender thread) |
 
 **Durable** kinds are journaled to disk until acknowledged: `init`, `config`, `gameplay`,
-`paused`, `started`, `timer_restart`, `integrity`, `modules`, `shutdown`. `sample` and
+`paused`, `started`, `timer_restart`, `integrity`, `modules`, `scale`, `shutdown`. `sample` and
 `heartbeat` are memory-only.
 
 ## Kinds
@@ -46,7 +46,8 @@ Every message except `hello` and `snapshot` carries these fields:
 | `paused` / `started` | none (scssdk_telemetry_event.h:38-54) |
 | `timer_restart` | `simulation_us`, `render_us`. The frame had `SCS_TELEMETRY_FRAME_START_FLAG_timer_restart` (scssdk_telemetry_event.h:91-97) |
 | `sample` | `simulation_us`, `render_us`, `ch` {channel name: value or `null` = unavailable}, `stale` [names that had a value but no callback this frame] |
-| `heartbeat` | `paused`, `ring_dropped`. Sent after 1 s with no other message from the game thread |
+| `heartbeat` | `paused`, `ring_dropped`, `local_scale` (latest reported map scale or null). Sent after 1 s with no other message from the game thread |
+| `scale` | `local_scale` (float or null = unavailable), `previous` (the last reported value or null), `truck.odometer`, `truck.world.placement` (where the change happened; null if unavailable). Sent on the first reading and on every change of `local.scale` (common_channels.h:13-23), checked every physics frame. Durable, so a job can be split into constant-scale runs even without samples. |
 | `shutdown` | none. `scs_telemetry_shutdown` was called |
 
 **Attribute** objects have the form `{"name": .., "index": null | n, "type": .., "value": ..}`.

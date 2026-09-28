@@ -200,7 +200,8 @@ Profile and TruckersMP:
 - `gameplay`: every event, including undocumented ids. If current game builds emit something like a refuel event, it will show up here.
 - `paused` / `started` / `timer_restart`.
 - `sample`: raw SDK units, sent at `sample_rate_hz` (default 20) on paused-simulation time. Only fresh channel values are marked `live`.
-- `heartbeat`: once per second, also while paused.
+- `heartbeat`: once per second, also while paused, with the current `local_scale`.
+- `scale`: every change of `local.scale` (durable).
 
 **Threading**
 - SDK callbacks run on the game main thread (SDK readme). They copy values, strings included, into a per-frame record. At `frame_end` the record is pushed into a lock-free **SPSC ring**.
@@ -412,6 +413,15 @@ The contracts are documented here as OpenAPI (`docs/PUBLIC_API.md`, `docs/ADMIN_
 - Per-game job list and leaderboard: `/ets2/...` and `/ats/...`. Games are never combined.
 - Job detail: stats, outcome, rule results that are safe to show publicly.
 - **Route as GeoJSON** in lon/lat, already projected, split into LineStrings at ferries, trains, pauses and gaps.
+- **Scale colouring (decided 2026-09-28):** the route is also split at every `scale` change. Each LineString carries `local_scale` and a `scale_class`, so the bot can colour them for moderators:
+  - `city` = 3;
+  - `road` = the vanilla road scale (ATS 20, ETS2 19);
+  - `one_to_one` = 1, a 1:1 mod;
+  - `nonstandard` = any other value, a modded scale;
+  - `unknown` = not reported.
+  
+  Suggested colours: city grey, road blue, one_to_one orange, nonstandard red, unknown dashed. The vanilla values per game live in config, not in code.
+- **Modded maps are drawn anyway.** Routes are always overlaid on the vanilla base map, even when the coordinates do not line up. A misaligned route is itself the visible sign of a 1:1 or modded map. Scale never sends a job to review on its own; moderators see it on the map and in the job detail (distance per `scale_class`).
 - Reverted material is never exposed publicly.
 
 **Route projection** stays in this repo (`pt-core::projection`, server-side), so the bot only draws GeoJSON.
@@ -557,15 +567,13 @@ I cannot run the games in this session, so the following steps need a real game 
       - The cross-check divides by whatever `local.scale` the game reports.
       - The distance-tolerance thresholds are measured on the delivery distance.
       
-      Open points under a 1:1 mod:
-      - Rule 3's 150 km would send most normal-length jobs to review.
-      - Route GeoJSON will not line up with vanilla-map tiles (§12).
+      Decided for 1:1 mods (2026-09-28):
+      - **One rule-3 threshold for every map scale.**
+      - The plugin reports every scale change (a durable `scale` message, checked each frame, plus the current value in the 1 Hz heartbeat).
+      - Route maps colour each stretch by its scale class, overlaid on the vanilla map (§8).
 
 ## 12. Open questions
 
 1. **Route images.** I assume the bot repo renders route images from the GeoJSON, because it holds the tiles. Should this server render the PNGs instead?
-2. **1:1 scale mods.**
-   - Rule 3 (over 150 km goes to review): should the threshold differ when a 1:1 mod is in use? The mod could be detected by `local.scale` staying at 1.
-   - Route maps: a 1:1 map has different world coordinates, so routes cannot be drawn on vanilla tiles. What should happen with them?
 
 Hosting and the final license are deferred to you.
