@@ -130,6 +130,32 @@ Per-frame order (:82-89): configuration → paused/started → frame_start → g
 - The plugin runs alongside TruckyTelemetry, an ETS shared-memory plugin and others without conflict.
 - **Privacy note for stage 2:** the `modules` message lists every loaded DLL (155 here). The client keeps that list local and uploads only the matches against `[multiplayer] truckersmp_module_names`, never the full list.
 
+**Second capture** (ATS 1.61.2.0s, 2026-09-28 10:13–10:40, sessions `01719a0c…` and `0ae3404d…`, plugin with `scale` messages):
+
+Tampered delivery:
+- **`job.delivered` `distance.km` is not trustworthy on its own.** A 7 km (planned) San Francisco job was delivered with **`distance.km = 1000`**, `delivery.time = 60`, `auto.park.used = true` and `auto.load.used = true` (gameplay_events.h:118-132).
+  - Just before the delivery: a save load (slot 143) whose truck odometer was edited ×10 (12,888 → 128,880 km), then a 1.8 world-km teleport straight to the destination while driving. The game log shows free-camera "Camera speed" lines just before it, which suggests a developer-mode teleport.
+  - TruckyTelemetry reported the same `realDistance: 1000`.
+  - The tracker's own loaded distance after the load was about 0.2 game km, so the delivered-vs-trace cross-check (§6) sends this job to review. That check is essential, not optional.
+  - This delivery **cannot** answer whether `distance.km` is 1:1 or game scale. A clean delivery (no edits, no teleports) is still needed.
+
+Save edits and profiles:
+- **Odometer save edit across a load** adds no distance: distance is measured within segments, and loads split segments.
+- **Profile switch via the main menu:**
+  - `exit` → `New profile selected: '<name>'` in the game log → W (job, truck and trailer emptied), **plus a `timer_restart` and a reset of `paused_simulation_time`**;
+  - the other profile's odometer, fuel, game time and position (a quick-job company truck: odometer 0.085 km, game.time 600).
+  
+  Loads from the main menu raise `timer_restart`; in-game loads did not (first capture).
+
+Other events:
+- **Refuel** (two stops, 624 → 840 L and 840 → 1041 L = full):
+  - Fuel rises in steps every 18 frames (0.3 s of simulation): first about 0.62 L per step for about 3 s, then 16.18 L per step (about 54 L/s), up to capacity.
+  - The truck was also moved short distances (31 m and 322 world m) around the pump.
+  - These are the first real figures for the refuel heuristic.
+- **Scale flapping:** `local.scale` switched 3 ↔ 20 six times in 0.8 s at a city boundary by the pump. This is harmless for distance, because each run is measured on its own. The route map should merge tiny runs for display.
+- **Cargo loading** again skipped 48 game minutes, and it moved the truck 7.5 world m.
+- **Quick job config:** `job.market = "quick_job"`, with a company truck (`vehicle.freightliner.cascadia2024`) and a flatbed trailer.
+
 **First capture** (ATS 1.61.2.0s on TruckersMP, 2026-09-28 08:50–09:21, capture mode, 70,453 samples; the game hung on exit to the main menu, not in the plugin).
 
 Loads:
