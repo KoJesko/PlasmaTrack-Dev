@@ -73,7 +73,7 @@ Every message except `hello` and `snapshot` carries these fields:
 | `truck.navigation.time` | float |
 | `truck.engine.enabled` | bool |
 | `truck.brake.parking` | bool |
-| `trailer.0.connected` | bool | first trailer hitched to the truck (trailer_common_channels.h:16-36); driving without it (bobtailing) is not scored |
+| `trailer.0.connected` | bool: first trailer hitched to the truck (trailer_common_channels.h:16-36); bobtail driving is not scored |
 
 **Sampling.** Samples are sent at `sample_rate_hz` of paused-simulation time. An extra sample is
 also forced right after any config, gameplay, paused/started or timer_restart event. In capture
