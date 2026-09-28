@@ -100,18 +100,12 @@ min_gap_duration_s = 5.0
 
 # Extra heuristics: manual review only (never invalidation), OFF by default.
 [review_flags]
-teleport_without_ferry_train_load = false
 odometer_jump = false
 impossible_delivery_time = false
 
 [review_flags.params]
-# Units: "_world_m" is metres of the game's 3D world (truck.world.placement).
-# The game's own distances (odometer, job distances, the map) are those world
-# metres x local.scale (3 in cities, 20 on open roads in ATS; measured in the
-# first capture), so 500 world m is about 10 game km on an open road.
 # Average speeds are world distance over simulated time (what the speedometer
 # shows); odometer over real time would read up to 20x too fast.
-teleport_min_distance_world_m = 500.0
 odometer_jump_min_km = 1.0
 min_plausible_avg_speed_mph = 0.0
 max_plausible_avg_speed_mph = 150.0
@@ -129,6 +123,11 @@ bracket_min_live_frames_after_started_frames = 30
 bracket_wall_cap_wall_s = 600.0
 gameplay_event_explain_window_wall_s = 2.0
 ferry_train_explain_window_wall_s = 10.0
+# A position jump of at least this many world metres (truck.world.placement;
+# game distance = world metres x local.scale) with no load is a teleport (F7,
+# ferry, train, quick travel). A teleport only adds no distance: it never
+# invalidates, penalises or sends a job to review (decided 2026-09-28).
+teleport_min_distance_world_m = 500.0
 # Loaded state must match a previously observed point within these tolerances
 # to count as "the same point" (for truncation or for restoring a reverted run).
 # Position is in world metres (x local.scale for game distance).

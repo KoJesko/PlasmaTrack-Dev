@@ -231,9 +231,10 @@ This model incorporates the red-team findings. All thresholds are in `[timeline]
   - **W** (in-session loads, backwards or forwards); or
   - **S plus a discontinuity** (odometer, position or fuel, plus `game.time` in singleplayer only) against the last kept state (loads across a restart, a crash or a client outage).
 - **A discontinuity without W or S is not a load.** It is a **teleport**, such as the two uncaptioned teleports in the capture.
-  - A teleport adds no distance, because distance is measured on the odometer.
-  - It reverts nothing and raises nothing.
-  - It is kept as evidence for the trace checks (§6a).
+  - **Decided 2026-09-28: a teleport only adds no distance.** It never invalidates, never penalises (not even partly) and never sends a job to review. Examples are F7, ferries, trains and quick travel.
+  - The odometer does not move on a teleport (first capture), so the tracker's own figure already excludes it.
+  - If a delivery capture shows that the game's `job.delivered` `distance.km` *does* count a teleport, the jumped distance is subtracted from the scored figure.
+  - It reverts nothing, and it is stored in the trace for admins to see.
 - **A pause bracket alone is not evidence.** In the capture, the teleports happened inside pauses, so a pause plus a position jump would otherwise look like a load.
 - **Other config changes never count as evidence.** A job or truck config that is re-sent without emptying `truck` only decides which case below applies. This stops ordinary job accepts, cargo loading, quick-job teleports and deliveries from looking like loads.
 - **Provisional:** W must still be confirmed not to occur on a quick job (C11), a truck purchase or switch (C12) or call for help (C13). If one of them does produce W, the rows below still match against the kept timeline. The worst outcome is a job sent to review, and no rule is ever raised.
@@ -330,7 +331,7 @@ The fingerprint has two parts:
 - **Refuel (decided):** the SDK has no refuel event, so a refuel is a **heuristic** episode: the fuel rises while the truck is stationary, at a plausible rate (`[rules.refuel]`). Only litres are tracked. Fuel cost is never calculated.
 - **Fuel across save loads (decided):** a fuel change across a load is most likely a save edit, and it is **ignored**. There's no flag and no rule 4, because fuel is only summed within tracked runs.
 - **Manual review everywhere (decided): every "flag" means manual review**, with the job pending and its points held until an admin approves or rejects it via the Discord bot. `review_policy` values are `review` or `off`. Gap, late-start and trace checks default to `review`.
-- **Other heuristics:** teleport, odometer jump and impossible delivery time exist only as manual-review triggers, **off by default**. Diagnostics (unexplained Δodometer, derived vs. reported speed, fuel against capacity) are always *stored* for admins but never trigger review.
+- **Other heuristics:** odometer jump and impossible delivery time exist only as manual-review triggers, **off by default**. Teleports are never a trigger (§5). Diagnostics (unexplained Δodometer, derived vs. reported speed, fuel against capacity) are always *stored* for admins but never trigger review.
 - **Record:** every rule result is stored, and a job can carry any number of flags.
 - **Recalculation:** each job records the config version and bonus set it was scored with. Admin recalculation replays the raw trace.
 
