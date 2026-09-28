@@ -6,7 +6,8 @@ or the config is done by the client, where it is tested.
 
 ## What Install does
 
-1. Stops a running background client (`plasmatrack-clientw.exe`).
+1. Stops a running background client with `plasmatrack-client stop`, so its tray icon goes away
+   cleanly. If it is still running after 5 s, it is killed.
 2. Copies the payload to `%LOCALAPPDATA%\PlasmaTrack\bin`: the client, the plugin DLL,
    licence texts and `manifest.json`.
 3. `plasmatrack-client set-local`: saves the server address and player token into
@@ -17,12 +18,22 @@ or the config is done by the client, where it is tested.
    `bin\win_x64\plugins\` of every ETS2/ATS install in every Steam library, then writes
    `plasmatrack.ini` there. Existing lines such as `capture = 1` are kept; `port`,
    `sample_rate_hz` and `replay_buffer_s` come from the config.
-5. Optionally adds `"…\plasmatrack-clientw.exe" run` to
-   `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` (value `PlasmaTrack`).
-6. Starts the client and waits for its status page.
+5. Adds a **PlasmaTrack** Start menu shortcut to `plasmatrack-clientw.exe run`.
+6. Optionally adds `"…\plasmatrack-clientw.exe" run` to
+   `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` (value `PlasmaTrack`). This is on by
+   default.
+7. Starts the client and waits for its status page.
+
+**Running in the background.** `plasmatrack-clientw` has no window. It shows a purple **P** in the
+taskbar tray:
+- **Tooltip:** whether the game is connected and whether uploads are working.
+- **Double-click:** opens the status page.
+- **Right-click menu:** Open status page, Open data folder, Quit PlasmaTrack.
+- **Starting it again** (Start menu) while it runs just opens the status page.
+- **Startup errors** (for example a missing config) appear as a dialog.
 
 **Update** does the same again. **Uninstall** stops the client and removes the startup
-entry, the plugin, `plasmatrack.ini` and the `bin` folder. Local data, settings and the
+entry, the Start menu shortcut, the plugin, `plasmatrack.ini` and the `bin` folder. Local data, settings and the
 token are kept unless the player ticks the box. The plugin's `plasmatrack\` journal
 folder in each game is left in place.
 
@@ -41,7 +52,9 @@ npm ci
 npm run dist        # dist\PlasmaTrack-Setup-<version>.exe (portable, ~100 MB)
 ```
 
-`npm start` runs it unpackaged. `npx electron scripts/snapshot.js out.png [dark]` saves a
+`npm start` runs it unpackaged. `"PlasmaTrack Setup.exe" --install [--no-autostart]` or
+`--uninstall` runs without a window and prints the steps as JSON. It keeps the saved server and
+token; a token is never accepted on the command line. `npx electron scripts/snapshot.js out.png [dark]` saves a
 PNG of the window and quits; it only reads state.
 
 **Inside VS Code** the terminal inherits `ELECTRON_RUN_AS_NODE=1`, which makes Electron run

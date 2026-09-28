@@ -30,8 +30,10 @@ pub enum Body {
     /// Module list, raw (capture mode, local client) or redacted (uploads).
     Modules { truckersmp: bool },
     /// TruckersMP client SDK state (plugin >= this change): authoritative for
-    /// "on a TruckersMP server" once seen in a session.
-    Truckersmp { loaded: bool, connected: bool, server_id: u64 },
+    /// "on a TruckersMP server" once seen in a session. `account_id` is the
+    /// player's TruckersMP account (0 = unknown); uploaded for the bot to link
+    /// TruckersMP profiles (PLAN §11, decision 24).
+    Truckersmp { loaded: bool, connected: bool, server_id: u64, account_id: u64 },
     Shutdown,
     /// Client-inserted: the active game profile changed (PLAN §6b).
     Profile { key: String },
@@ -153,6 +155,7 @@ pub fn parse_frame(json: &str, truckersmp_module_names: &[String]) -> Result<Fra
             loaded: v["loaded"].as_bool().unwrap_or(false),
             connected: v["connected"].as_bool().unwrap_or(false),
             server_id: v["server_id"].as_u64().unwrap_or(0),
+            account_id: v["account_id"].as_u64().unwrap_or(0),
         },
         "shutdown" => Body::Shutdown,
         "profile" => Body::Profile { key: v["profile_key"].as_str().unwrap_or("unknown").to_string() },
@@ -196,5 +199,14 @@ mod tests {
         assert_eq!(parse_frame(&raw, &[]).unwrap().body, Body::Modules { truckersmp: false });
         let red = format!(r#"{{"v":1,"kind":"modules","sess":"{SESS}","seq":3,"module_count":2,"truckersmp_matches":["core_atsmp.dll"],"redacted":true}}"#);
         assert_eq!(parse_frame(&red, &[]).unwrap().body, Body::Modules { truckersmp: true });
+    }
+
+    #[test]
+    fn parses_truckersmp_state_with_account() {
+        let line = format!(r#"{{"v":1,"kind":"truckersmp","sess":"{SESS}","seq":7,"loaded":true,"connected":true,"server_id":42,"account_id":5557777}}"#);
+        assert_eq!(
+            parse_frame(&line, &[]).unwrap().body,
+            Body::Truckersmp { loaded: true, connected: true, server_id: 42, account_id: 5557777 }
+        );
     }
 }

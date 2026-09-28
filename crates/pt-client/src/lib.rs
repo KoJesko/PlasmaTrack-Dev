@@ -11,6 +11,7 @@
 //! - [`setup`]: installs the plugin and sets `[local]` for the installer.
 //! - [`status`]: local status page.
 //! - [`cli`]: the command line of both binaries.
+//! - `tray` (Windows): the notification-area icon of the windowless client.
 
 pub mod cli;
 pub mod db;
@@ -20,6 +21,8 @@ pub mod paths;
 pub mod setup;
 pub mod status;
 pub mod steam;
+#[cfg(windows)]
+pub mod tray;
 pub mod uploader;
 
 use std::sync::{Mutex, OnceLock};

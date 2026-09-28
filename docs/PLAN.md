@@ -199,7 +199,7 @@ Profile and TruckersMP:
   - every `Loading save. Type: <t>, slot: <n>, path: .../profiles/<hex of profile name>/save/<slot>/game.sii`.
   
   Observed types: 0 = autosave on start, 3 = drive autosave, 5 = manual save.
-- **TruckersMP:** `core_atsmp.dll` was loaded from process start, and the TruckersMP mods were mounted. TruckersMP allows save loading, so every load rule applies to TruckersMP jobs too. `multiplayer.time.offset` stayed 0 on TruckersMP; that channel is only for SCS Convoy.
+- **TruckersMP:** `core_atsmp.dll` was loaded from process start, and the TruckersMP mods were mounted. TruckersMP allows save loading, so every load rule applies to TruckersMP jobs too. `multiplayer.time.offset` was 0 in this session, but about 24,136,737 in the later Sioux Falls TruckersMP session, so it is not a Convoy signal on its own (§6b).
 
 ## 4. Wire protocol (plugin → client)
 
@@ -264,7 +264,7 @@ This model incorporates the red-team findings. All thresholds are in `[timeline]
   - It reverts nothing, and it is stored in the trace for admins to see.
 - **A pause bracket alone is not evidence.** In the capture, the teleports happened inside pauses, so a pause plus a position jump would otherwise look like a load.
 - **Other config changes never count as evidence.** A job or truck config that is re-sent without emptying `truck` only decides which case below applies. This stops ordinary job accepts, cargo loading, quick-job teleports and deliveries from looking like loads.
-- **Provisional:** W must still be confirmed not to occur on a quick job (C11), a truck purchase or switch (C12) or call for help (C13). If one of them does produce W, the rows below still match against the kept timeline. A truck change itself never sends the job to review (see "Truck changes" below).
+- **Provisional:** W must still be confirmed not to occur on a quick job (C11) or a truck purchase or switch (C12). Call for help (C13, F7) was captured without it. If one of them does produce W, the rows below still match against the kept timeline. A truck change itself never sends the job to review (see "Truck changes" below).
 - Signals are correlated per **bracket**: from the last live sample before the pause, restart or gap to the first live sample after it. They are not correlated per time window, so a player who waits in the menu after loading is handled correctly.
 - `job.delivered` and `job.cancelled` are attributed to the last known job. The job config empties before or around these events (event.h:82-89; RenCloud changelog).
 
@@ -434,6 +434,7 @@ The fingerprint has two parts:
 - **TruckersMP (decided 2026-09-28: use the TruckersMP client SDK).** `plasmatrack.dll` is also a TruckersMP client plugin.
   - It exports `truckersmp_init` / `truckersmp_shutdown` (vendored SDK 1.1.0, MIT, C layer only).
   - It reports `truckersmp` messages: `connected` (`TruckersMP_Network::IsConnected`, updated on the connect/disconnect events), `server_id` and `account_id`.
+  - **`account_id` is uploaded** (decision 24): the server records which TruckersMP accounts each player drove on, and the bot uses it to link TruckersMP profiles.
   - **A job counts as TruckersMP only while connected to a server.** Singleplayer launched through the TruckersMP launcher loads `core_atsmp.dll` but is not TruckersMP.
   - Fallback for plugins without the SDK side: a module named in `[multiplayer] truckersmp_module_names` is loaded (confirmed for ATS: `core_atsmp.dll`).
   - TruckersMP supports an SDK version for about a year, so the plugin must be rebuilt against newer headers yearly.
@@ -491,6 +492,13 @@ The contracts are documented here as OpenAPI (`docs/PUBLIC_API.md`, `docs/ADMIN_
   Suggested colours: city grey, road blue, one_to_one orange, nonstandard red, unknown dashed. The vanilla values per game live in config, not in code.
 - **Modded maps are drawn anyway.** Routes are always overlaid on the vanilla base map, even when the coordinates do not line up. A misaligned route is itself the visible sign of a 1:1 or modded map. Scale never sends a job to review on its own; moderators see it on the map and in the job detail (distance per `scale_class`).
 - Reverted material is never exposed publicly.
+- **TruckersMP accounts (decision 24):**
+  - Per player: every TruckersMP `account_id` seen while connected to a server, each with first seen, last seen and job count.
+  - Per job: `multiplayer` (`singleplayer` / `truckersmp` / `convoy`), and for TruckersMP the `account_id` and `server_id`.
+  - `0` means unknown and is never listed.
+  - The admin API adds two flags for moderators:
+    - a player whose jobs come from more than one TruckersMP account;
+    - a TruckersMP account that appears under more than one player.
 
 **Route projection** stays in this repo (`pt-core::projection`, server-side), so the bot only draws GeoJSON.
 - Game world X/Z (metres) → lon/lat. Implemented independently from the game's `def/climate.sii` parameters and standard Lambert conformal conic maths. No GPL code is copied; truckermudgeon is credited for the ETS2 UK correction.
@@ -646,6 +654,8 @@ I cannot run the games in this session, so the following steps need a real game 
       - **One rule-3 threshold for every map scale.**
       - The plugin reports every scale change (a durable `scale` message, checked each frame, plus the current value in the 1 Hz heartbeat).
       - Route maps colour each stretch by its scale class, overlaid on the vanilla map (§8).
+
+24. **TruckersMP account ID is uploaded (2026-09-28):** the plugin reads it with `TruckersMP_Accounts::GetAccountID`, and it travels in the `truckersmp` message like any other frame. The server stores the account IDs seen per player; the Discord bot uses them to link and show TruckersMP profiles (§8).
 
 ## 12. Open questions
 

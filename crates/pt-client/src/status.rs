@@ -5,10 +5,12 @@ use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 
 use axum::extract::State;
+use axum::http::{HeaderMap, StatusCode};
 use axum::response::{Html, IntoResponse};
-use axum::routing::get;
+use axum::routing::{get, post};
 use axum::{Json, Router};
 use serde::Serialize;
+use tokio::sync::Notify;
 
 use crate::db::{Db, DbStats};
 
@@ -35,6 +37,7 @@ pub type SharedStatus = Arc<Mutex<Status>>;
 struct AppState {
     status: SharedStatus,
     db: Arc<Mutex<Db>>,
+    shutdown: Arc<Notify>,
 }
 
 #[derive(Serialize)]
@@ -79,16 +82,32 @@ async fn status_page(State(state): State<AppState>) -> impl IntoResponse {
     ))
 }
 
-pub fn router(status: SharedStatus, db: Arc<Mutex<Db>>) -> Router {
+/// Header `plasmatrack-client stop` sends with `POST /quit`.
+pub const QUIT_HEADER: (&str, &str) = ("x-plasmatrack", "quit");
+
+/// Stops the client (`plasmatrack-client stop`, the installer). Browsers cannot
+/// trigger it: they send `Origin` on cross-site POSTs, and the custom header
+/// needs a CORS preflight this server never grants.
+async fn quit(State(state): State<AppState>, headers: HeaderMap) -> StatusCode {
+    let asked = headers.get(QUIT_HEADER.0).is_some_and(|v| v == QUIT_HEADER.1);
+    if !asked || headers.contains_key("origin") {
+        return StatusCode::FORBIDDEN;
+    }
+    state.shutdown.notify_one();
+    StatusCode::NO_CONTENT
+}
+
+pub fn router(status: SharedStatus, db: Arc<Mutex<Db>>, shutdown: Arc<Notify>) -> Router {
     Router::new()
         .route("/", get(status_page))
         .route("/status.json", get(status_json))
-        .with_state(AppState { status, db })
+        .route("/quit", post(quit))
+        .with_state(AppState { status, db, shutdown })
 }
 
 /// Serves the status page until the task is dropped. Only loopback addresses
 /// are accepted by the config validation.
-pub async fn serve(addr: SocketAddr, status: SharedStatus, db: Arc<Mutex<Db>>) -> std::io::Result<()> {
+pub async fn serve(addr: SocketAddr, status: SharedStatus, db: Arc<Mutex<Db>>, shutdown: Arc<Notify>) -> std::io::Result<()> {
     let listener = tokio::net::TcpListener::bind(addr).await?;
-    axum::serve(listener, router(status, db)).await
+    axum::serve(listener, router(status, db, shutdown)).await
 }

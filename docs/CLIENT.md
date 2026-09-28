@@ -69,5 +69,18 @@ plasmatrack-client show-local        # [local] as JSON; the token only as token_
   when any folder fails (usually because the game is running).
 
 **`plasmatrack-clientw`** is the same program without a console window on Windows. The
-installer starts `plasmatrack-clientw run` at login. Its log goes to `client.log` in the
-data directory; the previous log is kept as `client.log.old` once it passes 8 MiB.
+installer starts `plasmatrack-clientw run` at login.
+- **Log:** `client.log` in the data directory. The previous log is kept as `client.log.old`
+  once it passes 8 MiB.
+- **Tray icon:** a purple P. The tooltip shows the game connection and the upload state.
+  Double-clicking opens the status page. The menu has Open status page, Open data folder and
+  Quit.
+- **Startup errors** appear as a dialog.
+
+**Only one client runs at a time.**
+- A second `run` finds the first through its status page. The windowless one opens that page;
+  the console one prints its address and exits.
+- `plasmatrack-client stop` asks the running client to quit. It sends `POST /quit` with the
+  header `x-plasmatrack: quit`; requests carrying an `Origin` header are refused, so web pages
+  cannot do it.
+- `taskkill` without `/F` also stops `plasmatrack-clientw` cleanly.

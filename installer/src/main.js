@@ -19,6 +19,7 @@ const BIN_DIR = path.join(DATA_DIR, 'bin');
 const CLIENTW = path.join(BIN_DIR, 'plasmatrack-clientw.exe');
 const RUN_KEY = 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run';
 const RUN_VALUE = 'PlasmaTrack';
+const START_MENU_LINK = path.join(app.getPath('appData'), 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'PlasmaTrack.lnk');
 const GAME_PROCESSES = ['eurotrucks2.exe', 'amtrucks.exe'];
 
 /** Runs a program without a console window. Resolves even on a non-zero exit. */
@@ -61,9 +62,29 @@ async function clientRunning(statusUrl) {
   }
 }
 
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+async function clientwRunning() {
+  const r = await run('tasklist.exe', ['/FO', 'CSV', '/NH', '/FI', 'IMAGENAME eq plasmatrack-clientw.exe']);
+  return r.stdout.toLowerCase().includes('plasmatrack-clientw.exe');
+}
+
+/** Asks the client to quit (so its tray icon goes away cleanly), then makes sure. */
 async function stopClient() {
-  await run('taskkill.exe', ['/F', '/IM', 'plasmatrack-clientw.exe']);
-  await new Promise((r) => setTimeout(r, 500)); // let Windows release the exe
+  await run(payloadClient(), ['stop']);
+  for (let i = 0; i < 20 && (await clientwRunning()); i++) await sleep(250);
+  if (await clientwRunning()) await run('taskkill.exe', ['/F', '/IM', 'plasmatrack-clientw.exe']);
+  await sleep(300); // let Windows release the exe
+}
+
+function writeStartMenuShortcut() {
+  return shell.writeShortcutLink(START_MENU_LINK, 'create', {
+    target: CLIENTW,
+    args: 'run',
+    description: 'PlasmaTrack runs in the background and records your ETS2/ATS jobs',
+    icon: CLIENTW,
+    iconIndex: 0,
+  });
 }
 
 function startClient() {
@@ -114,6 +135,9 @@ async function install({ serverUrl, token, autostart }) {
     step(false, 'Plugin not installed', plugin.stderr);
   }
 
+  const linked = writeStartMenuShortcut();
+  step(linked, linked ? 'Added PlasmaTrack to the Start menu' : 'Could not add PlasmaTrack to the Start menu');
+
   if (autostart) {
     const r = await run('reg.exe', ['add', RUN_KEY, '/v', RUN_VALUE, '/t', 'REG_SZ', '/d', `"${CLIENTW}" run`, '/f']);
     step(r.ok, r.ok ? 'PlasmaTrack starts when you log in' : 'Could not add PlasmaTrack to startup', r.stderr);
@@ -129,7 +153,11 @@ async function install({ serverUrl, token, autostart }) {
     await new Promise((r) => setTimeout(r, 500));
     running = await clientRunning(s.statusUrl);
   }
-  step(running, running ? 'Client running' : 'Client did not start', running ? s.statusUrl : path.join(DATA_DIR, 'client.log'));
+  step(
+    running,
+    running ? 'PlasmaTrack is running in the background (purple P icon in the taskbar tray)' : 'PlasmaTrack did not start',
+    running ? s.statusUrl : path.join(DATA_DIR, 'client.log'),
+  );
   return { steps };
 }
 
@@ -139,7 +167,8 @@ async function uninstall({ deleteData }) {
 
   await stopClient();
   await run('reg.exe', ['delete', RUN_KEY, '/v', RUN_VALUE, '/f']);
-  step(true, 'Stopped the client and removed it from startup');
+  fs.rmSync(START_MENU_LINK, { force: true });
+  step(true, 'Stopped the client and removed it from startup and the Start menu');
 
   const r = await run(payloadClient(), ['uninstall-plugin']);
   const folders = parseJson(r.stdout) || [];
@@ -196,7 +225,28 @@ function handle(channel, fn) {
   });
 }
 
+// Unattended: `--install [--no-autostart]` keeps the saved server and token
+// (a token is never taken on the command line); `--uninstall` keeps local data.
+// Steps are printed as JSON; the exit code is 0 when every step succeeded.
+const UNATTENDED = process.argv.includes('--install') ? 'install' : process.argv.includes('--uninstall') ? 'uninstall' : null;
+
+async function unattended() {
+  const r =
+    UNATTENDED === 'install'
+      ? await install({ autostart: !process.argv.includes('--no-autostart') })
+      : await uninstall({ deleteData: false });
+  process.stdout.write(JSON.stringify(r, null, 2) + '\n');
+  app.exit(r.steps && r.steps.every((s) => s.ok) ? 0 : 1);
+}
+
 app.whenReady().then(() => {
+  if (UNATTENDED) {
+    unattended().catch((err) => {
+      process.stderr.write(`${err && err.stack ? err.stack : err}\n`);
+      app.exit(1);
+    });
+    return;
+  }
   handle('state', state);
   handle('install', install);
   handle('uninstall', uninstall);

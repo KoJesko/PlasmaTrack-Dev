@@ -1,8 +1,10 @@
 //! Command line shared by `plasmatrack-client` (console) and
 //! `plasmatrack-clientw` (Windows, no console window; started at login by the
-//! installer, logging to `client.log` in the data directory).
+//! installer, logging to `client.log` in the data directory, with a tray icon).
 //!
-//!   run              [--config PATH] [--data-dir PATH]
+//!   run              [--config PATH] [--data-dir PATH]   a second `run` finds the first
+//!                                      and (windowless) opens its status page
+//!   stop             [--config PATH]   ask a running client to quit
 //!   init-config      [--config PATH]
 //!   status           [--config PATH] [--data-dir PATH]
 //!   find-games       [--json]
@@ -18,13 +20,14 @@ use std::io::Read;
 use std::net::{IpAddr, SocketAddr};
 use std::path::PathBuf;
 use std::process::ExitCode;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Duration;
 
 use pt_core::Config;
+use tokio::sync::Notify;
 
 use crate::db::Db;
-use crate::status::Status;
+use crate::status::{SharedStatus, Status};
 use crate::uploader::UploaderConfig;
 use crate::{listener, log, manifest, paths, setup, status, steam, uploader};
 
@@ -89,8 +92,60 @@ fn write_inis(cfg: &Config, installs: &[steam::GameInstall]) {
     }
 }
 
-async fn run(args: Args) -> Result<(), String> {
+/// Links `run` with whoever started it (the tray): a shutdown request, and the
+/// live state once the client is up.
+#[derive(Clone, Default)]
+pub struct Hooks {
+    pub shutdown: Arc<Notify>,
+    pub live: Arc<OnceLock<Live>>,
+}
+
+pub struct Live {
+    pub status: SharedStatus,
+    pub db: Arc<Mutex<Db>>,
+    pub status_url: String,
+}
+
+enum RunError {
+    /// Another client already listens; its status page.
+    AlreadyRunning(String),
+    Failed(String),
+}
+
+impl From<String> for RunError {
+    fn from(e: String) -> Self {
+        RunError::Failed(e)
+    }
+}
+
+fn status_url(cfg: &Config) -> String {
+    format!("http://{}:{}/", cfg.local.listen_address, cfg.local.status_port)
+}
+
+fn local_http() -> Option<reqwest::Client> {
+    reqwest::Client::builder().no_proxy().timeout(Duration::from_secs(2)).build().ok()
+}
+
+/// True when a PlasmaTrack client answers on the status page.
+async fn client_answers(status_url: &str) -> bool {
+    let Some(http) = local_http() else { return false };
+    let Ok(res) = http.get(format!("{status_url}status.json")).send().await else { return false };
+    if !res.status().is_success() {
+        return false;
+    }
+    let body = res.text().await.unwrap_or_default();
+    serde_json::from_str::<serde_json::Value>(&body).is_ok_and(|v| v.get("client_version").is_some())
+}
+
+async fn run(args: Args, hooks: Hooks) -> Result<(), RunError> {
     let cfg = load_config(&args.config)?;
+    let url = status_url(&cfg);
+    let ip: IpAddr = cfg.local.listen_address.parse().map_err(|e| format!("listen_address: {e}"))?;
+    let plugin_listener = match tokio::net::TcpListener::bind(SocketAddr::new(ip, cfg.local.port)).await {
+        Ok(l) => l,
+        Err(_) if client_answers(&url).await => return Err(RunError::AlreadyRunning(url)),
+        Err(e) => return Err(format!("cannot listen on {ip}:{} (port in use?): {e}", cfg.local.port).into()),
+    };
     std::fs::create_dir_all(&args.data_dir).map_err(|e| format!("{}: {e}", args.data_dir.display()))?;
     let db = Db::open(&args.data_dir.join(paths::DB_FILE)).map_err(|e| format!("database: {e}"))?;
     let db = Arc::new(Mutex::new(db));
@@ -111,18 +166,14 @@ async fn run(args: Args) -> Result<(), String> {
     }));
     let manifest = Arc::new(Mutex::new(manifest));
 
-    let ip: IpAddr = cfg.local.listen_address.parse().map_err(|e| format!("listen_address: {e}"))?;
-    let plugin_listener = tokio::net::TcpListener::bind(SocketAddr::new(ip, cfg.local.port))
-        .await
-        .map_err(|e| format!("cannot listen on {ip}:{} (port in use?): {e}", cfg.local.port))?;
     log!("waiting for the plugin on {ip}:{}", cfg.local.port);
     tokio::spawn(listener::serve(plugin_listener, db.clone(), status.clone()));
 
     let status_addr = SocketAddr::new(ip, cfg.local.status_port);
     {
-        let (status, db) = (status.clone(), db.clone());
+        let (status, db, shutdown) = (status.clone(), db.clone(), hooks.shutdown.clone());
         tokio::spawn(async move {
-            if let Err(e) = status::serve(status_addr, status, db).await {
+            if let Err(e) = status::serve(status_addr, status, db, shutdown).await {
                 log!("status page unavailable: {e}");
             }
         });
@@ -144,13 +195,142 @@ async fn run(args: Args) -> Result<(), String> {
         log!("uploads paused until [local] server_url and token are set; everything is kept locally");
     }
     tokio::spawn(uploader::run(ucfg, db.clone(), status.clone(), manifest.clone()));
+    let _ = hooks.live.set(Live { status, db, status_url: url });
 
-    // Without a console (plasmatrack-clientw) there is no Ctrl+C; run until killed.
-    if tokio::signal::ctrl_c().await.is_err() {
-        std::future::pending::<()>().await;
+    // Ctrl+C (console), POST /quit (`stop`, installer) or the tray's Quit.
+    // Without a console, ctrl_c() may fail; then only the other two apply.
+    let ctrl_c = async {
+        if tokio::signal::ctrl_c().await.is_err() {
+            std::future::pending::<()>().await;
+        }
+    };
+    tokio::select! {
+        _ = ctrl_c => {}
+        _ = hooks.shutdown.notified() => {}
     }
     log!("shutting down");
     Ok(())
+}
+
+/// Tooltip and tray menu lines: game connection, then uploads.
+pub fn status_lines(s: &Status, pending: Option<u64>) -> Vec<String> {
+    let game = match s.last_game.as_deref() {
+        Some("eut2") => "ETS2",
+        Some("ats") => "ATS",
+        _ => "the game",
+    };
+    let connection =
+        if s.plugin_connections > 0 { format!("Connected to {game}") } else { "Waiting for ETS2 or ATS".to_string() };
+    let failing = s.last_upload_error.is_some() && s.last_upload_ok_ms < s.last_upload_attempt_ms;
+    let upload = match pending {
+        _ if !s.upload_configured => Some("Uploads paused: no token".to_string()),
+        _ if failing => Some("Upload failing, retrying".to_string()),
+        Some(0) => Some("Everything uploaded".to_string()),
+        Some(n) => Some(format!("{n} frames waiting to upload")),
+        None => None,
+    };
+    std::iter::once(connection).chain(upload).collect()
+}
+
+/// `run` for plasmatrack-clientw on Windows: a tray icon while the client runs
+/// on a worker thread; errors as a dialog, since there is no console.
+#[cfg(windows)]
+fn run_windowless(args: Args) -> Result<(), String> {
+    use crate::tray;
+
+    let cfg = match load_config(&args.config) {
+        Ok(c) => c,
+        Err(e) => {
+            tray::error_box(&format!("PlasmaTrack could not start.\n\n{e}\n\nRun PlasmaTrack Setup to set it up."));
+            return Err(e);
+        }
+    };
+    let rt = tokio::runtime::Runtime::new().map_err(|e| e.to_string())?;
+    let url = status_url(&cfg);
+    if rt.block_on(client_answers(&url)) {
+        log!("already running; opening {url}");
+        tray::open(&url);
+        return Ok(());
+    }
+
+    let hooks = Hooks::default();
+    let (live, live2, shutdown) = (hooks.live.clone(), hooks.live.clone(), hooks.shutdown.clone());
+    let data_dir = args.data_dir.clone();
+    let cb = tray::Callbacks {
+        title: format!("PlasmaTrack {}", crate::CLIENT_VERSION),
+        lines: Box::new(move || match live.get() {
+            Some(l) => {
+                let status = l.status.lock().map(|s| s.clone()).unwrap_or_default();
+                let pending = l.db.try_lock().ok().and_then(|db| db.stats().ok()).map(|s| s.frames_pending_upload);
+                status_lines(&status, pending)
+            }
+            None => vec!["Starting…".to_string()],
+        }),
+        open_status: Box::new(move || {
+            if let Some(l) = live2.get() {
+                tray::open(&l.status_url);
+            }
+        }),
+        open_data: Box::new(move || tray::open(&data_dir.to_string_lossy())),
+        quit: Box::new(move || shutdown.notify_one()),
+    };
+    tray::run(cb, move |exit| {
+        std::thread::spawn(move || {
+            match rt.block_on(run(args, hooks)) {
+                Ok(()) => {}
+                Err(RunError::AlreadyRunning(url)) => tray::open(&url),
+                Err(RunError::Failed(e)) => {
+                    log!("error: {e}");
+                    tray::error_box(&format!("PlasmaTrack stopped.\n\n{e}"));
+                }
+            }
+            exit.post();
+        });
+    })
+}
+
+#[cfg(not(windows))]
+fn run_windowless(args: Args) -> Result<(), String> {
+    run_console(args)
+}
+
+fn run_console(args: Args) -> Result<(), String> {
+    let rt = tokio::runtime::Runtime::new().map_err(|e| e.to_string())?;
+    match rt.block_on(run(args, Hooks::default())) {
+        Ok(()) => Ok(()),
+        Err(RunError::AlreadyRunning(url)) => {
+            println!("PlasmaTrack is already running; status page: {url}");
+            Ok(())
+        }
+        Err(RunError::Failed(e)) => Err(e),
+    }
+}
+
+/// Asks a running client to quit and waits until it has.
+fn stop(args: &Args) -> Result<(), String> {
+    let cfg = load_config(&args.config)?;
+    let url = status_url(&cfg);
+    let rt = tokio::runtime::Runtime::new().map_err(|e| e.to_string())?;
+    rt.block_on(async {
+        let http = local_http().ok_or("http client")?;
+        let sent = http.post(format!("{url}quit")).header(status::QUIT_HEADER.0, status::QUIT_HEADER.1).send().await;
+        match sent {
+            Err(_) => {
+                println!("not running");
+                return Ok(());
+            }
+            Ok(r) if !r.status().is_success() => return Err(format!("quit refused: {}", r.status())),
+            Ok(_) => {}
+        }
+        for _ in 0..50 {
+            if !client_answers(&url).await {
+                println!("stopped");
+                return Ok(());
+            }
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+        Err("the client did not stop within 5 s".to_string())
+    })
 }
 
 fn print_json<T: serde::Serialize>(v: &T) {
@@ -242,7 +422,9 @@ pub fn main(windowless: bool) -> ExitCode {
         }
     }
     let result = match args.command.as_str() {
-        "run" => tokio::runtime::Runtime::new().map_err(|e| e.to_string()).and_then(|rt| rt.block_on(run(args))),
+        "run" if windowless => run_windowless(args),
+        "run" => run_console(args),
+        "stop" => stop(&args),
         "init-config" => {
             if args.config.exists() {
                 Err(format!("{} already exists", args.config.display()))
@@ -295,5 +477,28 @@ pub fn main(windowless: bool) -> ExitCode {
             eprintln!("error: {e}");
             ExitCode::FAILURE
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn status_lines_describe_game_and_uploads() {
+        let mut s = Status::default();
+        assert_eq!(status_lines(&s, Some(3)), ["Waiting for ETS2 or ATS", "Uploads paused: no token"]);
+        s.upload_configured = true;
+        s.plugin_connections = 1;
+        s.last_game = Some("eut2".into());
+        assert_eq!(status_lines(&s, Some(0)), ["Connected to ETS2", "Everything uploaded"]);
+        assert_eq!(status_lines(&s, Some(12)), ["Connected to ETS2", "12 frames waiting to upload"]);
+        assert_eq!(status_lines(&s, None), ["Connected to ETS2"]);
+        s.last_upload_attempt_ms = Some(20);
+        s.last_upload_ok_ms = Some(10);
+        s.last_upload_error = Some("503".into());
+        assert_eq!(status_lines(&s, Some(12))[1], "Upload failing, retrying");
+        s.last_upload_ok_ms = Some(20);
+        assert_eq!(status_lines(&s, Some(0))[1], "Everything uploaded");
     }
 }
