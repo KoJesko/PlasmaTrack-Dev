@@ -122,6 +122,14 @@ Per-frame order (:82-89): configuration → paused/started → frame_start → g
 - The SDK's `SCS_PF_U64` expands to `"lu"`, which is wrong on Win64. Use `PRIu64` instead.
 - The SDK example log calls have this bug too. Do not copy them.
 
+**Observed in the real game** (ATS 1.61.2.0s, 2026-09-28, first plugin run; no capture mode yet):
+- The telemetry game version reported is **1.07**, newer than the newest version the SDK 1.14 headers document (ATS 1.05).
+- The game sends two **undocumented config ids, `bus_job` and `car_job`**. Both were empty during this run. The plugin forwards them raw, and their contents still need to be captured.
+- **Every config is re-sent when a save loads into the world** (job, bus_job, car_job, controls, hshifter, truck, trailer, trailer.0–9). A **`timer_restart` flag** follows in the first frame. This is the first empirical support for load-context signals (§5).
+- At `scs_telemetry_init` the configs arrive once, empty, before any frame. They are sent again when the world loads.
+- The plugin runs alongside TruckyTelemetry, an ETS shared-memory plugin and others without conflict.
+- **Privacy note for stage 2:** the `modules` message lists every loaded DLL (155 here). The client keeps that list local and uploads only the matches against `[multiplayer] truckersmp_module_names`, never the full list.
+
 ## 4. Wire protocol (plugin → client)
 
 **Transport**
