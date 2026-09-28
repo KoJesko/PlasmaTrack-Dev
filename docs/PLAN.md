@@ -292,7 +292,7 @@ The fingerprint has two parts:
 | Situation | Result |
 |---|---|
 | Job appears in continuous, gap-free data | Tracked start. Start odometer and fuel are taken at the first live sample. |
-| Job first seen mid-way (plugin snapshot, after a data gap, or loaded save of an unseen job) | **Late start.** Record the details reported so far and track from that point. World distance = `job.delivered` `distance.km`, the same source as every other job (§6). Only the part seen can be cross-checked against the trace. Goes to review (`review_policy.late_start`). |
+| Job first seen mid-way (plugin snapshot, after a data gap, or loaded save of an unseen job) | **Late start.** Record the details reported so far and track from that point. Distance = `job.delivered` `distance.km`, the same source as every other job (§6). It is converted to 1:1 with the world/game ratio of the part that was tracked, and only that part can be cross-checked against the trace. Goes to review (`review_policy.late_start`). |
 | Load, same job, loaded point inside the kept timeline | Truncate to the matching point. Matching uses odometer, position and fuel together, plus game time in singleplayer only (position only if the truck changed). Everything after it, gaps included, is reverted. Recording continues. |
 | Load, same job, loaded point matches **previously reverted** material | Restore that branch up to the loaded point and score it normally, overspeed included. This closes the "revert, then restore" exploit, where overspeed would otherwise be laundered into a gap. |
 | Load, same job, loaded point beyond anything seen | **Gap** from the last kept point to the loaded point. Resume. Goes to review (`review_policy.gap`). |
@@ -322,17 +322,20 @@ The fingerprint has two parts:
 
 **Two distances per job (decided 2026-09-28):**
 - **World distance (scored):** the physical 1:1 distance the truck moved through the 3D world, like real-life driving (an hour at 90 km/h is 90 km).
-  - **Source (decided 2026-09-28):** the game's own figure at the delivery point, the `distance.km` attribute of `job.delivered`. The SDK documents it as "the real distance in km on the job" (gameplay_events.h:106-111), while `planned_distance.km` is in "simulated kilometers" (configs.h:610-617).
-  - **To confirm with a delivery capture (C7):**
-    - that `distance.km` is the 1:1 distance rather than the game-scale distance;
-    - whether it includes the empty drive to the pickup.
-    
-    If it includes the empty leg, the tracked empty-leg distance is subtracted (decision 21).
-  - **Trace cross-check:** the tracker still computes the world distance itself, as Σ (Δodometer ÷ `local.scale`), where each Δodometer is taken over a run of kept samples with the same `local.scale`.
+  - **Source (decided 2026-09-28):** the game's own figure at the delivery point, the `distance.km` attribute of `job.delivered` (gameplay_events.h:106-111).
+  - **Measured (clean Chicago → Chicago delivery, 2026-09-28): `distance.km` is in GAME scale, not 1:1.**
+    - The game reported 71. The odometer measured 70.72 km loaded (71.47 km including the 0.75 km empty leg); the 1:1 distance was 5.93 km loaded.
+    - The value appears rounded to whole km (71; 1000 in the edited run).
+    - Whether it includes the empty leg is still open: here the empty leg was too short to tell. If it does, the tracked empty-leg distance is subtracted (decision 21).
+  - **So the scored 1:1 figure is the game's figure converted with the job's own measured scale mix:** world = `distance.km` × (tracked loaded world ÷ tracked loaded game).
+    - Tracked world = Σ (Δodometer ÷ `local.scale`), where each Δodometer is taken over a run of kept samples with the same `local.scale`; tracked game = Σ Δodometer.
+    - Chicago example: 71 × 5.931 / 70.718 = 5.95 km = 3.70 mi → 3 points. It would be 44 mi in game.
+    - Under a 1:1 mod the scale is 1, so world = game.
+  - **Trace cross-check** (same units, game scale): `distance.km` against the tracked loaded game distance (odometer).
     - The first capture shows this matches the actual movement exactly: the ratio is 2.98 at scale 3 and 20.00 at scale 20.
     - If the game does not provide `local.scale`, which only a 1:1 map would do (common_channels.h:14-19), the scale is 1.
     - **ETS2 uses 1:19 on open roads** (you, 2026-09-28), against 20 in ATS. Nothing is hard-coded: the reported `local.scale` is used per run. The first ETS2 capture should show 19 on roads (and presumably 3 in cities).
-    - If `distance.km` and the trace figure disagree by more than the greater of 1% and 30 mi, **hard-capped at 5% for jobs under 100 mi**, all measured on the SDK-reported delivery distance (`delivered_vs_trace_*`; PROVISIONAL), the job goes to **manual review** with both values shown. This is a trace check (§6a), so a save edit or a patched game cannot quietly inflate the figure.
+    - If `distance.km` and the tracked game distance disagree by more than the greater of 1% and 30 mi, **hard-capped at 5% for jobs under 100 mi**, all measured in game miles on the SDK-reported delivery distance (`delivered_vs_trace_*`; PROVISIONAL), the job goes to **manual review** with both values shown. The Chicago job differed by 0.28 km (0.4%), well inside the tolerance. This is a trace check (§6a), so a save edit or a patched game cannot quietly inflate the figure.
   - Save loads need no special handling: the game restores its own job distance with the save, which matches the kept timeline.
 - **Game distance (shown, not scored):** the odometer difference, meaning what the truck's odometer, the job list and the in-game map show. The bot shows both values: "12.3 mi driven (1:1), 146 mi in game".
 - Both distances count **loaded** driving only, meaning kept segments where the job config has `cargo.loaded=true`.
@@ -591,7 +594,7 @@ I cannot run the games in this session, so the following steps need a real game 
 21. **Empty driving earns no points (2026-09-28):** only distance driven with `cargo.loaded=true` is scored. The World of Trucks exception is deferred (§6).
 22. **Count 1:1 (2026-09-28):** points come from the **physical world distance**, the distance the truck actually moved at 1:1 scale, like real driving. This is unique among trackers. The **in-game (odometer) distance is reported as a second value**, so players see both.
     - In the first capture, 79.5 game km equals 7.9 world km.
-    - World distance = the game's `job.delivered` `distance.km` at the delivery point. The tracker's own odometer ÷ `local.scale` figure cross-checks it, and a mismatch goes to review (§6).
+    - World distance = the game's `job.delivered` `distance.km` at the delivery point. That figure is in game scale (measured), so it is converted to 1:1 with the job's own tracked world/game ratio. The tracked odometer distance cross-checks it, and a mismatch goes to review (§6).
     - Rule 3 moves to world distance too: over **150 world km** goes to review (§6).
     - ETS2 uses 1:19 on roads and ATS 1:20; both are read from `local.scale`.
     - **Purpose: it must work with 1:1 scale mods** (you, 2026-09-28). Nothing assumes vanilla scale.

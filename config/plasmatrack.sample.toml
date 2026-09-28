@@ -55,15 +55,17 @@ compare_precision_km = 0.001
 # Odometer comparisons use max(4 x ulp(odometer), this value), because the SDK
 # odometer channel is a 32-bit float in km (scssdk_telemetry_truck_common_channels.h:640-645).
 odometer_epsilon_km = 0.005
-# Scored world distance is the game's job.delivered distance.km (PLAN §6). If it
-# differs from the tracker's own odometer / local.scale figure by more than the
-# GREATER of these two (pct is relative to the larger figure)
-# the job goes to manual review. PROVISIONAL until a
-# delivery capture (C7) shows how closely they agree.
+# The game's job.delivered distance.km is in GAME scale (measured on a clean
+# delivery: 71 reported vs 70.72 km loaded on the odometer). It is compared with
+# the tracker's own loaded odometer distance; if they differ by more than the
+# GREATER of these two (pct is relative to the larger figure), the job goes to
+# manual review. The scored 1:1 distance is distance.km x the job's tracked
+# world/game ratio (PLAN §6). PROVISIONAL: one clean delivery so far.
 delivered_vs_trace_tolerance_pct = 1.0
 delivered_vs_trace_tolerance_min_mi = 30.0
 # All measured on the SDK-reported delivery distance (job.delivered distance.km,
-# in miles): the job length for the short-job test, the floor and the percentage.
+# game scale, in miles): the job length for the short-job test, the floor and
+# the percentage.
 # Jobs shorter than short_job_under_mi are hard-capped at short_job_max_pct.
 delivered_vs_trace_short_job_under_mi = 100.0
 delivered_vs_trace_short_job_max_pct = 5.0
