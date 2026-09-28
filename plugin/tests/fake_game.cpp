@@ -250,7 +250,7 @@ struct Game {
     void frame(bool paused, double speed_mps, double odo_km, double fuel_l, double x,
                scs_u32_t flags = 0, bool fuel_available = true,
                const scs_telemetry_gameplay_event_t* gameplay = nullptr) {
-        if (!paused) sim_us += 16667;  // ~60 Hz physics
+        if (!paused) sim_us += 16666;  // the real game's physics step (observed in ATS 1.61)
         scs_telemetry_frame_start_t fs{};
         fs.flags = flags;
         fs.render_time = sim_us + 5000;

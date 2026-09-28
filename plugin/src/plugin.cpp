@@ -12,6 +12,7 @@
 //   gameplay events ......... common/scssdk_telemetry_common_gameplay_events.h
 //   channels ................ common/scssdk_telemetry_{common,truck_common,job_common}_channels.h
 
+#include <algorithm>
 #include <exception>
 #include <memory>
 #include <string>
@@ -87,6 +88,7 @@ public:
     bool force_sample = true;
     bool have_sample = false;
     scs_timestamp_t last_sample_sim_us = 0;
+    double next_sample_due_us = 0.0;  // paused-simulation time of the next scheduled sample
     std::int64_t last_emit_ms = 0;
 
     // Allocates a seq, lets `fill` add fields to the envelope, and pushes the
@@ -167,9 +169,23 @@ SCSAPI_VOID on_frame_end(const scs_event_t, const void* const, const scs_context
         if (!p->paused) {
             const double rate = p->settings.capture ? 0.0 : p->settings.sample_rate_hz;
             const scs_timestamp_t now = p->frame.paused_simulation_time;
-            const bool due = rate <= 0.0 || !p->have_sample || now < p->last_sample_sim_us ||
-                             double(now - p->last_sample_sim_us) >= 1e6 / rate;
-            if (p->force_sample || due) p->emit_sample();
+            // Fixed schedule with a small tolerance. The game's physics step is
+            // 16666 us (observed in ATS 1.61), so three steps (49998 us) fall just
+            // short of a 50 ms interval; comparing against the last sample time
+            // would only fire every 4th step (15 Hz instead of 20 Hz).
+            const double interval = rate > 0.0 ? 1e6 / rate : 0.0;
+            const double tolerance = interval > 0.0 ? std::min(2000.0, interval / 4.0) : 0.0;
+            const bool restarted = now < p->last_sample_sim_us;
+            const bool scheduled = rate <= 0.0 || !p->have_sample || restarted ||
+                                   double(now) + tolerance >= p->next_sample_due_us;
+            if (p->force_sample || scheduled) {
+                const bool had_sample = p->have_sample;
+                p->emit_sample();
+                if (scheduled) {
+                    const bool on_time = had_sample && !restarted && double(now) < p->next_sample_due_us + interval;
+                    p->next_sample_due_us = on_time ? p->next_sample_due_us + interval : double(now) + interval;
+                }
+            }
         }
         if (steady_ms() - p->last_emit_ms >= 1000) {
             p->emit(Kind::Heartbeat, [p](JsonWriter& w) {

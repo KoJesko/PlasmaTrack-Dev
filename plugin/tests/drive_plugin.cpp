@@ -119,7 +119,7 @@ int main(int argc, char** argv) {
     scs_timestamp_t sim = 0;
     double odo = 1000.0;
     for (int i = 0; i < 180; ++i) {
-        sim += 16667;
+        sim += 16666;  // the real game's physics step
         odo += 25.0 * 0.016667 / 1000.0;
         scs_telemetry_frame_start_t fs{};
         fs.simulation_time = fs.paused_simulation_time = fs.render_time = sim;
