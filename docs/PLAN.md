@@ -330,7 +330,7 @@ The contracts are documented here as OpenAPI (`docs/PUBLIC_API.md`, `docs/ADMIN_
 - **Route as GeoJSON** in lon/lat, already projected, split into LineStrings at ferries, trains, pauses and gaps.
 - Reverted material is never exposed publicly.
 
-**Route projection** stays in this repo (`pt-core::projection`, server-side), so the site only draws GeoJSON.
+**Route projection** stays in this repo (`pt-core::projection`, server-side), so the bot only draws GeoJSON.
 - Game world X/Z (metres) → lon/lat. Implemented independently from the game's `def/climate.sii` parameters and standard Lambert conformal conic maths. No GPL code is copied; truckermudgeon is credited for the ETS2 UK correction.
 - ATS: inverse LCC (lat₁ 33, lat₂ 45, lat₀ 39, lon₀ −96).
 - ETS2: offset (−16660, −4150), a UK box scaled 0.75 around (15550, 2750), then LCC (37, 65, 50, 15).
@@ -439,7 +439,7 @@ I cannot run the games in this session, so the following steps need a real game 
 
 ## 11. Decisions (2026-09-27)
 
-1. **Map:** you generate the tiles yourself with truckermudgeon/maps. This is allowed for modding as long as nothing is sold, so PlasmaTrack stays non-commercial. The tiles are rendered in the separate site repo (§8).
+1. **Map:** you generate the tiles yourself with truckermudgeon/maps. This is allowed for modding as long as nothing is sold, so PlasmaTrack stays non-commercial. The tiles are rendered in the bot repo (§8).
 2. **Refuel:** the heuristic is accepted. Fuel cost is never calculated. Fuel spikes across save loads are treated as save edits and ignored (§6).
 3. **Captures:** you will run the capture protocol in both games (§9).
 4. **Cancelled job brought back by a load:** resume it, unless that job was already delivered (§5).
