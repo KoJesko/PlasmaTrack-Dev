@@ -237,7 +237,7 @@ This model incorporates the red-team findings. All thresholds are in `[timeline]
   - It reverts nothing, and it is stored in the trace for admins to see.
 - **A pause bracket alone is not evidence.** In the capture, the teleports happened inside pauses, so a pause plus a position jump would otherwise look like a load.
 - **Other config changes never count as evidence.** A job or truck config that is re-sent without emptying `truck` only decides which case below applies. This stops ordinary job accepts, cargo loading, quick-job teleports and deliveries from looking like loads.
-- **Provisional:** W must still be confirmed not to occur on a quick job (C11), a truck purchase or switch (C12) or call for help (C13). If one of them does produce W, the rows below still match against the kept timeline. The worst outcome is a job sent to review, and no rule is ever raised.
+- **Provisional:** W must still be confirmed not to occur on a quick job (C11), a truck purchase or switch (C12) or call for help (C13). If one of them does produce W, the rows below still match against the kept timeline. A truck change itself never sends the job to review (see "Truck changes" below).
 - Signals are correlated per **bracket**: from the last live sample before the pause, restart or gap to the first live sample after it. They are not correlated per time window, so a player who waits in the menu after loading is handled correctly.
 - `job.delivered` and `job.cancelled` are attributed to the last known job. The job config empties before or around these events (event.h:82-89; RenCloud changelog).
 
@@ -247,7 +247,11 @@ The fingerprint has two parts:
 - **Route key:** game, source and destination city and company ids, the `delivery.time` deadline, `planned_distance.km`, `job.market`, `is.special.job`.
 - **Cargo key:** `cargo.id`, `cargo.mass`, `cargo.unit.count`, `income`.
 
-**Truck changes (decided):** allowed mid-job. The truck is not part of the fingerprint. Distance is measured per truck segment as an odometer difference, so a new truck's odometer never counts as distance driven.
+**Truck changes (decided; "should not do anything", 2026-09-28):** a truck change has **no effect** on the job, however it happens: truck switch, purchase, quick job, or a save edit (C20).
+- The truck is not part of the fingerprint.
+- A truck change never counts as load evidence, never opens a gap, never sends a job to review and never raises a rule.
+- Distance is measured per truck segment as an odometer difference, so the new truck's odometer never counts as distance driven.
+- When a load brings in a different truck, matching against the kept timeline uses **position** (plus game time in singleplayer) and skips odometer and fuel, which belong to the old truck. Tracking continues on a new segment.
 
 **Cargo switch (decided):** a job config whose route key matches the current or a suspended job but whose cargo key differs is a `cargo_switch`, never a new job. The game offers no way to change cargo mid-job, so this can only come from a save edit.
 - The job keeps its identity and goes to manual review with reason `cargo_switch`.
@@ -262,7 +266,7 @@ The fingerprint has two parts:
 |---|---|
 | Job appears in continuous, gap-free data | Tracked start. Start odometer and fuel are taken at the first live sample. |
 | Job first seen mid-way (plugin snapshot, after a data gap, or loaded save of an unseen job) | **Late start.** Record the details reported so far and track from that point. World distance = `job.delivered` `distance.km`, the same source as every other job (§6). Only the part seen can be cross-checked against the trace. Goes to review (`review_policy.late_start`). |
-| Load, same job, loaded point inside the kept timeline | Truncate to the matching point. Matching uses odometer, position and fuel together, plus game time in singleplayer only. Everything after it, gaps included, is reverted. Recording continues. |
+| Load, same job, loaded point inside the kept timeline | Truncate to the matching point. Matching uses odometer, position and fuel together, plus game time in singleplayer only (position only if the truck changed). Everything after it, gaps included, is reverted. Recording continues. |
 | Load, same job, loaded point matches **previously reverted** material | Restore that branch up to the loaded point and score it normally, overspeed included. This closes the "revert, then restore" exploit, where overspeed would otherwise be laundered into a gap. |
 | Load, same job, loaded point beyond anything seen | **Gap** from the last kept point to the loaded point. Resume. Goes to review (`review_policy.gap`). |
 | Load to a no-job save or a different job's save | Current job → **Suspended**: not cancelled, not sent to review, no penalty. The other job is resumed (if suspended), tracked (if new, as a late start), or stopped (if already delivered). |
