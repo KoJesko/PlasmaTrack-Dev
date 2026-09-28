@@ -299,7 +299,7 @@ The fingerprint has two parts:
     - The first capture shows this matches the actual movement exactly: the ratio is 2.98 at scale 3 and 20.00 at scale 20.
     - If the game does not provide `local.scale`, which only a 1:1 map would do (common_channels.h:14-19), the scale is 1.
     - **ETS2 uses 1:19 on open roads** (you, 2026-09-28), against 20 in ATS. Nothing is hard-coded: the reported `local.scale` is used per run. The first ETS2 capture should show 19 on roads (and presumably 3 in cities).
-    - If `distance.km` and the trace figure disagree by more than `delivered_vs_trace_tolerance_pct` (PROVISIONAL), the job goes to **manual review** with both values shown. This is a trace check (§6a), so a save edit or a patched game cannot quietly inflate the figure.
+    - If `distance.km` and the trace figure disagree by more than the greater of 1% and 30 world mi (`delivered_vs_trace_tolerance_pct`, `delivered_vs_trace_tolerance_min_world_mi`; PROVISIONAL), the job goes to **manual review** with both values shown. This is a trace check (§6a), so a save edit or a patched game cannot quietly inflate the figure.
   - Save loads need no special handling: the game restores its own job distance with the save, which matches the kept timeline.
 - **Game distance (shown, not scored):** the odometer difference, meaning what the truck's odometer, the job list and the in-game map show. The bot shows both values: "12.3 mi driven (1:1), 146 mi in game".
 - Both distances count **loaded** driving only, meaning kept segments where the job config has `cargo.loaded=true`.
