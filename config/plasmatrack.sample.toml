@@ -59,7 +59,7 @@ odometer_epsilon_km = 0.005
 # differs from the tracker's own odometer / local.scale figure by more than this
 # (relative to the larger), the job goes to manual review. PROVISIONAL until a
 # delivery capture (C7) shows how closely they agree.
-delivered_vs_trace_tolerance_pct = 5.0
+delivered_vs_trace_tolerance_pct = 1.0
 
 [rules.fuel]
 # Rule 4: job fuel used below -tolerance is flagged (float noise stays silent).
