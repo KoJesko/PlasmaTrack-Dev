@@ -1,0 +1,106 @@
+//! Regression tests on real game captures (ATS 1.61.2.0s, 2026-09-28), trimmed
+//! with `pt-replay --trim-to ... --every 15`: every non-sample message and its
+//! neighbouring samples are kept, other samples decimated to 4 Hz, seq
+//! renumbered, module lists redacted, heartbeats dropped. Odometer distances
+//! survive exactly. What happened in each is documented in docs/PLAN.md §3/§6.
+
+use std::path::Path;
+
+use pt_core::rules::{Context, Outcome, ReviewReason};
+use pt_core::timeline::{GapKind, JobEvent, JobState, StartKind};
+use pt_replay::{order_sessions, parse_lines, read_lines, replay, sample_config, Replayed};
+
+fn run(name: &str) -> Vec<Replayed> {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/real").join(name);
+    let cfg = sample_config();
+    let (mut frames, bad) = parse_lines(&read_lines(&path).expect("fixture"), &cfg);
+    assert_eq!(bad, 0);
+    order_sessions(&mut frames);
+    replay(&frames, &cfg, &Context::default())
+}
+
+fn find<'a>(jobs: &'a [Replayed], cargo: &str) -> &'a Replayed {
+    jobs.iter().find(|r| r.job.info.fingerprint.cargo.cargo_id == cargo).expect("job present")
+}
+
+fn count(events: &[JobEvent], f: impl Fn(&JobEvent) -> bool) -> usize {
+    events.iter().filter(|e| f(e)).count()
+}
+
+fn close(a: f64, b: f64, tol: f64) -> bool {
+    (a - b).abs() <= tol
+}
+
+/// Chicago → Chicago, planned 70 km: the game reported 71 km (game scale).
+#[test]
+fn chicago_clean_delivery() {
+    let jobs = run("ats-chicago-clean-delivery.jsonl.gz");
+    assert_eq!(jobs.len(), 1);
+    let r = &jobs[0];
+    assert_eq!((r.job.state, r.job.start), (JobState::Delivered, StartKind::Tracked));
+    let d = &r.result.distances;
+    assert!(close(d.tracked_counted_game_km, 70.72, 0.01));
+    assert!(close(d.tracked_uncounted_game_km, 0.75, 0.01));
+    assert!(close(d.driven_counted_world_km, 5.929, 0.002));
+    assert_eq!(d.delivered_game_km, Some(71.0));
+    assert_eq!(r.result.outcome, Outcome::Valid, "{:?}", r.result.review);
+    assert_eq!(r.result.points, 3.6);
+}
+
+/// Chicago → Sioux Falls on TruckersMP, planned 1042 km: a 159 km empty drive
+/// to the pickup, a game restart mid-job and an autosave load before the
+/// pickup. The game reported 1233 km for the whole trip.
+#[test]
+fn sioux_falls_empty_leg_restart_and_autosave() {
+    let jobs = run("ats-sioux-falls-tmp-empty-leg.jsonl.gz");
+    let r = find(&jobs, "dynamite");
+    assert_eq!((r.job.state, r.job.start), (JobState::Delivered, StartKind::Tracked));
+    assert_eq!(count(&r.job.events, |e| matches!(e, JobEvent::SessionContinue { .. })), 1);
+    assert_eq!(count(&r.job.events, |e| matches!(e, JobEvent::LoadTruncate { .. })), 1);
+    let d = &r.result.distances;
+    assert!(close(d.tracked_whole_game_km, 1232.13, 0.02));
+    assert!(close(d.tracked_uncounted_game_km, 158.84, 0.02));
+    assert!(close(d.counted_game_km, 1074.16, 0.02));
+    assert!(r.result.truckersmp && !r.result.convoy);
+    assert_eq!(r.result.outcome, Outcome::Valid, "{:?}", r.result.review);
+    assert_eq!(r.result.points, 36.1);
+    // The beverages job was cancelled at the start of the session.
+    assert_eq!(find(&jobs, "beverages").job.state, JobState::Cancelled);
+}
+
+/// Port Angeles → Tacoma on TruckersMP: six loads between saves 139 and 143
+/// (including loading forward onto reverted material), a ferry, an autosave
+/// load back across it, F7, and a cancel.
+#[test]
+fn six_loads_ferry_f7_cancel() {
+    let jobs = run("ats-tmp-six-loads-ferry-f7-cancel.jsonl.gz");
+    let r = find(&jobs, "tyres");
+    let ev = &r.job.events;
+    assert_eq!(count(ev, |e| matches!(e, JobEvent::LoadTruncate { .. })), 4);
+    assert_eq!(count(ev, |e| matches!(e, JobEvent::LoadRestore { .. })), 2, "143 after 139 restores");
+    assert_eq!(count(ev, |e| matches!(e, JobEvent::Teleport { ferry_or_train: true, .. })), 1);
+    assert_eq!(count(ev, |e| matches!(e, JobEvent::Teleport { ferry_or_train: false, .. })), 1, "F7");
+    assert!(r.job.gaps.is_empty());
+    assert_eq!(r.job.state, JobState::Cancelled);
+    assert!(r.result.review.is_empty(), "loads and teleports raise nothing: {:?}", r.result.review);
+    assert!(close(r.result.distances.tracked_whole_game_km, 33.77, 0.02));
+}
+
+/// The tampered run: a save with the odometer ×10, a developer-mode teleport to
+/// the destination and a save-edited 1000 km delivery of a 7 km job. Also two
+/// refuels and a profile switch (no profile notices yet, so it falls back to
+/// load handling).
+#[test]
+fn save_edits_are_held_for_review() {
+    let jobs = run("ats-save-edits-profile-refuel.jsonl.gz");
+    let r = find(&jobs, "beverages");
+    assert_eq!(r.job.state, JobState::Delivered);
+    assert_eq!(r.result.outcome, Outcome::PendingReview);
+    assert!(r.result.review.iter().any(|x| matches!(x, ReviewReason::DistanceMismatch { delivered_km, .. } if *delivered_km == 1000.0)));
+    assert_eq!(r.job.gaps.iter().filter(|g| g.kind == GapKind::Load).count(), 1, "the odometer edit");
+    assert_eq!(r.result.refuels.len(), 2);
+    assert!(!r.result.review.iter().any(|x| matches!(x, ReviewReason::FuelJump { .. } | ReviewReason::NegativeFuel { .. })));
+    assert_eq!(count(&r.job.events, |e| matches!(e, JobEvent::Teleport { .. })), 2);
+    // The other profile's quick job is a separate (late-start) job.
+    assert_eq!(find(&jobs, "moving_cont").job.info.fingerprint.route.job_market, "quick_job");
+}

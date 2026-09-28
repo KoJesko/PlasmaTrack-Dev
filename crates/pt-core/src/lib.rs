@@ -6,6 +6,10 @@
 
 pub mod config;
 pub mod game;
+pub mod job;
+pub mod rules;
+pub mod timeline;
+pub mod trace;
 pub mod units;
 pub mod upload;
 pub mod wire;

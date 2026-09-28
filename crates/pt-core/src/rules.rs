@@ -1,0 +1,480 @@
+//! Scoring (PLAN §6), evaluated on a job's kept timeline.
+//!
+//! Distances (decided and measured 2026-09-28):
+//! - Only loaded, hitched driving counts; World of Trucks jobs count everything.
+//! - The game's `job.delivered` `distance.km` is game scale, whole km, includes
+//!   the empty leg and comes from the save. It is cross-checked against the
+//!   tracked whole-job odometer distance; the uncounted legs are then subtracted
+//!   and the rest converted to 1:1 with the job's own world/game ratio.
+
+use serde::{Deserialize, Serialize};
+
+use crate::config::{Config, ReviewAction, ScaleClass};
+use crate::job::JobInfo;
+use crate::timeline::{Job, Point, StartKind};
+use crate::units::{exceeds, km_to_mi};
+
+/// A bonus-cargo entry (server-side table, PLAN §7 `bonus_cargo`).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Bonus {
+    pub game: crate::game::Game,
+    /// Exact cargo id, or a glob with `*`.
+    pub cargo_match: String,
+    pub kind: BonusKind,
+    pub amount: f64,
+    pub active_from_ms: Option<i64>,
+    pub active_to_ms: Option<i64>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum BonusKind {
+    /// Points added once.
+    Flat,
+    /// Points multiplied.
+    Multiplier,
+}
+
+/// Facts from outside the trace.
+#[derive(Debug, Clone, Default)]
+pub struct Context {
+    pub bonuses: Vec<Bonus>,
+    /// Rule 0 (server): config and install manifest matched a published version.
+    /// `None` = not checked (client-side provisional result).
+    pub integrity_ok: Option<bool>,
+    pub singleplayer_division: bool,
+    /// Server clock at delivery, for bonus windows.
+    pub delivered_at_ms: Option<i64>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Outcome {
+    /// Not delivered (yet): tracking, suspended, cancelled or stopped.
+    Incomplete,
+    Discarded,
+    Invalid,
+    PendingReview,
+    Valid,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DiscardReason {
+    Integrity,
+    NegativeDistance,
+    SingleplayerDivisionTruckersmp,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "reason", rename_all = "snake_case")]
+pub enum ReviewReason {
+    /// Rule 3.
+    LongJob { world_km: f64 },
+    /// Rule 4: fuel used below −tolerance in a tracked run.
+    NegativeFuel { run: u32, used_l: f64 },
+    /// Rule 4: fuel rose outside a detected refuel.
+    FuelJump { wall_ms: i64, litres: f64 },
+    Gap { count: usize },
+    LateStart,
+    CargoSwitch,
+    /// The game's delivery distance disagrees with the trace.
+    DistanceMismatch { delivered_km: f64, tracked_km: f64, tolerance_km: f64 },
+    NoDeliveredDistance,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct SpeedStats {
+    pub peak_mph: f64,
+    pub over_penalty_s: f64,
+    pub over_invalid_s: f64,
+    /// Rule 5.
+    pub penalty: bool,
+    /// Rule 2.
+    pub invalid: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Refuel {
+    pub wall_ms: i64,
+    pub litres: f64,
+    pub duration_s: f64,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct Distances {
+    /// Tracked, whole job (accept → delivery, kept timeline + gaps), game km.
+    pub tracked_whole_game_km: f64,
+    /// Tracked counted (loaded + hitched, or everything for WoT), game km.
+    pub tracked_counted_game_km: f64,
+    pub tracked_uncounted_game_km: f64,
+    /// Tracked counted, 1:1 km (Σ Δodometer ÷ local.scale).
+    pub tracked_counted_world_km: f64,
+    /// Driven (kept, not gap) counted distance: the basis of the 1:1 ratio.
+    pub driven_counted_game_km: f64,
+    pub driven_counted_world_km: f64,
+    /// The game's figure (`job.delivered` `distance.km`).
+    pub delivered_game_km: Option<f64>,
+    /// Scored game km: delivered − uncounted (or tracked counted).
+    pub counted_game_km: f64,
+    /// Scored 1:1 km.
+    pub world_km: f64,
+    pub world_mi: f64,
+    /// Shown next to the points: counted distance in the game's own scale.
+    pub game_mi: f64,
+    /// Counted game km per scale class (route map colouring and admin detail).
+    pub game_km_by_scale: Vec<(ScaleClass, f64)>,
+    /// Negative kept-timeline odometer movement (rule 1).
+    pub negative_km: f64,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct JobResult {
+    pub outcome: Outcome,
+    pub discard: Option<DiscardReason>,
+    pub review: Vec<ReviewReason>,
+    pub distances: Distances,
+    pub speed: SpeedStats,
+    pub refuels: Vec<Refuel>,
+    /// Accepted 1:1 miles after the rule 5 penalty.
+    pub accepted_world_mi: f64,
+    pub bonus: Option<Bonus>,
+    /// Points before rounding.
+    pub points_raw: f64,
+    /// Final points (floored to `points_decimals`); 0 when discarded or invalid.
+    pub points: f64,
+    pub truckersmp: bool,
+    pub convoy: bool,
+}
+
+fn glob(pat: &str, s: &str) -> bool {
+    match pat.split_once('*') {
+        None => pat == s,
+        Some((pre, rest)) => {
+            let Some(tail) = s.strip_prefix(pre) else { return false };
+            (0..=tail.len()).any(|i| tail.is_char_boundary(i) && glob(rest, &tail[i..]))
+        }
+    }
+}
+
+/// Neighbouring kept points of the same run: the only pairs that accumulate.
+fn pairs(kept: &[Point]) -> impl Iterator<Item = (&Point, &Point)> {
+    kept.windows(2).filter(|w| w[0].run == w[1].run && w[0].truck == w[1].truck).map(|w| (&w[0], &w[1]))
+}
+
+fn distances(job: &Job, cfg: &Config) -> Distances {
+    let wot = job.info.is_world_of_trucks();
+    let vanilla = cfg.map.scale.vanilla(job.game);
+    let eps = cfg.rules.distance.odometer_epsilon_km;
+    let mut d = Distances::default();
+    let mut by_scale: Vec<(ScaleClass, f64)> = Vec::new();
+    let mut add = |d: &mut Distances, km: f64, counted: bool, scale: f64| {
+        d.tracked_whole_game_km += km;
+        if counted || wot {
+            d.tracked_counted_game_km += km;
+            d.tracked_counted_world_km += km / scale;
+            let class = vanilla.classify(Some(scale));
+            match by_scale.iter_mut().find(|(c, _)| *c == class) {
+                Some((_, v)) => *v += km,
+                None => by_scale.push((class, km)),
+            }
+        } else {
+            d.tracked_uncounted_game_km += km;
+        }
+    };
+    for (a, b) in pairs(&job.kept) {
+        let (Some(x), Some(y)) = (a.odometer_km, b.odometer_km) else { continue };
+        let km = y - x;
+        if km < -eps {
+            d.negative_km += -km;
+            continue;
+        }
+        let counted = b.cargo_loaded && b.trailer_connected;
+        if counted || wot {
+            d.driven_counted_game_km += km.max(0.0);
+            d.driven_counted_world_km += km.max(0.0) / b.local_scale;
+        }
+        add(&mut d, km.max(0.0), counted, b.local_scale);
+    }
+    for g in job.active_gaps() {
+        if let Some(km) = g.game_km.filter(|k| *k > 0.0) {
+            add(&mut d, km, g.counted, g.local_scale);
+        }
+    }
+    d.game_km_by_scale = by_scale;
+    d
+}
+
+fn speed(job: &Job, cfg: &Config) -> SpeedStats {
+    let limits = cfg.rules.speed.limits(job.game);
+    let prec = cfg.rules.speed.compare_precision_mph;
+    let window = cfg.rules.speed.sustained_window_s;
+    let mut s = SpeedStats::default();
+    // Episodes: consecutive over-limit points of one run, timed in paused
+    // simulation time, so pausing neither adds time nor splits an episode.
+    let mut ep_pen: Option<u64> = None;
+    let mut ep_inv: Option<u64> = None;
+    let mut prev: Option<&Point> = None;
+    for p in &job.kept {
+        s.peak_mph = s.peak_mph.max(p.mph());
+        if prev.is_some_and(|q| q.run != p.run) || p.after_teleport {
+            ep_pen = None;
+            ep_inv = None;
+        }
+        if let Some(q) = prev.filter(|q| q.run == p.run && !p.after_teleport) {
+            let dt = p.sim_us.saturating_sub(q.sim_us) as f64 / 1e6;
+            if exceeds(q.mph(), limits.penalty_over_mph, prec) && exceeds(p.mph(), limits.penalty_over_mph, prec) {
+                s.over_penalty_s += dt;
+            }
+            if exceeds(q.mph(), limits.invalid_over_mph, prec) && exceeds(p.mph(), limits.invalid_over_mph, prec) {
+                s.over_invalid_s += dt;
+            }
+        }
+        for (limit, ep, flag) in [
+            (limits.penalty_over_mph, &mut ep_pen, &mut s.penalty),
+            (limits.invalid_over_mph, &mut ep_inv, &mut s.invalid),
+        ] {
+            if exceeds(p.mph(), limit, prec) {
+                let since = *ep.get_or_insert(p.sim_us);
+                if p.sim_us.saturating_sub(since) as f64 / 1e6 > window {
+                    *flag = true;
+                }
+            } else {
+                *ep = None;
+            }
+        }
+        prev = Some(p);
+    }
+    s
+}
+
+/// Refuel episodes and rule 4 per run.
+fn fuel(job: &Job, cfg: &Config, review: &mut Vec<ReviewReason>) -> Vec<Refuel> {
+    let r = &cfg.rules.refuel;
+    let f = &cfg.rules.fuel;
+    let mut refuels = Vec::new();
+    let mut runs: Vec<&[Point]> = Vec::new();
+    let mut start = 0;
+    for i in 1..=job.kept.len() {
+        if i == job.kept.len() || job.kept[i].run != job.kept[i - 1].run || job.kept[i].truck != job.kept[i - 1].truck {
+            runs.push(&job.kept[start..i]);
+            start = i;
+        }
+    }
+    for run in runs {
+        // Fuel rises while stationary, in steps (every 0.3 s of simulation in
+        // ATS 1.61), so zero-change samples inside an episode are allowed.
+        let mut refuelled = 0.0;
+        let mut in_refuel = vec![false; run.len()];
+        let mut i = 1;
+        while i < run.len() {
+            let rising = |k: usize| match (run[k - 1].fuel_l, run[k].fuel_l) {
+                (Some(a), Some(b)) => b - a > 1e-6,
+                _ => false,
+            };
+            let still = |k: usize| run[k].mph() < r.stationary_below_mph;
+            if !(rising(i) && still(i)) {
+                i += 1;
+                continue;
+            }
+            let first = i;
+            let mut last = i;
+            let mut k = i + 1;
+            while k < run.len() && still(k) && run[k].sim_us.saturating_sub(run[last].sim_us) <= 2_000_000 {
+                if rising(k) {
+                    last = k;
+                }
+                k += 1;
+            }
+            let litres = run[last].fuel_l.unwrap_or(0.0) - run[first - 1].fuel_l.unwrap_or(0.0);
+            let dur = run[last].sim_us.saturating_sub(run[first - 1].sim_us) as f64 / 1e6;
+            let rate = if dur > 0.0 { litres / dur } else { f64::INFINITY };
+            if dur >= r.min_duration_s && rate >= r.min_rate_l_per_s && rate <= r.max_rate_l_per_s {
+                refuelled += litres;
+                refuels.push(Refuel { wall_ms: run[first].wall_ms, litres, duration_s: dur });
+                for flag in &mut in_refuel[first..=last] {
+                    *flag = true;
+                }
+            }
+            i = last + 1;
+        }
+        for k in 1..run.len() {
+            if let (Some(a), Some(b)) = (run[k - 1].fuel_l, run[k].fuel_l) {
+                if !in_refuel[k] && b - a > f.mid_job_jump_tolerance_l {
+                    review.push(ReviewReason::FuelJump { wall_ms: run[k].wall_ms, litres: b - a });
+                }
+            }
+        }
+        if let (Some(a), Some(b)) = (run.first().and_then(|p| p.fuel_l), run.last().and_then(|p| p.fuel_l)) {
+            let used = a - b + refuelled;
+            if used < -f.negative_fuel_tolerance_l {
+                review.push(ReviewReason::NegativeFuel { run: run[0].run, used_l: used });
+            }
+        }
+    }
+    refuels
+}
+
+fn pick_bonus(info: &JobInfo, base: f64, ctx: &Context) -> Option<(Bonus, f64)> {
+    let cargo = &info.fingerprint.cargo.cargo_id;
+    let game = info.fingerprint.route.game;
+    ctx.bonuses
+        .iter()
+        .filter(|b| b.game == game && glob(&b.cargo_match, cargo))
+        .filter(|b| match ctx.delivered_at_ms {
+            Some(t) => b.active_from_ms.map_or(true, |from| from <= t) && b.active_to_ms.map_or(true, |to| t <= to),
+            None => true,
+        })
+        .map(|b| {
+            let pts = match b.kind {
+                BonusKind::Flat => base + b.amount,
+                BonusKind::Multiplier => base * b.amount,
+            };
+            (b.clone(), pts)
+        })
+        .fold(None, |best: Option<(Bonus, f64)>, c| match best {
+            Some(b) if b.1 >= c.1 => Some(b),
+            _ => Some(c),
+        })
+}
+
+/// Scores a job. Works on any state; only a delivered job gets an outcome
+/// other than `Incomplete`.
+pub fn evaluate(job: &Job, cfg: &Config, ctx: &Context) -> JobResult {
+    let r = &cfg.rules;
+    let mut review = Vec::new();
+    let mut d = distances(job, cfg);
+    let speed = speed(job, cfg);
+    let refuels = fuel(job, cfg, &mut review);
+    let truckersmp = job.kept.iter().any(|p| p.truckersmp);
+    // TruckersMP also reports a multiplayer time offset (2026-09-28 capture), so a
+    // non-zero offset means Convoy only when TruckersMP is not loaded.
+    let convoy = !truckersmp && job.kept.iter().any(|p| p.mp_time_offset != 0);
+
+    // Distance: the game's figure, cross-checked, minus uncounted legs, to 1:1.
+    d.delivered_game_km = job.delivered.as_ref().and_then(|x| x.distance_km);
+    // The job's own mix of city and road scale, from driving only: a gap (a
+    // forward load, possibly a save edit) carries just one scale reading.
+    let ratio = if d.driven_counted_game_km > 0.0 {
+        d.driven_counted_world_km / d.driven_counted_game_km
+    } else {
+        1.0 / cfg.map.scale.vanilla(job.game).road_local_scale
+    };
+    match d.delivered_game_km {
+        Some(delivered) => {
+            let tol_km = r.distance.delivered_vs_trace_tolerance_mi(km_to_mi(delivered)) / crate::units::MI_PER_KM;
+            let off = match job.start {
+                // Only the part that was seen can be checked: the game may know more.
+                StartKind::LateStart => (d.tracked_whole_game_km - delivered).max(0.0),
+                StartKind::Tracked => (delivered - d.tracked_whole_game_km).abs(),
+            };
+            if off > tol_km && cfg.review_policy.trace_checks == ReviewAction::Review {
+                review.push(ReviewReason::DistanceMismatch {
+                    delivered_km: delivered,
+                    tracked_km: d.tracked_whole_game_km,
+                    tolerance_km: tol_km,
+                });
+            }
+            d.counted_game_km = if job.info.is_world_of_trucks() {
+                delivered
+            } else {
+                (delivered - d.tracked_uncounted_game_km).max(0.0)
+            };
+        }
+        None => {
+            if job.delivered.is_some() {
+                review.push(ReviewReason::NoDeliveredDistance);
+            }
+            d.counted_game_km = d.tracked_counted_game_km;
+        }
+    }
+    d.world_km = d.counted_game_km * ratio;
+    d.world_mi = km_to_mi(d.world_km);
+    d.game_mi = km_to_mi(d.counted_game_km);
+
+    // Review reasons from the timeline and rule 3.
+    let policy = &cfg.review_policy;
+    let gaps = job
+        .active_gaps()
+        .filter(|g| g.kind == crate::timeline::GapKind::Load)
+        .filter(|g| {
+            let mi = km_to_mi(g.game_km.unwrap_or(f64::INFINITY).abs());
+            !(mi < policy.min_gap_distance_mi && g.duration_s < policy.min_gap_duration_s)
+        })
+        .count();
+    if gaps > 0 && policy.gap == ReviewAction::Review {
+        review.push(ReviewReason::Gap { count: gaps });
+    }
+    if job.start == StartKind::LateStart && policy.late_start == ReviewAction::Review {
+        review.push(ReviewReason::LateStart);
+    }
+    if job.cargo_switched {
+        review.push(ReviewReason::CargoSwitch);
+    }
+    if exceeds(d.world_km, r.manual_review_over_world_km, r.distance.compare_precision_km) {
+        review.push(ReviewReason::LongJob { world_km: d.world_km });
+    }
+
+    // Points: rules 5, 6, 7 (bonus on the cargo first tracked after a switch).
+    let accepted = if speed.penalty { d.world_mi * r.speed_penalty_factor } else { d.world_mi };
+    let base = accepted * r.points_per_world_mi;
+    let (bonus, points_raw) = match pick_bonus(&job.first_info, base, ctx) {
+        Some((b, p)) => (Some(b), p),
+        None => (None, base),
+    };
+
+    let discard = if ctx.integrity_ok == Some(false) {
+        Some(DiscardReason::Integrity)
+    } else if d.negative_km > r.distance.odometer_epsilon_km {
+        Some(DiscardReason::NegativeDistance)
+    } else if ctx.singleplayer_division && truckersmp {
+        Some(DiscardReason::SingleplayerDivisionTruckersmp)
+    } else {
+        None
+    };
+    // A delivered job keeps its result even when a later load stops its tracking.
+    let outcome = if job.delivered.is_none() {
+        Outcome::Incomplete
+    } else if discard.is_some() {
+        Outcome::Discarded
+    } else if speed.invalid {
+        Outcome::Invalid
+    } else if !review.is_empty() {
+        Outcome::PendingReview
+    } else {
+        Outcome::Valid
+    };
+    let points = match outcome {
+        Outcome::Discarded | Outcome::Invalid => 0.0,
+        _ => r.floor_points(points_raw),
+    };
+    JobResult {
+        outcome,
+        discard,
+        review,
+        distances: d,
+        speed,
+        refuels,
+        accepted_world_mi: accepted,
+        bonus,
+        points_raw,
+        points,
+        truckersmp,
+        convoy,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn glob_matching() {
+        assert!(glob("dynamite", "dynamite"));
+        assert!(glob("dyna*", "dynamite"));
+        assert!(glob("*mite", "dynamite"));
+        assert!(glob("d*n*e", "dynamite"));
+        assert!(!glob("dyna", "dynamite"));
+        assert!(!glob("x*", "dynamite"));
+    }
+}

@@ -183,9 +183,7 @@ pub struct Sync {
     pub retry_interval_wall_s: f64,
 }
 
-/// Desktop notifications for a delivery marked Invalid (rule 2) and for the
-/// speed penalty (rule 5) activating. The client draws each delay uniformly
-/// from [min, max] at microsecond resolution (pt-core itself has no RNG).
+/// Route map settings (PLAN §8).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Map {
@@ -242,6 +240,9 @@ impl VanillaScale {
     }
 }
 
+/// Desktop notifications for a delivery marked Invalid (rule 2) and for the
+/// speed penalty (rule 5) activating. The client draws each delay uniformly
+/// from [min, max] at microsecond resolution (pt-core itself has no RNG).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Notifications {

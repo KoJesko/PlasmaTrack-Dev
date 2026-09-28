@@ -305,6 +305,22 @@ The fingerprint has two parts:
 
 **Load paths covered:** quick-load, autosave, main menu, load after a crash, and a client restart on a different save.
 
+**Implementation notes (stage 3, `pt-core::timeline`; from replaying the real captures):**
+- A **bracket** is everything between two consecutive samples.
+- **W counts only within a running session.** At `scs_telemetry_init` every config starts out empty, so W at session start would turn every game start into a load. A profile switch or a main-menu load keeps the session and raises `timer_restart` alongside W, so it is still a load.
+- **A position jump is a teleport only if driving could not cover it** in the elapsed simulation time, at up to 100 world m/s. Samples can go missing while the truck keeps driving (client closed, plugin replay buffer overrun).
+- **Bridge gaps.** Missing samples with plausible driving in between still count as distance, as does the odometer difference across a game restart with no discontinuity. They never go to review. Only forward-load gaps do.
+- **Across a teleport, distance carries on** (the odometer does not move), but **overspeed episodes end** there.
+- **Gaps undone by a later load stop counting:** a gap is active only while its far end is on the kept timeline.
+- **`job.delivered` and `job.cancelled` apply the moment they arrive.** The game may stop before another sample.
+- **A delivered job keeps its result** after a load stops its tracking.
+- **The 1:1 ratio comes from driven stretches only.** A gap carries a single scale reading, and a save-edited one would distort it.
+- **Load matching:**
+  - the loaded point must lie within 50 world m of a kept point;
+  - with the same truck, fuel must be within 1 L and the odometer within 1 game km;
+  - in singleplayer, game time must be within 2 minutes;
+  - the closest candidate wins, and the latest wins a tie.
+
 **No rule ever fires because of a load:**
 - Rule 1 is evaluated on the kept timeline.
 - Rule 4 is summed per tracked run, so it never compares fuel across a splice or gap. Loading forward across a refuel therefore raises no flag.
@@ -414,8 +430,8 @@ The fingerprint has two parts:
 - Until confirmed, the key is `unknown`, and profile switches fall back to load handling.
 
 **Multiplayer is tracked** in every form: TruckersMP, other multiplayer mods, and Convoy.
-- **Convoy** is detected from `multiplayer.time.offset ≠ 0` (common_channels.h:287-300).
-- **TruckersMP** cannot be identified by the SDK. The plugin reports whether any module named in `[multiplayer] truckersmp_module_names` is loaded in the game process. That list stays empty until a capture confirms the names.
+- **Convoy** is detected from `multiplayer.time.offset ≠ 0` (common_channels.h:287-300) **while no TruckersMP module is loaded**. The Sioux Falls TruckersMP session reported an offset of about 24,136,737, while the first TruckersMP capture reported 0, so the offset alone does not mean Convoy.
+- **TruckersMP** cannot be identified by the SDK. The plugin reports whether any module named in `[multiplayer] truckersmp_module_names` is loaded in the game process. **Confirmed for ATS: `core_atsmp.dll`** (loaded from process start). The ETS2 name still needs an ETS2 TruckersMP capture.
 - **Singleplayer Division:** a user flag, set through the admin API. For these users, jobs detected as TruckersMP are **discarded**, with the reason shown. Convoy and other multiplayer remain allowed.
 - Each job stores its multiplayer kind.
 
@@ -533,6 +549,12 @@ I cannot run the games in this session, so the following steps need a real game 
 3. **Validation.**
    - `pt-core` timeline and rules, and the `pt-replay` harness.
    - Every fixture: spec boundaries, load scenarios and red-team exploit cases.
+   - **Status (2026-09-28): the core is done.**
+     - `pt-core::{trace, job, timeline, rules}` are written.
+     - `pt-replay` provides the CLI plus `--trim-to` for fixtures.
+     - 38 simulated fixtures in `crates/pt-replay/tests/scenarios.rs` cover every bullet below plus decisions 20–23.
+     - 4 real-capture regressions in `tests/real_captures.rs` pass (Chicago 3.6 points, Sioux Falls 36.1, six-load TruckersMP session, the tampered 1000 km delivery → review).
+     - **Remaining:** client-side provisional results and notifications, and `profile_key` from `game.log.txt`.
 4. **Server APIs.** Ingest, scoring, rule 0, auth, the public read API, the admin API and webhooks for the Discord bot, audit log, recalculation, and OpenAPI contract tests.
 5. **Route projection and GeoJSON endpoint.** Rendering route images happens in the bot repo.
 

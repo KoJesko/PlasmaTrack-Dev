@@ -58,12 +58,13 @@ compare_precision_km = 0.001
 # Odometer comparisons use max(4 x ulp(odometer), this value), because the SDK
 # odometer channel is a 32-bit float in km (scssdk_telemetry_truck_common_channels.h:640-645).
 odometer_epsilon_km = 0.005
-# The game's job.delivered distance.km is in GAME scale (measured on a clean
-# delivery: 71 reported vs 70.72 km loaded on the odometer). It is compared with
-# the tracker's own loaded odometer distance; if they differ by more than the
+# The game's job.delivered distance.km is in GAME scale (measured on two clean
+# deliveries: 71 vs 71.47 km and 1233 vs 1232.14 km) and includes the empty drive
+# to the pickup. It is compared with the tracker's whole-job odometer distance
+# (accept -> delivery, kept timeline); if they differ by more than the
 # GREATER of these two (pct is relative to the larger figure), the job goes to
-# manual review. The scored 1:1 distance is distance.km x the job's tracked
-# world/game ratio (PLAN §6). PROVISIONAL: one clean delivery so far.
+# manual review. The scored 1:1 distance is (distance.km - uncounted legs) x the
+# job's driven world/game ratio (PLAN §6). PROVISIONAL: two clean deliveries.
 delivered_vs_trace_tolerance_pct = 1.0
 delivered_vs_trace_tolerance_min_mi = 30.0
 # All measured on the SDK-reported delivery distance (job.delivered distance.km,
@@ -141,12 +142,6 @@ match_fuel_tolerance_l = 1.0
 match_game_time_tolerance_min_game = 2
 
 # ---------------------------------------------------------------------------
-# Player notifications (desktop notification from the client).
-# Sent for: a delivery marked Invalid (rule 2) and the moment the speed
-# penalty (rule 5) activates. Each is delayed by a uniformly random time in
-# [delay_min_wall_s, delay_max_wall_s] with microsecond resolution.
-# ---------------------------------------------------------------------------
-# ---------------------------------------------------------------------------
 # Route map scale classes (PLAN §8). Each stretch of a route is coloured by the
 # local.scale it was driven at: 1 = one_to_one (1:1 mod), these vanilla values =
 # city / road, anything else = nonstandard (modded). Display only: scale never
@@ -161,6 +156,12 @@ road_local_scale = 20.0
 city_local_scale = 3.0
 road_local_scale = 19.0
 
+# ---------------------------------------------------------------------------
+# Player notifications (desktop notification from the client).
+# Sent for: a delivery marked Invalid (rule 2) and the moment the speed
+# penalty (rule 5) activates. Each is delayed by a uniformly random time in
+# [delay_min_wall_s, delay_max_wall_s] with microsecond resolution.
+# ---------------------------------------------------------------------------
 [notifications]
 enabled = true
 delay_min_wall_s = 5.0
@@ -168,14 +169,17 @@ delay_max_wall_s = 30.0
 
 # ---------------------------------------------------------------------------
 # Multiplayer. All multiplayer is tracked (TruckersMP, other MP mods, Convoy).
-# Convoy is detected from multiplayer.time.offset != 0
+# Convoy is detected from multiplayer.time.offset != 0 while no TruckersMP module
+# is loaded (TruckersMP reports an offset too, observed 2026-09-28)
 # (common/scssdk_telemetry_common_channels.h:287-300). The SDK cannot identify
 # TruckersMP, so the plugin reports whether any of these module file names is
 # loaded in the game process. PROVISIONAL: empty until confirmed by capture.
 # Users with the "Singleplayer Division" flag have TruckersMP jobs discarded.
 # ---------------------------------------------------------------------------
 [multiplayer]
-truckersmp_module_names = []
+# Confirmed: core_atsmp.dll (ATS, first capture 2026-09-28). ETS2 name to be
+# confirmed by an ETS2 TruckersMP capture.
+truckersmp_module_names = ["core_atsmp.dll"]
 
 # ---------------------------------------------------------------------------
 # Plugin <-> client transport (localhost only).
