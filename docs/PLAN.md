@@ -326,16 +326,23 @@ The fingerprint has two parts:
   - **Measured (clean Chicago → Chicago delivery, 2026-09-28): `distance.km` is in GAME scale, not 1:1.**
     - The game reported 71. The odometer measured 70.72 km loaded (71.47 km including the 0.75 km empty leg); the 1:1 distance was 5.93 km loaded.
     - The value appears rounded to whole km (71; 1000 in the edited run).
-    - Whether it includes the empty leg is still open: here the empty leg was too short to tell. If it does, the tracked empty-leg distance is subtracted (decision 21).
-  - **So the scored 1:1 figure is the game's figure converted with the job's own measured scale mix:** world = `distance.km` × (tracked loaded world ÷ tracked loaded game).
+    - **It includes the empty drive to the pickup** (measured on a clean TruckersMP job, 2026-09-28: dynamite, Chicago → Sioux Falls, planned 1042 km).
+      - The game reported **1233**. The tracked kept timeline was 158.85 km empty plus 1073.29 km loaded, 1232.14 km in total (0.07% off). The 1:1 figures were 10.29 + 58.09 km.
+      - The job spanned a game restart; the odometer carried over, so there was no discontinuity. It also had an in-game autosave load that undid 3.5 km, and the game left those out too: it rolls its own counter back with the save.
+      - So the game's figure is compared with the **whole kept job** (accept → delivery), and the uncounted legs are then subtracted (decision 21).
+      - The figure is whole km and can differ from the odometer by up to about 1 km.
+  - **So the scored 1:1 figure is the game's figure, minus the uncounted legs, converted with the job's own measured scale mix:**
+    - counted game = `distance.km` − tracked uncounted game distance (empty and bobtail legs; none for World of Trucks);
+    - world = counted game × (tracked counted world ÷ tracked counted game).
+    - Sioux Falls example: (1233 − 158.85) × 58.085 / 1073.29 = 58.13 km = 36.1 mi → **36.1 points**, shown as 667 mi in game.
     - Tracked world = Σ (Δodometer ÷ `local.scale`), where each Δodometer is taken over a run of kept samples with the same `local.scale`; tracked game = Σ Δodometer.
-    - Chicago example: 71 × 5.931 / 70.718 = 5.95 km = 3.70 mi → 3 points. It would be 44 mi in game.
+    - Chicago example: (71 − 0.75) × 5.931 / 70.718 = 5.89 km = 3.66 mi → 3.6 points, shown as 44 mi in game.
     - Under a 1:1 mod the scale is 1, so world = game.
-  - **Trace cross-check** (same units, game scale): `distance.km` against the tracked loaded game distance (odometer).
+  - **Trace cross-check** (same units, game scale): `distance.km` against the tracked **whole-job** game distance on the odometer, from accept to delivery over the kept timeline, before the uncounted legs are subtracted.
     - The first capture shows this matches the actual movement exactly: the ratio is 2.98 at scale 3 and 20.00 at scale 20.
     - If the game does not provide `local.scale`, which only a 1:1 map would do (common_channels.h:14-19), the scale is 1.
     - **ETS2 uses 1:19 on open roads** (you, 2026-09-28), against 20 in ATS. Nothing is hard-coded: the reported `local.scale` is used per run. The first ETS2 capture should show 19 on roads (and presumably 3 in cities).
-    - If `distance.km` and the tracked game distance disagree by more than the greater of 1% and 30 mi, **hard-capped at 5% for jobs under 100 mi**, all measured in game miles on the SDK-reported delivery distance (`delivered_vs_trace_*`; PROVISIONAL), the job goes to **manual review** with both values shown. The Chicago job differed by 0.28 km (0.4%), well inside the tolerance. This is a trace check (§6a), so a save edit or a patched game cannot quietly inflate the figure.
+    - If `distance.km` and the tracked game distance disagree by more than the greater of 1% and 30 mi, **hard-capped at 5% for jobs under 100 mi**, all measured in game miles on the SDK-reported delivery distance (`delivered_vs_trace_*`; PROVISIONAL), the job goes to **manual review** with both values shown. Measured: Chicago 71 vs 71.47 km (0.7%), Sioux Falls 1233 vs 1232.14 km (0.07%), both well inside the tolerance. This is a trace check (§6a), so a save edit or a patched game cannot quietly inflate the figure.
   - Save loads need no special handling: the game restores its own job distance with the save, which matches the kept timeline.
 - **Game distance (shown, not scored):** the odometer difference, meaning what the truck's odometer, the job list and the in-game map show. The bot shows both values: "12.3 mi driven (1:1), 146 mi in game".
 - Both distances count **loaded, hitched** driving only (decided 2026-09-28): kept segments where the job config has `cargo.loaded=true` **and** `trailer.0.connected` is true.
