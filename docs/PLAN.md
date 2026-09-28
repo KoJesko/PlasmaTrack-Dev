@@ -125,10 +125,44 @@ Per-frame order (:82-89): configuration → paused/started → frame_start → g
 **Observed in the real game** (ATS 1.61.2.0s, 2026-09-28, first plugin run; no capture mode yet):
 - The telemetry game version reported is **1.07**, newer than the newest version the SDK 1.14 headers document (ATS 1.05).
 - The game sends two **undocumented config ids, `bus_job` and `car_job`**. Both were empty during this run. The plugin forwards them raw, and their contents still need to be captured.
-- **Every config is re-sent when a save loads into the world** (job, bus_job, car_job, controls, hshifter, truck, trailer, trailer.0–9). A **`timer_restart` flag** follows in the first frame. This is the first empirical support for load-context signals (§5).
+- **Every config is re-sent when a save loads into the world** (job, bus_job, car_job, controls, hshifter, truck, trailer, trailer.0–9). On the *first* world load after launch a **`timer_restart` flag** follows in the first frame; later loads do not raise it (see the capture below).
 - At `scs_telemetry_init` the configs arrive once, empty, before any frame. They are sent again when the world loads.
 - The plugin runs alongside TruckyTelemetry, an ETS shared-memory plugin and others without conflict.
 - **Privacy note for stage 2:** the `modules` message lists every loaded DLL (155 here). The client keeps that list local and uploads only the matches against `[multiplayer] truckersmp_module_names`, never the full list.
+
+**First capture** (ATS 1.61.2.0s on TruckersMP, 2026-09-28 08:50–09:21, capture mode, 70,453 samples; the game hung on exit to the main menu, not in the plugin).
+
+Loads:
+- **Six in-session loads**: five manual saves (slots 139 and 143, back and forth) and one autosave (`autosave_drive_7`). All six had the same signature:
+  1. `paused`.
+  2. **`job`, `truck`, `trailer` and `trailer.0`–`9` all re-sent empty in one batch** at the moment the game log prints `Loading save`.
+  3. 3–18 s later the full configs are re-sent.
+  4. `started`.
+  5. The first sample jumps in position, odometer and fuel. `game.time` jumps too, backwards or forwards.
+- **No `timer_restart` on any in-session load.** `paused_simulation_time` and `simulation_time` keep increasing across loads. So `timer_restart` and a time reset cannot be relied on as load signals.
+- **Forward loads carry no rollback evidence.** For example, loading slot 143 after slot 139 moved the odometer +4.548 km and the position 201 m, with zero simulated time between them. The R + C rule (§5) could not classify that as a load; this is fixed in §5.
+
+Job details:
+- **Byte-identical across loads:** the job config was identical after all six loads.
+- **`cargo.loaded` changes:** with an owned trailer on the cargo market, the job config arrives at accept with `cargo.loaded=false`. At the pickup, loading the cargo re-sends the job, truck and trailer configs (not emptied first), sets `cargo.loaded=true`, and skips 48 game minutes. It is correctly excluded from the fingerprint.
+
+Other events:
+- **Cancel:** `job` is re-sent empty, `truck` and `trailer` are re-sent full, and then `job.cancelled` arrives (with `cancel.penalty`), all in one pause.
+- **Ferry:** the order is `paused` → `player.use.ferry` (with source/target ids and names and `pay.amount`) → `started`. The next sample jumps 1.3 km in position and 36 game minutes. **The odometer does not change** on a ferry.
+- **Two teleports with no event and no config change**:
+  - 1.76 km with 118 game minutes skipped;
+  - 6.47 km with no game time skipped.
+  
+  Both happened inside a pause, and the odometer was unchanged. What caused them is not yet identified (possibly call for help or quick travel). Under the old rule, a position jump (R) plus a pause bracket (C) would have been **misclassified as a load**. This is fixed in §5.
+- **Samples stop while paused.** Frames continue, and heartbeats keep coming.
+
+Profile and TruckersMP:
+- **Profile:** the telemetry does not carry it, but `Documents/<game>/game.log.txt` does:
+  - `New profile selected: '<name>'`;
+  - every `Loading save. Type: <t>, slot: <n>, path: .../profiles/<hex of profile name>/save/<slot>/game.sii`.
+  
+  Observed types: 0 = autosave on start, 3 = drive autosave, 5 = manual save.
+- **TruckersMP:** `core_atsmp.dll` was loaded from process start, and the TruckersMP mods were mounted. TruckersMP allows save loading, so every load rule applies to TruckersMP jobs too. `multiplayer.time.offset` stayed 0 on TruckersMP; that channel is only for SCS Convoy.
 
 ## 4. Wire protocol (plugin → client)
 
@@ -175,18 +209,23 @@ This model incorporates the red-team findings. All thresholds are in `[timeline]
 
 **Principle.** The tracker follows the game's own timeline. A reverted stretch does not exist, so its distance, fuel and overspeed are never scored. That includes a speed spike from falling under the map, which **clears an Invalid status** once it is reverted.
 
-**Load classification.** "Never a single signal" is implemented as follows:
+**Load classification** (revised after the first capture, §3). "Never a single signal" is implemented as follows:
+- **World reload (W):** within one bracket, the `job` *and* `truck` configs are both re-sent **empty**, then re-sent (full or empty). All six captured loads showed W. Job accept, cargo loading, cancel and the ferry re-sent configs without emptying `truck`, so they never produce W.
 - **Hard rollback evidence (R)** is one of:
   - the odometer decreases beyond ε on the same truck;
   - `game.time` decreases by at least 1 minute;
   - a position discontinuity not explained by a ferry or train event.
-- **Independent context (C)** is one of:
-  - a re-sent config;
-  - a `paused`/`started` bracket;
-  - the `timer_restart` flag (the SCS example comments it as "e.g. after load");
-  - a plugin session change or a data gap.
-- A **load** requires R plus a second independent signal, which may be a C or another R from a different channel.
-- **Job and truck config changes never count as evidence.** They only decide which case below applies. This stops ordinary job accepts, quick-job teleports and deliveries from looking like loads.
+- **Session change (S):** a new plugin session (game restart or crash), a data gap, or `timer_restart`.
+- **A load** is either:
+  - **W** (in-session loads, backwards or forwards); or
+  - **S plus a discontinuity** (odometer, position, `game.time` or fuel) against the last kept state (loads across a restart, a crash or a client outage).
+- **A discontinuity without W or S is not a load.** It is a **teleport**, such as the two uncaptioned teleports in the capture.
+  - A teleport adds no distance, because distance is measured on the odometer.
+  - It reverts nothing and raises nothing.
+  - It is kept as evidence for the trace checks (§6a).
+- **A pause bracket alone is not evidence.** In the capture, the teleports happened inside pauses, so a pause plus a position jump would otherwise look like a load.
+- **Other config changes never count as evidence.** A job or truck config that is re-sent without emptying `truck` only decides which case below applies. This stops ordinary job accepts, cargo loading, quick-job teleports and deliveries from looking like loads.
+- **Provisional:** W must still be confirmed not to occur on a quick job (C11), a truck purchase or switch (C12) or call for help (C13). If one of them does produce W, the rows below still match against the kept timeline. The worst outcome is a job sent to review, and no rule is ever raised.
 - Signals are correlated per **bracket**: from the last live sample before the pause, restart or gap to the first live sample after it. They are not correlated per time window, so a player who waits in the menu after loading is handled correctly.
 - `job.delivered` and `job.cancelled` are attributed to the last known job. The job config empties before or around these events (event.h:82-89; RenCloud changelog).
 
