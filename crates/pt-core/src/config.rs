@@ -71,6 +71,7 @@ pub struct SpeedLimits {
 pub struct DistanceRules {
     pub compare_precision_km: f64,
     pub odometer_epsilon_km: f64,
+    pub delivered_vs_trace_tolerance_pct: f64,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -234,6 +235,7 @@ impl Config {
             ("rules.speed.compare_precision_mph", r.speed.compare_precision_mph),
             ("rules.distance.compare_precision_km", r.distance.compare_precision_km),
             ("rules.distance.odometer_epsilon_km", r.distance.odometer_epsilon_km),
+            ("rules.distance.delivered_vs_trace_tolerance_pct", r.distance.delivered_vs_trace_tolerance_pct),
             ("plugin.sample_rate_hz", self.plugin.sample_rate_hz),
             ("sync.retry_interval_wall_s", self.sync.retry_interval_wall_s),
         ] {

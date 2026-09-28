@@ -55,6 +55,11 @@ compare_precision_km = 0.001
 # Odometer comparisons use max(4 x ulp(odometer), this value), because the SDK
 # odometer channel is a 32-bit float in km (scssdk_telemetry_truck_common_channels.h:640-645).
 odometer_epsilon_km = 0.005
+# Scored world distance is the game's job.delivered distance.km (PLAN §6). If it
+# differs from the tracker's own odometer / local.scale figure by more than this
+# (relative to the larger), the job goes to manual review. PROVISIONAL until a
+# delivery capture (C7) shows how closely they agree.
+delivered_vs_trace_tolerance_pct = 5.0
 
 [rules.fuel]
 # Rule 4: job fuel used below -tolerance is flagged (float noise stays silent).
