@@ -9,7 +9,10 @@
 | winpthreads | may be statically linked by GCC-based builds | MIT / BSD-3-Clause | `third_party/notices/winpthreads-COPYING.txt` |
 | Rust crates (~160, via `cargo metadata`) | client and pt-core binaries | all FOSS: MIT and/or Apache-2.0 (most), BSD-2/3-Clause, ISC, Zlib, Unicode-3.0, BSL-1.0, Unlicense, `ring` (Apache-2.0 AND ISC), `option-ext` (MPL-2.0, unmodified; source: crates.io/crates/option-ext) | crate sources; full texts to be bundled with `cargo about` at release |
 | SQLite 3.46 (bundled by rusqlite) | client | public domain | sqlite.org/copyright.html |
+| Electron 44 (includes Chromium and Node.js) | installer (`PlasmaTrack-Setup-*.exe`) only | MIT; Chromium BSD-3-Clause plus the third-party licences it lists | `LICENSE.electron.txt` and `LICENSES.chromium.html`, shipped next to the installer's exe by electron-builder |
+| electron-builder 26 (build tool), its NSIS portable stub and `elevate.exe` | installer only | MIT; NSIS zlib/libpng | github.com/electron-userland/electron-builder, nsis.sourceforge.io/License |
 
 `third_party/notices/COPYING.MinGW-w64-runtime.txt` and `winpthreads-COPYING.txt` were fetched from
 https://github.com/mingw-w64/mingw-w64 (master) on 2026-09-27. `LLVM-LICENSE.txt` is `LICENSE.TXT` from
-llvm-mingw 20260922 (UCRT, x86_64). Ship this file and `third_party/notices/` with every plugin release.
+llvm-mingw 20260922 (UCRT, x86_64). Ship this file and `third_party/notices/` with every plugin release. The installer's
+`scripts/payload.js` copies them into `payload/licenses/`.

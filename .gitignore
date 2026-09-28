@@ -18,3 +18,8 @@
 .idea/
 .DS_Store
 Thumbs.db
+
+# Installer (Electron)
+/installer/node_modules/
+/installer/dist/
+/installer/payload/

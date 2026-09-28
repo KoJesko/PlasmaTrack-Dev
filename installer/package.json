@@ -1,0 +1,46 @@
+{
+  "name": "plasmatrack-setup",
+  "productName": "PlasmaTrack Setup",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Installs the PlasmaTrack game plugin and background client for ETS2/ATS.",
+  "license": "SEE LICENSE IN LICENSE.md",
+  "main": "src/main.js",
+  "scripts": {
+    "payload": "node scripts/payload.js",
+    "start": "node scripts/payload.js && electron .",
+    "check": "node --check src/main.js && node --check src/preload.js && node --check src/renderer.js && node --check scripts/payload.js",
+    "dist": "node scripts/payload.js && electron-builder --win portable"
+  },
+  "build": {
+    "appId": "org.plasmatrack.setup",
+    "productName": "PlasmaTrack Setup",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "src/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "payload",
+        "to": "payload"
+      }
+    ],
+    "win": {
+      "target": "portable",
+      "signAndEditExecutable": false
+    },
+    "portable": {
+      "artifactName": "PlasmaTrack-Setup-${version}.exe"
+    }
+  },
+  "devDependencies": {
+    "electron": "44.4.5",
+    "electron-builder": "26.15.3"
+  },
+  "allowScripts": {
+    "electron-winstaller": false
+  }
+}

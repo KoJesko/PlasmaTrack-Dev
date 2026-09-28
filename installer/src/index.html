@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PlasmaTrack Setup</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main>
+    <header>
+      <h1>PlasmaTrack Setup</h1>
+      <span id="version" class="muted"></span>
+    </header>
+
+    <section>
+      <h2>Games</h2>
+      <ul id="games" class="list"><li class="muted">Looking for ETS2 and ATS…</li></ul>
+      <p id="games-running" class="warn" hidden></p>
+    </section>
+
+    <section>
+      <h2>Your account</h2>
+      <label for="server">Server address</label>
+      <input id="server" type="url" placeholder="https://…" autocomplete="off" spellcheck="false">
+      <label for="token">Player token</label>
+      <input id="token" type="password" autocomplete="off" spellcheck="false">
+      <p class="muted small">Ask the PlasmaTrack Discord bot for your token. It is stored only on this PC.</p>
+      <label class="check"><input id="autostart" type="checkbox" checked> Start PlasmaTrack when I log in</label>
+    </section>
+
+    <div class="actions">
+      <button id="install" class="primary" disabled>Install</button>
+      <button id="status" hidden>Open status page</button>
+      <button id="start" hidden>Start client</button>
+    </div>
+
+    <section id="result" hidden>
+      <h2 id="result-title">Result</h2>
+      <ul id="steps" class="list"></ul>
+    </section>
+
+    <details id="remove" hidden>
+      <summary>Uninstall</summary>
+      <label class="check"><input id="delete-data" type="checkbox"> Also delete local data, settings and token</label>
+      <p class="muted small">Local data may include driving that has not been uploaded yet.</p>
+      <button id="uninstall" class="danger">Uninstall PlasmaTrack</button>
+    </details>
+  </main>
+  <script src="renderer.js"></script>
+</body>
+</html>

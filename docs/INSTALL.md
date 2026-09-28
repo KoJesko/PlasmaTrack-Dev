@@ -1,6 +1,8 @@
 # Installing the plugin
 
-The PlasmaTrack client will automate these steps (stage 2). Until then, install by hand.
+On Windows, **PlasmaTrack Setup** (`installer/README.md`) does these steps. So does
+`plasmatrack-client install-plugin --plugin PATH` on any OS. This page is the manual
+route, and the reference for where things go.
 
 Put **only** these two files into the game's plugin folder:
 - `plasmatrack.dll` (Windows and Proton) or `plasmatrack.so` (native Linux build);
