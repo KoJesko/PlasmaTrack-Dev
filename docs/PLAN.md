@@ -155,7 +155,7 @@ Other events:
 
   **TruckersMP runs its own server-side clock (you, 2026-09-28).** A sleep or a ferry sometimes skips game time and sometimes does not. So on TruckersMP, `game.time` is neither evidence of a load nor evidence against a transport, and a missing time skip is never suspicious.
   
-  Both happened inside a pause, and the odometer was unchanged. What caused them is not yet identified (possibly call for help or quick travel). Under the old rule, a position jump (R) plus a pause bracket (C) would have been **misclassified as a load**. This is fixed in §5.
+  Both happened inside a pause, and the odometer was unchanged. You identified them as **one F7 (call for help) and one ferry trip**; neither raised a gameplay event. If the 6.47 km one was the ferry, a ferry can arrive with no `player.use.ferry` event, so nothing may depend on transport events being present. Under the old rule, a position jump (R) plus a pause bracket (C) would have been **misclassified as a load**. This is fixed in §5.
 - **Samples stop while paused.** Frames continue, and heartbeats keep coming.
 
 Profile and TruckersMP:
@@ -251,7 +251,7 @@ The fingerprint has two parts:
 | Situation | Result |
 |---|---|
 | Job appears in continuous, gap-free data | Tracked start. Start odometer and fuel are taken at the first live sample. |
-| Job first seen mid-way (plugin snapshot, after a data gap, or loaded save of an unseen job) | **Late start.** Record the details reported so far and track from that point. Driven distance = `job.delivered` `distance.km`. Goes to review (`review_policy.late_start`). |
+| Job first seen mid-way (plugin snapshot, after a data gap, or loaded save of an unseen job) | **Late start.** Record the details reported so far and track from that point. Driven distance = `job.delivered` `distance.km`. Goes to review (`review_policy.late_start`). Open: a delivery capture (C7) must show whether `distance.km` includes the empty leg. If it does, the tracked loaded distance is used where one exists, and the admin sees both. |
 | Load, same job, loaded point inside the kept timeline | Truncate to the matching point. Matching uses odometer, position and fuel together, plus game time in singleplayer only. Everything after it, gaps included, is reverted. Recording continues. |
 | Load, same job, loaded point matches **previously reverted** material | Restore that branch up to the loaded point and score it normally, overspeed included. This closes the "revert, then restore" exploit, where overspeed would otherwise be laundered into a gap. |
 | Load, same job, loaded point beyond anything seen | **Gap** from the last kept point to the loaded point. Resume. Goes to review (`review_policy.gap`). |
@@ -278,6 +278,12 @@ The fingerprint has two parts:
 **Conversions:** mi = km × 0.621371; mph = |m/s| × 2.23694.
 
 **Comparison precision:** values are quantized to `compare_precision_*` before comparing. So exactly 105.0 mph is not over 105, and 3000.0 mi is not over 3000.
+
+**Driven distance (decided 2026-09-28):** only **loaded** driving counts, meaning the odometer difference over kept segments where the job config has `cargo.loaded=true`.
+- The empty drive to the pickup earns nothing. It happens with an owned trailer on the cargo market; the first capture shows `cargo.loaded` flipping at the pickup.
+- Rules 1, 3, 5 and 6 use this loaded distance.
+- Speed rules 2 and 5 and fuel rule 4 still watch the **whole job**, from accept to delivery, empty leg included. (This is my default.)
+- World of Trucks jobs (`job.market` = `external_contracts` / `external_market`, configs.h:633-637) might later earn points for the empty leg. That exception is **deferred**; for now they follow the same rule.
 
 **Rules**
 0. **Integrity** (added at your request; runs first; overrides the spec's "no other auto-invalidation"). The job is **discarded** (0 pts, reason and diff visible to admins, not approvable) if either check fails (§6a):
@@ -514,6 +520,7 @@ I cannot run the games in this session, so the following steps need a real game 
 18. **DLC-gated map areas:** you own all DLC and will handle this in the tile generation and the bot repo.
 19. **Discord bot:** it will be written afterwards by parallel agents against `docs/ADMIN_API.md`, which this repo defines in stage 4.
 20. **Truck vs cargo changes (2026-09-28):** switching trucks mid-job is allowed. A mid-job cargo change (same route, different cargo) is treated as a save edit and goes to manual review with reason `cargo_switch`; the bonus uses the original cargo until an admin decides (§5).
+21. **Empty driving earns no points (2026-09-28):** only distance driven with `cargo.loaded=true` is scored. The World of Trucks exception is deferred (§6).
 
 ## 12. Open questions
 
