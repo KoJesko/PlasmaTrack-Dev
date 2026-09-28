@@ -3,4 +3,4 @@
 # no proprietary MSVC tools are needed. Link libunwind and the C++ runtime
 # statically so binaries import only Windows system DLLs.
 [target.x86_64-pc-windows-gnullvm]
-rustflags = ["-C", "target-feature=+crt-static"]
+rustflags = ["-C", "target-feature=+crt-static", "-C", "link-arg=-Wno-unused-command-line-argument"]

@@ -158,3 +158,7 @@ retry_interval_wall_s = 20.0
 listen_address = "127.0.0.1"
 port = 30455
 server_url = "https://plasmatrack.example.invalid"
+# Local status page of the client: http://127.0.0.1:<status_port>/
+status_port = 30456
+# Player token issued by the server (via the Discord bot). Keep this file private.
+token = ""

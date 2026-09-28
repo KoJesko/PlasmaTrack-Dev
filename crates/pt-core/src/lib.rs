@@ -7,6 +7,8 @@
 pub mod config;
 pub mod game;
 pub mod units;
+pub mod upload;
+pub mod wire;
 
 pub use config::Config;
 pub use game::Game;

@@ -2,18 +2,25 @@
 
 Every tool below is FOSS.
 
-## Rust workspace (pt-core; later the client and server)
+## Rust workspace (pt-core, client; later the server)
 
-On Windows, use the GNU host toolchain. It avoids the proprietary MSVC Build Tools.
+On Windows, use the **gnullvm** host toolchain together with llvm-mingw (the same
+toolchain as the plugin). Bundled C code (SQLite) and Rust then share one UCRT-based
+toolchain, and no proprietary MSVC Build Tools are needed. `.cargo/config.toml` links
+the runtime statically, so the binaries import only Windows system DLLs.
 
 ```powershell
 winget install Rustlang.Rustup
-rustup toolchain install stable-x86_64-pc-windows-gnu --profile minimal -c clippy,rustfmt
-rustup default stable-x86_64-pc-windows-gnu
+rustup toolchain install stable-x86_64-pc-windows-gnullvm --profile minimal -c clippy,rustfmt
+rustup default stable-x86_64-pc-windows-gnullvm
+$env:PATH = "$env:LOCALAPPDATA\PlasmaTrackTools\llvm-mingw-<date>-ucrt-x86_64\bin;$env:PATH"   # llvm-mingw, see below
 cargo test --workspace
 ```
 
-On Linux, install Rust with rustup (https://rustup.rs), then run `cargo test --workspace`.
+On Linux, install Rust with rustup (https://rustup.rs) and a C compiler (for SQLite), then run `cargo test --workspace`.
+
+End-to-end check of the real plugin DLL against the real client binary (Windows):
+`powershell -ExecutionPolicy Bypass -File scripts\e2e-plugin-client.ps1`.
 
 ## Plugin: Windows DLL, built on Windows
 

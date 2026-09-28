@@ -185,6 +185,8 @@ pub struct Local {
     pub listen_address: String,
     pub port: u16,
     pub server_url: String,
+    pub status_port: u16,
+    pub token: String,
 }
 
 impl Config {
@@ -268,6 +270,9 @@ impl Config {
         if self.local.listen_address != "127.0.0.1" && self.local.listen_address != "::1" {
             errs.push("local.listen_address must be a loopback address".into());
         }
+        if self.local.status_port == self.local.port {
+            errs.push("local.status_port must differ from local.port".into());
+        }
         if errs.is_empty() {
             Ok(())
         } else {
@@ -325,7 +330,7 @@ mod tests {
         let reformatted = SAMPLE.replace("sustained_window_s = 3.0", "sustained_window_s   =   3.00 # same");
         assert_eq!(Config::from_toml_str(&reformatted).unwrap().integrity_hash(), h);
         let canon = base.integrity_canonical_json();
-        for local_key in ["\"local\"", "\"listen_address\"", "\"server_url\"", "\"port\""] {
+        for local_key in ["\"local\"", "\"listen_address\"", "\"server_url\"", "\"port\"", "\"token\"", "\"status_port\""] {
             assert!(!canon.contains(local_key), "{local_key} leaked into the integrity hash");
         }
     }

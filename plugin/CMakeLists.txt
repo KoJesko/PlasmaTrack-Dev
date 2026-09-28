@@ -70,6 +70,13 @@ if(BUILD_TESTING)
   endif()
   add_test(NAME fake_game COMMAND pt_fake_game $<TARGET_FILE:plasmatrack_telemetry>)
 
+  # Used by scripts/e2e-plugin-client.ps1 together with the real client binary.
+  add_executable(pt_drive_plugin tests/drive_plugin.cpp)
+  target_link_libraries(pt_drive_plugin PRIVATE pt_plugin_core)
+  if(WIN32)
+    target_link_options(pt_drive_plugin PRIVATE -static)
+  endif()
+
   if(WIN32)
     if(NOT PT_OBJDUMP)
       find_program(PT_OBJDUMP NAMES llvm-objdump x86_64-w64-mingw32-objdump objdump)
