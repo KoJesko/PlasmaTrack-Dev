@@ -4,3 +4,6 @@
 EXPORTS
     scs_telemetry_init
     scs_telemetry_shutdown
+    ; TruckersMP client SDK plugin entry points (TruckersMP_Base.h:121-129).
+    truckersmp_init
+    truckersmp_shutdown

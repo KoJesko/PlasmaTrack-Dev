@@ -10,6 +10,8 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
 endif()
 
 set(SCS_SDK_INCLUDE "${CMAKE_CURRENT_SOURCE_DIR}/../third_party/scssdk-1.14/include")
+# TruckersMP client SDK (MIT, header-only; only its C layer is used).
+set(TMP_SDK_INCLUDE "${CMAKE_CURRENT_SOURCE_DIR}/../third_party/truckersmp-client-sdk-1.1.0/include")
 
 # Everything except the SDK entry points, shared by the plugin and the tests.
 add_library(pt_plugin_core STATIC
@@ -35,8 +37,9 @@ else()
 endif()
 
 # ---- the plugin -----------------------------------------------------------
-add_library(plasmatrack_telemetry SHARED src/plugin.cpp)
+add_library(plasmatrack_telemetry SHARED src/plugin.cpp src/tmp.cpp)
 target_link_libraries(plasmatrack_telemetry PRIVATE pt_plugin_core)
+target_include_directories(plasmatrack_telemetry PRIVATE "${TMP_SDK_INCLUDE}")
 set_target_properties(plasmatrack_telemetry PROPERTIES PREFIX "" OUTPUT_NAME plasmatrack)
 if(WIN32)
   target_sources(plasmatrack_telemetry PRIVATE plasmatrack.def)
@@ -65,6 +68,7 @@ if(BUILD_TESTING)
 
   add_executable(pt_fake_game tests/fake_game.cpp)
   target_link_libraries(pt_fake_game PRIVATE pt_plugin_core)
+  target_include_directories(pt_fake_game PRIVATE "${TMP_SDK_INCLUDE}")
   if(WIN32)
     target_link_options(pt_fake_game PRIVATE -static)
   endif()

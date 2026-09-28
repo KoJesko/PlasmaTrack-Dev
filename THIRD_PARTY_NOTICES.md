@@ -3,6 +3,7 @@
 | Component | Where it ends up | License | Text |
 |---|---|---|---|
 | SCS Telemetry SDK 1.14 headers | compiled into the plugin | MIT, © 2016 SCS Software | `third_party/scssdk-1.14/sdk_license.txt` |
+| TruckersMP Game Client SDK 1.1.0 headers (C layer) | compiled into the plugin | MIT, © 2026 TruckersMP | `third_party/truckersmp-client-sdk-1.1.0/LICENSE` |
 | LLVM libc++, libc++abi, libunwind, compiler-rt (llvm-mingw) | statically linked into the Windows plugin DLL | Apache-2.0 WITH LLVM-exception | `third_party/notices/LLVM-LICENSE.txt` |
 | MinGW-w64 runtime (CRT startup, headers) | statically linked into the Windows plugin DLL | ZPL-2.1 and others listed in the file | `third_party/notices/COPYING.MinGW-w64-runtime.txt` |
 | winpthreads | may be statically linked by GCC-based builds | MIT / BSD-3-Clause | `third_party/notices/winpthreads-COPYING.txt` |

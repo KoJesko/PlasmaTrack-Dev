@@ -34,6 +34,7 @@
 #include "sender.hpp"
 #include "settings.hpp"
 #include "spsc_ring.hpp"
+#include "tmp.hpp"
 #include "value_json.hpp"
 
 namespace pt {
@@ -101,6 +102,9 @@ public:
     // Map scale tracking (PLAN §6): every change of local.scale is reported as a
     // durable "scale" message, checked each frame, so the server can split a job
     // into constant-scale runs and the route map can colour them.
+    // Last TruckersMP SDK state reported (tmp.hpp); UINT32_MAX = none yet.
+    std::uint32_t tmp_version = UINT32_MAX;
+
     Channel* local_scale = nullptr;
     bool scale_reported = false;
     bool scale_was_available = false;
@@ -110,6 +114,19 @@ public:
         for (Channel& c : channels)
             if (std::string(c.name) == name) return &c;
         return nullptr;
+    }
+
+    void track_truckersmp() {
+        const tmp::State& s = tmp::state();
+        const std::uint32_t v = s.version.load();
+        if (v == tmp_version) return;
+        tmp_version = v;
+        emit(Kind::Truckersmp, [&s](JsonWriter& w) {
+            w.key("loaded").boolean(s.loaded.load());
+            w.key("connected").boolean(s.connected.load());
+            w.key("server_id").u64(s.server_id.load());
+            w.key("account_id").u64(s.account_id.load());
+        });
     }
 
     void track_scale() {
@@ -213,6 +230,7 @@ SCSAPI_VOID on_frame_end(const scs_event_t, const void* const, const scs_context
     if (!p) return;
     try {
         p->track_scale();
+        p->track_truckersmp();
         if (!p->paused) {
             const double rate = p->settings.capture ? 0.0 : p->settings.sample_rate_hz;
             const scs_timestamp_t now = p->frame.paused_simulation_time;

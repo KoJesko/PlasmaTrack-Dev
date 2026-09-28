@@ -365,6 +365,12 @@ impl Sim {
         self.emit("modules", json!({"modules": ["KERNEL32.DLL", "core_atsmp.dll"]}));
     }
 
+    /// The plugin's TruckersMP client SDK report (plugin/src/tmp.cpp).
+    pub fn truckersmp_sdk(&mut self, connected: bool) {
+        let server = if connected { 42 } else { 0 };
+        self.emit("truckersmp", json!({"loaded": true, "connected": connected, "server_id": server, "account_id": 5557777}));
+    }
+
     /// Client-inserted profile notice (PLAN §6b); not a plugin message, so no seq.
     pub fn profile(&mut self, key: &str) {
         self.lines.push(json!({"v": 1, "kind": "profile", "sess": self.sess, "wall_ms": self.wall_ms, "profile_key": key}).to_string());

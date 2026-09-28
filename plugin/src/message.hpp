@@ -14,7 +14,7 @@ constexpr int kProtocolVersion = 1;
 constexpr const char* kPluginVersion = "0.1.0";
 
 enum class Kind : std::uint8_t {
-    Init, Config, Gameplay, Paused, Started, TimerRestart, Sample, Heartbeat, Shutdown, Integrity, Modules, Scale,
+    Init, Config, Gameplay, Paused, Started, TimerRestart, Sample, Heartbeat, Shutdown, Integrity, Modules, Scale, Truckersmp,
 };
 
 inline const char* kind_name(Kind k) {
@@ -31,6 +31,7 @@ inline const char* kind_name(Kind k) {
         case Kind::Integrity: return "integrity";
         case Kind::Modules: return "modules";
         case Kind::Scale: return "scale";
+        case Kind::Truckersmp: return "truckersmp";
     }
     return "unknown";
 }

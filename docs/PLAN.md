@@ -431,7 +431,13 @@ The fingerprint has two parts:
 
 **Multiplayer is tracked** in every form: TruckersMP, other multiplayer mods, and Convoy.
 - **Convoy** is detected from `multiplayer.time.offset ≠ 0` (common_channels.h:287-300) **while no TruckersMP module is loaded**. The Sioux Falls TruckersMP session reported an offset of about 24,136,737, while the first TruckersMP capture reported 0, so the offset alone does not mean Convoy.
-- **TruckersMP** cannot be identified by the SDK. The plugin reports whether any module named in `[multiplayer] truckersmp_module_names` is loaded in the game process. **Confirmed for ATS: `core_atsmp.dll`** (loaded from process start). The ETS2 name still needs an ETS2 TruckersMP capture.
+- **TruckersMP (decided 2026-09-28: use the TruckersMP client SDK).** `plasmatrack.dll` is also a TruckersMP client plugin.
+  - It exports `truckersmp_init` / `truckersmp_shutdown` (vendored SDK 1.1.0, MIT, C layer only).
+  - It reports `truckersmp` messages: `connected` (`TruckersMP_Network::IsConnected`, updated on the connect/disconnect events), `server_id` and `account_id`.
+  - **A job counts as TruckersMP only while connected to a server.** Singleplayer launched through the TruckersMP launcher loads `core_atsmp.dll` but is not TruckersMP.
+  - Fallback for plugins without the SDK side: a module named in `[multiplayer] truckersmp_module_names` is loaded (confirmed for ATS: `core_atsmp.dll`).
+  - TruckersMP supports an SDK version for about a year, so the plugin must be rebuilt against newer headers yearly.
+  - Not yet verified in the real TruckersMP client: that it loads our DLL as a plugin next to the telemetry role, and what `server_id` values look like.
 - **Singleplayer Division:** a user flag, set through the admin API. For these users, jobs detected as TruckersMP are **discarded**, with the reason shown. Convoy and other multiplayer remain allowed.
 - Each job stores its multiplayer kind.
 

@@ -36,8 +36,50 @@
 #include "eurotrucks2/scssdk_eut2.h"
 #include "eurotrucks2/scssdk_telemetry_eut2.h"
 
+#include "TruckersMP/TruckersMP.h"
+
 #include "platform.hpp"
 #include "sha256.hpp"
+
+// A fake TruckersMP client: serves the SDK's C function tables
+// (TruckersMP_Base.h / TruckersMP.h) to the plugin's truckersmp_init.
+namespace faketmp {
+bool connected = false;
+std::uint64_t server = 0;
+std::uint32_t declared = 0;
+std::vector<std::pair<std::uint64_t, TruckersMP_EventFn>> listeners;
+TruckersMP_EResult TMP_API declare(TruckersMP_PluginContext*, std::uint32_t v) {
+    declared = v;
+    return v == TRUCKERSMP_SDK_VERSION ? TruckersMP_Result_Ok : TruckersMP_Result_NotSupported;
+}
+TruckersMP_EResult TMP_API add(TruckersMP_PluginContext*, std::uint64_t id, TruckersMP_EventFn fn, void*) {
+    listeners.push_back({id, fn});
+    return TruckersMP_Result_Ok;
+}
+TruckersMP_EResult TMP_API remove(TruckersMP_PluginContext*, std::uint64_t id, TruckersMP_EventFn fn, void*) {
+    listeners.erase(std::remove(listeners.begin(), listeners.end(), std::make_pair(id, fn)), listeners.end());
+    return TruckersMP_Result_Ok;
+}
+bool TMP_API is_connected(TruckersMP_PluginContext*, bool* out) { *out = connected; return true; }
+bool TMP_API ping(TruckersMP_PluginContext*, std::uint16_t* out) { *out = 30; return true; }
+bool TMP_API server_id(TruckersMP_PluginContext*, std::uint64_t* out) { *out = server; return true; }
+bool TMP_API account(TruckersMP_PluginContext*, std::uint64_t* out) { *out = 5557777; return true; }
+TruckersMP_Core core{add, remove, nullptr, nullptr, nullptr, nullptr};
+TruckersMP_Network net{is_connected, ping, server_id};
+TruckersMP_Accounts acc{account, nullptr, nullptr, nullptr, nullptr};
+const void* TMP_API get_api(TruckersMP_PluginContext*, std::uint64_t id) {
+    if (id == TRUCKERSMP_API_CORE) return &core;
+    if (id == TRUCKERSMP_API_NETWORK) return &net;
+    if (id == TRUCKERSMP_API_ACCOUNTS) return &acc;
+    return nullptr;
+}
+void TMP_API free_fn(TruckersMP_PluginContext*, void*) {}
+void fire(std::uint64_t id) {
+    auto copy = listeners;
+    for (auto& l : copy)
+        if (l.first == id) l.second(nullptr, id, nullptr, 0);
+}
+}  // namespace faketmp
 
 static int g_failures = 0;
 #define CHECK(cond)                                                            \
@@ -512,6 +554,49 @@ int main(int argc, char** argv) {
     game.frame(true, 0, 0, 0, 0);
     CHECK(std::any_of(g_mock.logs.begin(), g_mock.logs.end(),
                       [](const std::string& l) { return l.find("connected to client") != std::string::npos; }));
+
+    // ---- the same DLL as a TruckersMP client SDK plugin ----------------------------
+    {
+        auto last_tmp = [&](const char* needle) {
+            return client.wait_for([&](auto& v) {
+                for (auto it = v.rbegin(); it != v.rend(); ++it)
+                    if (it->sess == sess1 && it->kind == "truckersmp") return it->json.find(needle) != std::string::npos;
+                return false;
+            }, 2000);
+        };
+#ifdef _WIN32
+        using tmp_init_fn = bool (*)(const TruckersMP_Host*, TruckersMP_PluginDesc*);
+        auto tmp_init = reinterpret_cast<tmp_init_fn>(reinterpret_cast<void*>(GetProcAddress(lib, "truckersmp_init")));
+        auto tmp_shutdown = reinterpret_cast<void (*)()>(reinterpret_cast<void*>(GetProcAddress(lib, "truckersmp_shutdown")));
+        REQUIRE(tmp_init && tmp_shutdown);
+        TruckersMP_Host host{sizeof(TruckersMP_Host), nullptr, faketmp::declare, faketmp::get_api, faketmp::free_fn};
+        TruckersMP_PluginDesc desc{};
+        desc.m_size = sizeof desc;
+        CHECK(tmp_init(&host, &desc));
+        CHECK(faketmp::declared == TRUCKERSMP_SDK_VERSION);
+        CHECK(std::string(desc.m_name) == "PlasmaTrack");
+        CHECK(faketmp::listeners.size() == 2);
+        game.frame(true, 0, 0, 0, 0);
+        CHECK(last_tmp("\"loaded\":true,\"connected\":false"));
+        faketmp::connected = true;
+        faketmp::server = 42;
+        faketmp::fire(TRUCKERSMP_EVT_NETWORK_CONNECTED);
+        game.frame(true, 0, 0, 0, 0);
+        CHECK(last_tmp("\"loaded\":true,\"connected\":true,\"server_id\":42,\"account_id\":5557777"));
+        faketmp::connected = false;
+        faketmp::fire(TRUCKERSMP_EVT_NETWORK_DISCONNECTED);
+        game.frame(true, 0, 0, 0, 0);
+        CHECK(last_tmp("\"connected\":false,\"server_id\":0"));
+        tmp_shutdown();
+        CHECK(faketmp::listeners.empty());
+        game.frame(true, 0, 0, 0, 0);
+        CHECK(last_tmp("\"loaded\":false"));
+        // A client built for another SDK version is refused.
+        TruckersMP_Host old = host;
+        old.DeclareVersion = [](TruckersMP_PluginContext*, std::uint32_t) -> TruckersMP_EResult { return TruckersMP_Result_NotSupported; };
+        CHECK(!tmp_init(&old, &desc));
+#endif
+    }
 
     // ---- sdk reload: shutdown (unacknowledged tail) and init again -----------------
     shutdown();

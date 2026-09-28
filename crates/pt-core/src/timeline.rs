@@ -216,6 +216,10 @@ pub struct Timeline {
     job_cfg: Option<JobInfo>,
     truck_ids: Vec<String>,
     truck: u32,
+    /// Loaded-module heuristic (fallback for plugins without the TruckersMP SDK side).
+    truckersmp_module: bool,
+    /// TruckersMP SDK state, once reported in this session.
+    truckersmp_sdk: Option<bool>,
     truckersmp: bool,
     last: Option<Point>,
     next_run: u32,
@@ -238,6 +242,8 @@ impl Timeline {
             job_cfg: None,
             truck_ids: Vec::new(),
             truck: 0,
+            truckersmp_module: false,
+            truckersmp_sdk: None,
             truckersmp: false,
             last: None,
             next_run: 0,
@@ -279,6 +285,8 @@ impl Timeline {
         };
         if self.sess != Some(sess) {
             self.bracket.session_change = true;
+            self.truckersmp_module = false;
+            self.truckersmp_sdk = None;
             self.truckersmp = false;
             self.sess = Some(sess);
         } else if f.seq > 0 && f.seq != self.last_seq + 1 && f.seq > self.last_seq {
@@ -330,7 +338,14 @@ impl Timeline {
                 "player.use.ferry" | "player.use.train" => self.bracket.transfer = true,
                 _ => {}
             },
-            Body::Modules { truckersmp } => self.truckersmp |= *truckersmp,
+            Body::Modules { truckersmp } => {
+                self.truckersmp_module |= *truckersmp;
+                self.truckersmp = self.truckersmp_sdk.unwrap_or(self.truckersmp_module);
+            }
+            Body::Truckersmp { connected, .. } => {
+                self.truckersmp_sdk = Some(*connected);
+                self.truckersmp = *connected;
+            }
             Body::Sample(s) => self.on_sample(sess, f, s),
             _ => {}
         }
@@ -836,7 +851,7 @@ impl Profiles {
         if matches!(f.body, Body::Init { .. }) {
             self.session.clear();
         }
-        if matches!(f.body, Body::Init { .. } | Body::Modules { .. }) {
+        if matches!(f.body, Body::Init { .. } | Body::Modules { .. } | Body::Truckersmp { .. }) {
             self.session.push(f.clone());
             for (k, t) in self.timelines.iter_mut() {
                 if *k != active {

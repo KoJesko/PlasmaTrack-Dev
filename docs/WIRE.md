@@ -29,7 +29,7 @@ Every message except `hello` and `snapshot` carries these fields:
 | `sim_us` | u64 | `paused_simulation_time` of the latest `frame_start`, µs (scssdk_telemetry_event.h:132-136). It stops while physics is paused (absent on messages created by the sender thread) |
 
 **Durable** kinds are journaled to disk until acknowledged: `init`, `config`, `gameplay`,
-`paused`, `started`, `timer_restart`, `integrity`, `modules`, `scale`, `shutdown`. `sample` and
+`paused`, `started`, `timer_restart`, `integrity`, `modules`, `scale`, `truckersmp`, `shutdown`. `sample` and
 `heartbeat` are memory-only.
 
 ## Kinds
@@ -48,6 +48,7 @@ Every message except `hello` and `snapshot` carries these fields:
 | `sample` | `simulation_us`, `render_us`, `ch` {channel name: value or `null` = unavailable}, `stale` [names that had a value but no callback this frame] |
 | `heartbeat` | `paused`, `ring_dropped`, `local_scale` (latest reported map scale or null). Sent after 1 s with no other message from the game thread |
 | `scale` | `local_scale` (float or null = unavailable), `previous` (the last reported value or null), `truck.odometer`, `truck.world.placement` (where the change happened; null if unavailable). Sent on the first reading and on every change of `local.scale` (common_channels.h:13-23), checked every physics frame. Durable, so a job can be split into constant-scale runs even without samples. |
+| `truckersmp` | `loaded` (the TruckersMP client initialised the plugin through `truckersmp_init`), `connected` (`TruckersMP_Network::IsConnected`), `server_id` (`GetGameServerID`, 0 when not connected), `account_id` (`TruckersMP_Accounts::GetAccountID`, 0 if unknown). Sent at the first frame and on every change (connect/disconnect events, `truckersmp_shutdown`). Source: vendored TruckersMP client SDK 1.1.0 C layer (TruckersMP.h). Durable. |
 | `shutdown` | none. `scs_telemetry_shutdown` was called |
 
 **Attribute** objects have the form `{"name": .., "index": null | n, "type": .., "value": ..}`.

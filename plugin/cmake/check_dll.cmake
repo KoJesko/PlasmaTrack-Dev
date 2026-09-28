@@ -1,5 +1,6 @@
 # Verifies the built DLL:
-#  - exports exactly scs_telemetry_init and scs_telemetry_shutdown (undecorated)
+#  - exports scs_telemetry_init and scs_telemetry_shutdown (SCS SDK) and
+#    truckersmp_init and truckersmp_shutdown (TruckersMP client SDK), undecorated
 #  - imports only DLLs that ship with Windows (and Wine/Proton): no MinGW
 #    runtime DLLs (libc++, libunwind, libstdc++, libgcc, libwinpthread).
 execute_process(COMMAND "${OBJDUMP}" -p "${DLL}" OUTPUT_VARIABLE out RESULT_VARIABLE rc)
@@ -19,7 +20,7 @@ foreach(line IN LISTS imports)
   endif()
 endforeach()
 
-foreach(sym scs_telemetry_init scs_telemetry_shutdown)
+foreach(sym scs_telemetry_init scs_telemetry_shutdown truckersmp_init truckersmp_shutdown)
   if(NOT out MATCHES "[ \t]${sym}[\r\n]")
     message(FATAL_ERROR "Missing export: ${sym}")
   endif()

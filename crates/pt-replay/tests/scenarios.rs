@@ -713,3 +713,31 @@ fn a_cargo_switch_goes_to_review_and_keeps_the_original_bonus_basis() {
     };
     assert!(rescore(&job, &ctx).bonus.is_none(), "no bonus for the switched-in cargo");
 }
+
+#[test]
+fn the_truckersmp_sdk_tells_server_play_from_launcher_singleplayer() {
+    // TruckersMP loaded (its DLL is in the process) but not on a server:
+    // singleplayer through the TruckersMP launcher is not TruckersMP.
+    let mut s = Sim::new("ats");
+    s.truckersmp();
+    s.truckersmp_sdk(false);
+    s.accept(JobSpec::new("tyres"));
+    s.drive_km(20.0);
+    s.deliver(20.0);
+    let (job, r) = s.job("tyres");
+    assert!(!r.truckersmp);
+    let sp = rescore(&job, &Context { singleplayer_division: true, ..Default::default() });
+    assert_eq!(sp.outcome, Outcome::Valid);
+
+    // Connected to a server: TruckersMP, discarded for the Singleplayer Division.
+    let mut s = Sim::new("ats");
+    s.truckersmp();
+    s.truckersmp_sdk(true);
+    s.accept(JobSpec::new("tyres"));
+    s.drive_km(20.0);
+    s.deliver(20.0);
+    let (job, r) = s.job("tyres");
+    assert!(r.truckersmp);
+    let sp = rescore(&job, &Context { singleplayer_division: true, ..Default::default() });
+    assert_eq!(sp.discard, Some(DiscardReason::SingleplayerDivisionTruckersmp));
+}

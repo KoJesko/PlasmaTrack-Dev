@@ -29,6 +29,9 @@ pub enum Body {
     Scale { local_scale: Option<f64> },
     /// Module list, raw (capture mode, local client) or redacted (uploads).
     Modules { truckersmp: bool },
+    /// TruckersMP client SDK state (plugin >= this change): authoritative for
+    /// "on a TruckersMP server" once seen in a session.
+    Truckersmp { loaded: bool, connected: bool, server_id: u64 },
     Shutdown,
     /// Client-inserted: the active game profile changed (PLAN §6b).
     Profile { key: String },
@@ -146,6 +149,11 @@ pub fn parse_frame(json: &str, truckersmp_module_names: &[String]) -> Result<Fra
             let redacted_hit = v["truckersmp_matches"].as_array().is_some_and(|m| !m.is_empty());
             Body::Modules { truckersmp: raw_hit || redacted_hit }
         }
+        "truckersmp" => Body::Truckersmp {
+            loaded: v["loaded"].as_bool().unwrap_or(false),
+            connected: v["connected"].as_bool().unwrap_or(false),
+            server_id: v["server_id"].as_u64().unwrap_or(0),
+        },
         "shutdown" => Body::Shutdown,
         "profile" => Body::Profile { key: v["profile_key"].as_str().unwrap_or("unknown").to_string() },
         other => Body::Other(other.to_string()),
