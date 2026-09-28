@@ -135,6 +135,7 @@ Per-frame order (:82-89): configuration → paused/started → frame_start → g
 Tampered delivery:
 - **`job.delivered` `distance.km` is not trustworthy on its own.** A 7 km (planned) San Francisco job was delivered with **`distance.km = 1000`**, `delivery.time = 60`, `auto.park.used = true` and `auto.load.used = true` (gameplay_events.h:118-132).
   - Just before the delivery: a save load (slot 143) whose truck odometer was edited ×10 (12,888 → 128,880 km), then a 1.8 world-km teleport straight to the destination while driving. The game log shows free-camera "Camera speed" lines just before it, which suggests a developer-mode teleport.
+  - **Confirmed (you, 2026-09-28): the 1000 km was a save edit of the job's driven distance.** The game keeps that figure in the save and reports it unchanged at delivery.
   - TruckyTelemetry reported the same `realDistance: 1000`.
   - The tracker's own loaded distance after the load was about 0.2 game km, so the delivered-vs-trace cross-check (§6) sends this job to review. That check is essential, not optional.
   - This delivery **cannot** answer whether `distance.km` is 1:1 or game scale. A clean delivery (no edits, no teleports) is still needed.
@@ -257,9 +258,9 @@ This model incorporates the red-team findings. All thresholds are in `[timeline]
   - **W** (in-session loads, backwards or forwards); or
   - **S plus a discontinuity** (odometer, position or fuel, plus `game.time` in singleplayer only) against the last kept state (loads across a restart, a crash or a client outage).
 - **A discontinuity without W or S is not a load.** It is a **teleport**, such as the two uncaptioned teleports in the capture.
-  - **Decided 2026-09-28: a teleport only adds no distance.** It never invalidates, never penalises (not even partly) and never sends a job to review. Examples are F7, ferries, trains and quick travel.
+  - **Decided 2026-09-28: a teleport only adds no distance.** It never invalidates, never penalises (not even partly) and never sends a job to review. Examples are F7, ferries, trains, quick travel and **developer-mode (free-camera) teleports**. Developer mode or the console being enabled is not a review reason either (you, 2026-09-28).
   - The odometer does not move on a teleport (first capture), so the tracker's own figure already excludes it.
-  - If a delivery capture shows that the game's `job.delivered` `distance.km` *does* count a teleport, the jumped distance is subtracted from the scored figure.
+  - If a delivery capture shows that the game's `job.delivered` `distance.km` *does* count a teleport, the jumped distance is subtracted from the game's figure **before** the delivered-vs-trace cross-check. A teleport therefore never causes a mismatch or a review by itself.
   - It reverts nothing, and it is stored in the trace for admins to see.
 - **A pause bracket alone is not evidence.** In the capture, the teleports happened inside pauses, so a pause plus a position jump would otherwise look like a load.
 - **Other config changes never count as evidence.** A job or truck config that is re-sent without emptying `truck` only decides which case below applies. This stops ordinary job accepts, cargo loading, quick-job teleports and deliveries from looking like loads.
