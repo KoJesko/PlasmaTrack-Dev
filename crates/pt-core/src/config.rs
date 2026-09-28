@@ -32,9 +32,9 @@ pub struct Config {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Rules {
-    pub manual_review_over_mi: f64,
+    pub manual_review_over_world_km: f64,
     pub speed_penalty_factor: f64,
-    pub points_per_mile: f64,
+    pub points_per_world_mi: f64,
     pub speed: SpeedRules,
     pub distance: DistanceRules,
     pub fuel: FuelRules,
@@ -69,7 +69,7 @@ pub struct SpeedLimits {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct DistanceRules {
-    pub compare_precision_mi: f64,
+    pub compare_precision_km: f64,
     pub odometer_epsilon_km: f64,
 }
 
@@ -228,11 +228,11 @@ impl Config {
         let mut errs = Vec::new();
         let r = &self.rules;
         for (name, v) in [
-            ("rules.manual_review_over_mi", r.manual_review_over_mi),
-            ("rules.points_per_mile", r.points_per_mile),
+            ("rules.manual_review_over_world_km", r.manual_review_over_world_km),
+            ("rules.points_per_world_mi", r.points_per_world_mi),
             ("rules.speed.sustained_window_s", r.speed.sustained_window_s),
             ("rules.speed.compare_precision_mph", r.speed.compare_precision_mph),
-            ("rules.distance.compare_precision_mi", r.distance.compare_precision_mi),
+            ("rules.distance.compare_precision_km", r.distance.compare_precision_km),
             ("rules.distance.odometer_epsilon_km", r.distance.odometer_epsilon_km),
             ("plugin.sample_rate_hz", self.plugin.sample_rate_hz),
             ("sync.retry_interval_wall_s", self.sync.retry_interval_wall_s),
@@ -294,7 +294,7 @@ mod tests {
         assert_eq!(c.rules.speed.limits(Game::Ats).invalid_over_mph, 125.0);
         assert_eq!(c.rules.speed.limits(Game::Ets2).penalty_over_mph, 100.0);
         assert_eq!(c.rules.speed.limits(Game::Ets2).invalid_over_mph, 150.0);
-        assert_eq!(c.rules.manual_review_over_mi, 3000.0);
+        assert_eq!(c.rules.manual_review_over_world_km, 150.0);
         assert_eq!(c.rules.speed_penalty_factor, 0.85);
         assert_eq!(c.rules.speed.sustained_window_s, 3.0);
         assert_eq!(c.sync.retry_interval_wall_s, 20.0);

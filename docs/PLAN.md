@@ -161,7 +161,7 @@ Other events:
 
 Every ferry in this capture raised its event. Nothing depends on transport events anyway: a teleport is never a load, never adds distance, and is never suspicious by itself. Under the old rule, a position jump (R) plus a pause bracket (C) would have been **misclassified as a load**. This is fixed in §5.
 - **Units (measured over 70k samples):** `truck.world.placement` is in world metres. `truck.odometer` advances at world distance × `local.scale`: the ratio was 2.98 at scale 3 (cities) and 20.00 at scale 20 (open road).
-  - The odometer is therefore in the game's own kilometres, the same scale as job distances and the map. Points (rule 6) are scored on it.
+  - The odometer is therefore in the game's own kilometres, the same scale as job distances and the map. Points are scored on the **world (1:1) distance**, which is the odometer ÷ `local.scale` (§6, decision 22). The game distance is reported next to it.
   - `truck.speed` is world m/s, which is what the speedometer shows. Speed rules 2 and 5 use it.
   - Position thresholds in the config are named `_world_m`. Never compare position distances with odometer distances without multiplying by `local.scale`.
 - **Samples stop while paused.** Frames continue, and heartbeats keep coming.
@@ -259,7 +259,7 @@ The fingerprint has two parts:
 | Situation | Result |
 |---|---|
 | Job appears in continuous, gap-free data | Tracked start. Start odometer and fuel are taken at the first live sample. |
-| Job first seen mid-way (plugin snapshot, after a data gap, or loaded save of an unseen job) | **Late start.** Record the details reported so far and track from that point. Driven distance = `job.delivered` `distance.km`. Goes to review (`review_policy.late_start`). Open: a delivery capture (C7) must show whether `distance.km` includes the empty leg. If it does, the tracked loaded distance is used where one exists, and the admin sees both. |
+| Job first seen mid-way (plugin snapshot, after a data gap, or loaded save of an unseen job) | **Late start.** Record the details reported so far and track from that point. Game distance = `job.delivered` `distance.km`. `distance.km` is in game km, and the untracked part's scale is unknown. So the world distance is **estimated** as `distance.km` × (tracked world ÷ tracked game distance), which is marked as an estimate. Goes to review (`review_policy.late_start`). Open: a delivery capture (C7) must show whether `distance.km` includes the empty leg. If it does, the tracked loaded distance is used where one exists, and the admin sees both. |
 | Load, same job, loaded point inside the kept timeline | Truncate to the matching point. Matching uses odometer, position and fuel together, plus game time in singleplayer only. Everything after it, gaps included, is reverted. Recording continues. |
 | Load, same job, loaded point matches **previously reverted** material | Restore that branch up to the loaded point and score it normally, overspeed included. This closes the "revert, then restore" exploit, where overspeed would otherwise be laundered into a gap. |
 | Load, same job, loaded point beyond anything seen | **Gap** from the last kept point to the loaded point. Resume. Goes to review (`review_policy.gap`). |
@@ -285,11 +285,22 @@ The fingerprint has two parts:
 
 **Conversions:** mi = km × 0.621371; mph = |m/s| × 2.23694.
 
-**Comparison precision:** values are quantized to `compare_precision_*` before comparing. So exactly 105.0 mph is not over 105, and 3000.0 mi is not over 3000.
+**Comparison precision:** values are quantized to `compare_precision_*` before comparing. So exactly 105.0 mph is not over 105, and 150.0 km is not over 150.
 
-**Driven distance (decided 2026-09-28):** only **loaded** driving counts, meaning the odometer difference over kept segments where the job config has `cargo.loaded=true`.
+**Two distances per job (decided 2026-09-28):**
+- **World distance (scored):** the physical 1:1 distance the truck moved through the 3D world, like real-life driving (an hour at 90 km/h is 90 km).
+  - It is computed as Σ (Δodometer ÷ `local.scale`), where each Δodometer is taken over a run of kept samples with the same `local.scale`. It is never a sum of position steps, because teleports and jitter would distort that.
+  - The first capture shows this matches the actual movement exactly: the ratio is 2.98 at scale 3 and 20.00 at scale 20.
+  - If the game does not provide `local.scale`, which only a 1:1 map would do (common_channels.h:14-19), the scale is 1.
+  - **ETS2 uses 1:19 on open roads** (you, 2026-09-28), against 20 in ATS. Nothing is hard-coded: the reported `local.scale` is used per run. The first ETS2 capture should show 19 on roads (and presumably 3 in cities).
+  - As a trace check, it is cross-checked against the position path length over the same runs, with teleports excluded.
+- **Game distance (shown, not scored):** the odometer difference, meaning what the truck's odometer, the job list and the in-game map show. The bot shows both values: "12.3 mi driven (1:1), 146 mi in game".
+- Both distances count **loaded** driving only, meaning kept segments where the job config has `cargo.loaded=true`.
+
+**Which rules use which distance:**
 - The empty drive to the pickup earns nothing. It happens with an owned trailer on the cargo market; the first capture shows `cargo.loaded` flipping at the pickup.
-- Rules 1, 3, 5 and 6 use this loaded distance.
+- Rules 1, 5 and 6 use the loaded **world** distance. The speed rules were already 1:1: `truck.speed` is world m/s, which is what the speedometer shows.
+- Rule 3 uses the loaded **world** distance too, with its threshold rescaled for 1:1: over **150 world km** (`manual_review_over_world_km`) goes to review. It replaces the spec's 3000 mi (decided 2026-09-28).
 - Speed rules 2 and 5 and fuel rule 4 still watch the **whole job**, from accept to delivery, empty leg included. (This is my default.)
 - World of Trucks jobs (`job.market` = `external_contracts` / `external_market`, configs.h:633-637) might later earn points for the empty leg. That exception is **deferred**; for now they follow the same rule.
 
@@ -299,7 +310,7 @@ The fingerprint has two parts:
    - the uploaded install manifest matches no published release.
 1. Negative kept-timeline distance → Discard.
 2. Sustained speed over `invalid_over_mph` → Invalid.
-3. Driven distance over 3000 mi → Pending review.
+3. Loaded world distance over 150 km → Pending review (was 3000 mi before scoring moved to 1:1).
 4. Fuel used below −tolerance → **manual review** (points held). Also send every mid-run fuel jump outside a detected refuel to manual review, with its timestamp.
 5. Sustained speed over `penalty_over_mph` → accepted distance = 0.85 × driven.
 6. 1 point per accepted mile.
@@ -368,7 +379,7 @@ The fingerprint has two parts:
 | `users` | id, name, role (player/admin), token_sha256, discord_user_id, **singleplayer_division** flag, disabled |
 | `plugin_sessions` | sess, user, game, game_version, first/last seq |
 | `raw_chunks` | sess, seq_from, seq_to, zstd blob, received_at. Append-only and idempotent on (sess, seq) |
-| `jobs` | user, **game**, fingerprint, state, start_kind (tracked/late_start), config snapshot fields, truck_key, start/end odometer and fuel, refuelled_l, driven/accepted mi, points, peak mph, seconds over each threshold, delivered attributes, outcome (discarded / invalid / pending_review / valid / approved / rejected / voided), review_reasons[], multiplayer (none / convoy / truckersmp / other), profile_key, config_version |
+| `jobs` | user, **game**, fingerprint, state, start_kind (tracked/late_start), config snapshot fields, truck_key, start/end odometer and fuel, refuelled_l, world_driven_mi (scored, 1:1), world_accepted_mi, game_driven_mi (odometer, shown), world_distance_estimated (late starts), points, peak mph, seconds over each threshold, delivered attributes, outcome (discarded / invalid / pending_review / valid / approved / rejected / voided), review_reasons[], multiplayer (none / convoy / truckersmp / other), profile_key, config_version |
 | `job_segments` | kind (tracked / gap / reverted / restored), seq range, load timestamps |
 | `rule_results` | job, rule, triggered, details JSON |
 | `bonus_cargo` | game, match (exact or glob), type (flat/multiplier), amount, active_from/to |
@@ -468,7 +479,7 @@ I cannot run the games in this session, so the following steps need a real game 
 - 105.0 / 125.0 mph in ATS, and 100.0 / 150.0 mph in ETS2, each exactly on the limit.
 - A 1-second speed spike vs. sustained overspeed.
 - Overspeed while on a ferry.
-- 3000 vs. 3000.1 mi.
+- 150 vs. 150.1 world km.
 - Negative fuel within tolerance and beyond it.
 - A legitimate refuel.
 - Negative distance.
@@ -529,7 +540,11 @@ I cannot run the games in this session, so the following steps need a real game 
 19. **Discord bot:** it will be written afterwards by parallel agents against `docs/ADMIN_API.md`, which this repo defines in stage 4.
 20. **Truck vs cargo changes (2026-09-28):** switching trucks mid-job is allowed. A mid-job cargo change (same route, different cargo) is treated as a save edit and goes to manual review with reason `cargo_switch`; the bonus uses the original cargo until an admin decides (§5).
 21. **Empty driving earns no points (2026-09-28):** only distance driven with `cargo.loaded=true` is scored. The World of Trucks exception is deferred (§6).
-22. **Count 1:1 with the game (2026-09-28):** distance is exactly what the game's odometer shows, the same scale as job distances and the in-game map. It is never converted to real-world scale, so a 235 km job scores about 235 km (146 mi). World coordinates are used only for detection (teleports, load matching), never for points (§3 units).
+22. **Count 1:1 (2026-09-28):** points come from the **physical world distance**, the distance the truck actually moved at 1:1 scale, like real driving. This is unique among trackers. The **in-game (odometer) distance is reported as a second value**, so players see both.
+    - In the first capture, 79.5 game km equals 7.9 world km.
+    - World distance = odometer ÷ `local.scale` per run (§6).
+    - Rule 3 moves to world distance too: over **150 world km** goes to review (§6).
+    - ETS2 uses 1:19 on roads and ATS 1:20; both are read from `local.scale`.
 
 ## 12. Open questions
 

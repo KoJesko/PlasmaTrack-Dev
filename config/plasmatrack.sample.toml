@@ -4,6 +4,9 @@
 #   _mph, _mi, _km, _l (litres), _l_per_s, _s (seconds of paused simulation
 #   time unless noted), _wall_s (wall-clock seconds), _min_game (in-game minutes),
 #   _hz, _frames.
+# Distances are qualified: _world_ = physical 1:1 distance (odometer / local.scale,
+# what points use); _game_ = the game's own scale (odometer, job list, map);
+# _world_m = metres of the 3D world (positions).
 #
 # Unit conversions are fixed by the spec and are NOT configurable:
 #   1 km = 0.621371 mi, mph = m/s x 2.23694 (see crates/pt-core/src/units.rs).
@@ -19,12 +22,14 @@ config_version = 1
 # provisional result). Rule numbers match the spec's precedence table.
 # ---------------------------------------------------------------------------
 [rules]
-# Rule 3: driven distance strictly greater than this is held for review.
-manual_review_over_mi = 3000.0
+# Rule 3: loaded WORLD distance (physical 1:1, PLAN §6) strictly
+# greater than this is held for review.
+manual_review_over_world_km = 150.0
 # Rule 5: accepted distance = driven distance x this factor when penalized.
 speed_penalty_factor = 0.85
-# Rule 6: points per accepted mile. The job total is floored once, at the end.
-points_per_mile = 1.0
+# Rule 6: points per accepted WORLD mile (physical 1:1 distance = odometer /
+# local.scale, PLAN §6). The job total is floored once, at the end.
+points_per_world_mi = 1.0
 
 [rules.speed]
 # "Over X" means strictly over X for longer than this window (single-sample
@@ -44,9 +49,9 @@ penalty_over_mph = 100.0   # rule 5
 invalid_over_mph = 150.0   # rule 2
 
 [rules.distance]
-# Distances are compared after rounding to this precision (3000.0 mi is not
-# "over 3000"; 3000.1 mi is).
-compare_precision_mi = 0.001
+# Distances are compared after rounding to this precision (150.0 km is not
+# "over 150"; 150.1 km is). Distance thresholds are in km, so this is in km too.
+compare_precision_km = 0.001
 # Odometer comparisons use max(4 x ulp(odometer), this value), because the SDK
 # odometer channel is a 32-bit float in km (scssdk_telemetry_truck_common_channels.h:640-645).
 odometer_epsilon_km = 0.005
