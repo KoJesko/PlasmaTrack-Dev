@@ -105,7 +105,7 @@ Per-frame order (:82-89): configuration → paused/started → frame_start → g
 | `truck.fuel.amount` | float litres | :321-326 | fuel rules |
 | `truck.world.placement` | dplacement; world X east, Y up, Z south | :33-38; scssdk_value.h:86-87 | route, discontinuities |
 | `truck.local.velocity.linear` | fvector m/s | :41-46 | cross-check of speedometer speed (evidence only) |
-| `game.time` | u32 in-game minutes | common_channels.h:277-285 | rollback detection |
+| `game.time` | u32 in-game minutes | common_channels.h:277-285 | supporting signal in singleplayer only; ignored on TruckersMP (server-side time) |
 | `local.scale` | float | :265-275 | scaling of odometer vs. position |
 | `multiplayer.time.offset` | s32 minutes | :287-300 | multiplayer detection |
 | `job.cargo.damage` | float 0–1 | job_common_channels.h:241-246 | evidence |
@@ -152,6 +152,8 @@ Other events:
 - **Two teleports with no event and no config change**:
   - 1.76 km with 118 game minutes skipped;
   - 6.47 km with no game time skipped.
+
+  **TruckersMP runs its own server-side clock (you, 2026-09-28).** A sleep or a ferry sometimes skips game time and sometimes does not. So on TruckersMP, `game.time` is neither evidence of a load nor evidence against a transport, and a missing time skip is never suspicious.
   
   Both happened inside a pause, and the odometer was unchanged. What caused them is not yet identified (possibly call for help or quick travel). Under the old rule, a position jump (R) plus a pause bracket (C) would have been **misclassified as a load**. This is fixed in §5.
 - **Samples stop while paused.** Frames continue, and heartbeats keep coming.
@@ -213,12 +215,12 @@ This model incorporates the red-team findings. All thresholds are in `[timeline]
 - **World reload (W):** within one bracket, the `job` *and* `truck` configs are both re-sent **empty**, then re-sent (full or empty). All six captured loads showed W. Job accept, cargo loading, cancel and the ferry re-sent configs without emptying `truck`, so they never produce W.
 - **Hard rollback evidence (R)** is one of:
   - the odometer decreases beyond ε on the same truck;
-  - `game.time` decreases by at least 1 minute;
+  - `game.time` decreases by at least 1 minute (**singleplayer only**; on TruckersMP the clock is server-side, so this signal is ignored);
   - a position discontinuity not explained by a ferry or train event.
 - **Session change (S):** a new plugin session (game restart or crash), a data gap, or `timer_restart`.
 - **A load** is either:
   - **W** (in-session loads, backwards or forwards); or
-  - **S plus a discontinuity** (odometer, position, `game.time` or fuel) against the last kept state (loads across a restart, a crash or a client outage).
+  - **S plus a discontinuity** (odometer, position or fuel, plus `game.time` in singleplayer only) against the last kept state (loads across a restart, a crash or a client outage).
 - **A discontinuity without W or S is not a load.** It is a **teleport**, such as the two uncaptioned teleports in the capture.
   - A teleport adds no distance, because distance is measured on the odometer.
   - It reverts nothing and raises nothing.
@@ -250,7 +252,7 @@ The fingerprint has two parts:
 |---|---|
 | Job appears in continuous, gap-free data | Tracked start. Start odometer and fuel are taken at the first live sample. |
 | Job first seen mid-way (plugin snapshot, after a data gap, or loaded save of an unseen job) | **Late start.** Record the details reported so far and track from that point. Driven distance = `job.delivered` `distance.km`. Goes to review (`review_policy.late_start`). |
-| Load, same job, loaded point inside the kept timeline | Truncate to the matching point. Matching uses odometer, game time, position and fuel together. Everything after it, gaps included, is reverted. Recording continues. |
+| Load, same job, loaded point inside the kept timeline | Truncate to the matching point. Matching uses odometer, position and fuel together, plus game time in singleplayer only. Everything after it, gaps included, is reverted. Recording continues. |
 | Load, same job, loaded point matches **previously reverted** material | Restore that branch up to the loaded point and score it normally, overspeed included. This closes the "revert, then restore" exploit, where overspeed would otherwise be laundered into a gap. |
 | Load, same job, loaded point beyond anything seen | **Gap** from the last kept point to the loaded point. Resume. Goes to review (`review_policy.gap`). |
 | Load to a no-job save or a different job's save | Current job → **Suspended**: not cancelled, not sent to review, no penalty. The other job is resumed (if suspended), tracked (if new, as a late start), or stopped (if already delivered). |
