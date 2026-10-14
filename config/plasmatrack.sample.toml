@@ -158,6 +158,11 @@ teleport_min_distance_world_m = 500.0
 match_position_tolerance_world_m = 50.0
 match_fuel_tolerance_l = 1.0
 match_game_time_tolerance_min_game = 2
+# Jobs that finished (or were abandoned) longer ago than this leave the live
+# timeline when a new session starts; they are already stored. A save from such
+# a job loaded later starts a new late-start job (manual review). Bounds memory
+# on the server and in the client (PLAN §7a). Measured on frame wall-clock time.
+reopen_window_wall_h = 48.0
 
 # ---------------------------------------------------------------------------
 # Route map scale classes (PLAN §8). Each stretch of a route is coloured by the

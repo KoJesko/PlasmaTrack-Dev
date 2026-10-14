@@ -183,7 +183,7 @@ pub enum Notice {
     PenaltyActivated { job: u32, wall_ms: i64 },
 }
 
-#[derive(Default)]
+#[derive(Default, Serialize, Deserialize)]
 struct Bracket {
     /// New plugin session or a seq gap: the plugin re-sends empty configs at
     /// init, so W is not evidence here; only a discontinuity is.
@@ -202,13 +202,16 @@ struct Bracket {
 }
 
 /// Streaming overspeed state for the penalty notification.
-#[derive(Default)]
+#[derive(Default, Serialize, Deserialize)]
 struct OverspeedWatch {
     run: u32,
     since_us: Option<u64>,
     notified: bool,
 }
 
+/// The state is serialisable so the server can snapshot it between batches
+/// (PLAN §7a); a restored timeline continues exactly like the original.
+#[derive(Serialize, Deserialize)]
 pub struct Timeline {
     cfg: Config,
     profile: String,
@@ -231,6 +234,10 @@ pub struct Timeline {
     next_run: u32,
     watch: Vec<OverspeedWatch>,
     notices: Vec<Notice>,
+    /// Next job id. Ids stay unique when old jobs are evicted.
+    next_id: u32,
+    /// Jobs that left the live timeline (`reopen_window_wall_h`), not yet taken.
+    evicted: Vec<Job>,
 }
 
 impl Timeline {
@@ -255,6 +262,8 @@ impl Timeline {
             next_run: 0,
             watch: Vec::new(),
             notices: Vec::new(),
+            next_id: 0,
+            evicted: Vec::new(),
         }
     }
 
@@ -262,8 +271,45 @@ impl Timeline {
         &self.jobs
     }
 
+    /// Every job, evicted ones included, in creation order.
     pub fn into_jobs(self) -> Vec<Job> {
-        self.jobs
+        let mut jobs = self.evicted;
+        jobs.extend(self.jobs);
+        jobs.sort_by_key(|j| j.id);
+        jobs
+    }
+
+    /// Jobs evicted since the last call (PLAN §7a). They never change again.
+    pub fn take_evicted(&mut self) -> Vec<Job> {
+        std::mem::take(&mut self.evicted)
+    }
+
+    /// Drops jobs that ended more than `reopen_window_wall_h` before `now_wall`
+    /// (a frame's wall clock, so a full replay evicts exactly the same jobs).
+    /// Delivered, cancelled and stopped jobs end at their last event; a suspended
+    /// job counts as abandoned after the same time. The current job always stays.
+    fn evict_finished(&mut self, now_wall: i64) {
+        let window_ms = (self.cfg.timeline.reopen_window_wall_h * 3_600_000.0) as i64;
+        let mut k = self.jobs.len();
+        while k > 0 {
+            k -= 1;
+            let job = &self.jobs[k];
+            let ended = matches!(
+                job.state,
+                JobState::Delivered | JobState::Cancelled | JobState::Stopped | JobState::Suspended
+            );
+            let last = job.events.last().map(event_wall).unwrap_or(0);
+            if self.current == Some(k) || !ended || now_wall - last <= window_ms {
+                continue;
+            }
+            self.evicted.push(self.jobs.remove(k));
+            self.watch.remove(k);
+            if let Some(c) = self.current {
+                if c > k {
+                    self.current = Some(c - 1);
+                }
+            }
+        }
     }
 
     pub fn game(&self) -> Option<Game> {
@@ -306,6 +352,9 @@ impl Timeline {
             Body::Init { game, .. } => {
                 if game.is_some() {
                     self.game = *game;
+                }
+                if f.wall_ms > 0 {
+                    self.evict_finished(f.wall_ms);
                 }
                 self.bracket.session_change = true;
             }
@@ -481,7 +530,8 @@ impl Timeline {
     }
 
     fn start_job(&mut self, info: JobInfo, start: StartKind, wall: i64) -> usize {
-        let id = self.jobs.len() as u32;
+        let id = self.next_id;
+        self.next_id += 1;
         self.jobs.push(Job {
             id,
             game: info.fingerprint.route.game,
@@ -829,6 +879,7 @@ pub fn dist3(a: [f64; 3], b: [f64; 3]) -> f64 {
 
 /// Routes frames to one [`Timeline`] per profile (PLAN §6b: profiles are
 /// separate timelines). Frames before any profile notice go to "unknown".
+#[derive(Serialize, Deserialize)]
 pub struct Profiles {
     cfg: Config,
     active: String,
@@ -877,6 +928,30 @@ impl Profiles {
             }
         }
         self.timeline(&active).push(f);
+    }
+
+    /// Live jobs of every profile timeline (evicted ones excluded).
+    pub fn jobs(&self) -> impl Iterator<Item = &Job> {
+        self.timelines.iter().flat_map(|(_, t)| t.jobs())
+    }
+
+    /// Jobs evicted from any profile timeline since the last call.
+    pub fn take_evicted(&mut self) -> Vec<Job> {
+        self.timelines.iter_mut().flat_map(|(_, t)| t.take_evicted()).collect()
+    }
+
+    /// Notices of every profile timeline since the last call, each with its
+    /// profile (job ids are per profile timeline).
+    pub fn take_notices(&mut self) -> Vec<(String, Notice)> {
+        let mut out = Vec::new();
+        for (k, t) in self.timelines.iter_mut() {
+            out.extend(t.take_notices().into_iter().map(|n| (k.clone(), n)));
+        }
+        out
+    }
+
+    pub fn active_profile(&self) -> &str {
+        &self.active
     }
 
     pub fn into_jobs(self) -> Vec<Job> {

@@ -2,12 +2,13 @@
 //! them. Parsing is lenient: unknown kinds and channels are kept or ignored, never
 //! fatal, so newer plugins and undocumented game data do not break replay.
 
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::game::Game;
 
 /// One plugin message, in the order the plugin produced it.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Frame {
     pub sess: String,
     pub seq: u64,
@@ -17,7 +18,7 @@ pub struct Frame {
     pub body: Body,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Body {
     Init { game: Option<Game>, game_version: (u32, u32) },
     Config { id: String, attrs: Vec<Attr> },
@@ -41,7 +42,7 @@ pub enum Body {
 }
 
 /// A config or gameplay attribute: `{name, index, type, value}`.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Attr {
     pub name: String,
     pub index: Option<u32>,
@@ -49,7 +50,7 @@ pub struct Attr {
 }
 
 /// Channel values of one sample (SDK units). `None` = the game reported no value.
-#[derive(Debug, Clone, Default, PartialEq)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct Sample {
     pub speed_mps: Option<f64>,
     pub odometer_km: Option<f64>,

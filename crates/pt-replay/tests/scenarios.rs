@@ -841,3 +841,51 @@ fn the_in_game_pace_check_uses_the_truckersmp_clock() {
     assert!(r.review.iter().any(|x| matches!(x, ReviewReason::FastAverage { .. })), "{:?}", r.review);
     assert!(r.review.iter().any(|x| matches!(x, ReviewReason::FastAverageGame { .. })), "{:?}", r.review);
 }
+
+// ---- bounded memory (PLAN §7a) -------------------------------------------------
+
+/// Delivers a job, then the game restarts `hours_later` into a save taken
+/// during that job and drives on.
+fn restart_into_delivered_job(hours_later: f64) -> Sim {
+    let mut s = Sim::new("ats");
+    s.accept(JobSpec::new("tyres"));
+    s.drive_km(10.0);
+    let mid = s.save();
+    s.drive_km(10.0);
+    s.deliver(20.0);
+    s.wall_ms += (hours_later * 3_600_000.0) as i64;
+    s.restart(Some(&mid));
+    s.drive_km(10.0);
+    s
+}
+
+#[test]
+fn a_delivered_job_stays_reopenable_inside_the_window() {
+    let s = restart_into_delivered_job(47.0);
+    let jobs = s.replay();
+    assert_eq!(jobs.len(), 1);
+    assert_eq!(jobs[0].job.state, JobState::Stopped);
+}
+
+#[test]
+fn a_job_finished_before_the_window_is_evicted_and_a_late_load_is_reviewed() {
+    let s = restart_into_delivered_job(49.0);
+    let cfg = pt_replay::sample_config();
+    let (frames, _) = pt_replay::parse_lines(&s.lines, &cfg);
+    let mut profiles = pt_core::timeline::Profiles::new(cfg.clone());
+    let mut evicted = Vec::new();
+    for f in &frames {
+        profiles.push(f);
+        evicted.extend(profiles.take_evicted());
+    }
+    assert_eq!(evicted.len(), 1, "evicted when the new session starts");
+    assert_eq!(evicted[0].state, JobState::Delivered);
+    let live: Vec<_> = profiles.jobs().collect();
+    assert_eq!(live.len(), 1);
+    assert_eq!((live[0].state, live[0].start), (JobState::Tracking, StartKind::LateStart));
+    assert_ne!(live[0].id, evicted[0].id, "ids stay unique after eviction");
+    // A full replay sees the same two jobs.
+    let jobs = s.replay();
+    assert_eq!(jobs.len(), 2);
+    assert_eq!(jobs[0].result.outcome, Outcome::Valid, "{:?}", jobs[0].result.review);
+}

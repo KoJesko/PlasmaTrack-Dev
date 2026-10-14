@@ -168,3 +168,31 @@ fn ets2_convoy_with_a_quick_job() {
     assert!(r.job.events.iter().all(|e| !matches!(e, JobEvent::LoadTruncate { .. } | JobEvent::LoadGap { .. })), "hosting is not a load");
     assert_eq!(r.result.outcome, Outcome::Incomplete);
 }
+
+/// The server snapshots the timeline between batches (PLAN §7a): stopping
+/// anywhere, serialising and continuing must give exactly the same jobs.
+#[test]
+fn a_snapshot_mid_capture_replays_identically() {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/real/ets2-tmp-norway-tunnel-profiles.jsonl.gz");
+    let cfg = sample_config();
+    let (mut frames, _) = parse_lines(&read_lines(&path).expect("fixture"), &cfg);
+    order_sessions(&mut frames);
+    let straight = replay(&frames, &cfg, &Context::default());
+    for cut in [frames.len() / 3, frames.len() / 2, frames.len() * 9 / 10] {
+        let mut a = pt_core::timeline::Profiles::new(cfg.clone());
+        for f in &frames[..cut] {
+            a.push(f);
+        }
+        let json = serde_json::to_string(&a).expect("serialise");
+        let mut b: pt_core::timeline::Profiles = serde_json::from_str(&json).expect("deserialise");
+        for f in &frames[cut..] {
+            b.push(f);
+        }
+        let jobs = b.into_jobs();
+        assert_eq!(jobs.len(), straight.len());
+        for (j, s) in jobs.iter().zip(&straight) {
+            assert_eq!(j, &s.job, "cut at {cut}");
+            assert_eq!(pt_core::rules::evaluate(j, &cfg, &Context::default()), s.result);
+        }
+    }
+}

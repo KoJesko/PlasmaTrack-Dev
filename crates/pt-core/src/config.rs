@@ -186,6 +186,14 @@ pub struct Timeline {
     pub match_position_tolerance_world_m: f64,
     pub match_fuel_tolerance_l: f64,
     pub match_game_time_tolerance_min_game: u32,
+    /// Finished (or abandoned) jobs older than this, measured on frame wall-clock
+    /// time when a new session starts, leave the in-memory timeline (PLAN §7a).
+    #[serde(default = "default_reopen_window_wall_h")]
+    pub reopen_window_wall_h: f64,
+}
+
+fn default_reopen_window_wall_h() -> f64 {
+    48.0
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -359,6 +367,7 @@ impl Config {
             ("rules.distance.delivered_distance_resolution_km", r.distance.delivered_distance_resolution_km),
             ("plugin.sample_rate_hz", self.plugin.sample_rate_hz),
             ("sync.retry_interval_wall_s", self.sync.retry_interval_wall_s),
+            ("timeline.reopen_window_wall_h", self.timeline.reopen_window_wall_h),
         ] {
             positive(&mut errs, name, v);
         }
