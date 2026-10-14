@@ -406,6 +406,11 @@ The fingerprint has two parts:
 1. Negative kept-timeline distance → Discard.
 2. Sustained speed over `invalid_over_mph` → Invalid.
 3. Loaded world distance over 150 km → Pending review (was 3000 mi before scoring moved to 1:1).
+   - **Average pace** (you, 2026-10-14): the whole job averaging over **5 world km per minute** (300 km/h) → Pending review. It is checked on two clocks in tandem:
+     - real time: unpaused simulation time, so pausing cannot lower it (`fast_average`);
+     - the game's clock: in-game minutes turned back into real minutes at the game's time rate, which is the map scale (`local.scale`) in singleplayer and 6 on TruckersMP, where one in-game minute is 10 real seconds (`fast_average_game`).
+
+     Distance is odometer ÷ `local.scale`, so ferries, trains and teleports add nothing. Jobs under 1 real minute or 20 in-game minutes of driving are not averaged. The captured jobs peak at 1.52 km/min (91 km/h).
 4. Fuel used below −tolerance → **manual review** (points held). Also send every mid-run fuel jump outside a detected refuel to manual review, with its timestamp.
 5. Sustained speed over `penalty_over_mph` → accepted distance = 0.85 × driven.
 6. 1 point per accepted mile.

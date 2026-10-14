@@ -25,6 +25,21 @@ config_version = 1
 # Rule 3: loaded WORLD distance (physical 1:1, PLAN §6) strictly
 # greater than this is held for review.
 manual_review_over_world_km = 150.0
+# A whole job averaging more than this many 1:1 km per real minute is held for
+# review: 5 = 300 km/h (2026-10-14). Time is unpaused simulation time, so
+# pausing cannot lower the average; distance is odometer / local.scale, so
+# ferries, trains and teleports add nothing. Jobs with less driving than
+# average_pace_min_driving_s are not averaged.
+review_over_average_world_km_per_min = 5.0
+average_pace_min_driving_s = 60.0
+# In tandem: the same check timed by the game's own clock. In-game minutes are
+# turned back into real minutes at the game's time rate (local.scale in
+# singleplayer; on TruckersMP one in-game minute is 10 real seconds, you,
+# 2026-10-14), then 1:1 km per minute is compared (5 = 300 km/h). Sleeping,
+# ferries and cargo loading skip game time, which only lowers this average.
+review_over_average_world_km_per_game_clock_min = 5.0
+truckersmp_game_min_per_real_min = 6.0
+average_pace_min_game_min = 20.0
 # Rule 5: accepted distance = driven distance x this factor when penalized.
 speed_penalty_factor = 0.85
 # Rule 6: points per accepted WORLD mile (physical 1:1 distance = odometer /

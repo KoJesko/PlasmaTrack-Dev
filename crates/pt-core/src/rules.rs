@@ -71,6 +71,12 @@ pub enum DiscardReason {
 pub enum ReviewReason {
     /// Rule 3.
     LongJob { world_km: f64 },
+    /// The whole job averaged more than the threshold in 1:1 km per real
+    /// (unpaused) minute: a speed hack or a boosted truck.
+    FastAverage { world_km: f64, driving_min: f64, world_km_per_min: f64 },
+    /// The same timed by the game's clock (in-game minutes converted back to
+    /// real minutes at the game's time rate).
+    FastAverageGame { world_km: f64, game_clock_min: f64, world_km_per_min: f64 },
     /// Rule 4: fuel used below −tolerance in a tracked run.
     NegativeFuel { run: u32, used_l: f64 },
     /// Rule 4: fuel rose outside a detected refuel.
@@ -124,6 +130,14 @@ pub struct Distances {
     pub game_mi: f64,
     /// Counted game km per scale class (route map colouring and admin detail).
     pub game_km_by_scale: Vec<(ScaleClass, f64)>,
+    /// Whole job, driven only (no gaps): 1:1 km and unpaused simulation
+    /// seconds, for the average-pace check.
+    pub driven_whole_world_km: f64,
+    pub driven_s: f64,
+    /// Whole job, driven only: in-game minutes elapsed, and the same turned
+    /// back into real minutes at the game's time rate.
+    pub driven_game_min: f64,
+    pub driven_game_clock_min: f64,
     /// Negative kept-timeline odometer movement (rule 1).
     pub negative_km: f64,
 }
@@ -188,6 +202,15 @@ fn distances(job: &Job, cfg: &Config) -> Distances {
         if km < -eps {
             d.negative_km += -km;
             continue;
+        }
+        d.driven_whole_world_km += km.max(0.0) / b.local_scale;
+        d.driven_s += b.sim_us.saturating_sub(a.sim_us) as f64 / 1e6;
+        if let (Some(ta), Some(tb)) = (a.game_time_min, b.game_time_min) {
+            let game_min = tb.saturating_sub(ta) as f64;
+            // Singleplayer time runs at local.scale; TruckersMP at its server rate.
+            let rate = if b.truckersmp { cfg.rules.truckersmp_game_min_per_real_min } else { b.local_scale };
+            d.driven_game_min += game_min;
+            d.driven_game_clock_min += game_min / rate;
         }
         let counted = b.cargo_loaded && b.trailer_connected;
         if counted || wot {
@@ -414,6 +437,27 @@ pub fn evaluate(job: &Job, cfg: &Config, ctx: &Context) -> JobResult {
     }
     if exceeds(d.world_km, r.manual_review_over_world_km, r.distance.compare_precision_km) {
         review.push(ReviewReason::LongJob { world_km: d.world_km });
+    }
+    if d.driven_s >= r.average_pace_min_driving_s {
+        let minutes = d.driven_s / 60.0;
+        let pace = d.driven_whole_world_km / minutes;
+        if pace > r.review_over_average_world_km_per_min {
+            review.push(ReviewReason::FastAverage {
+                world_km: d.driven_whole_world_km,
+                driving_min: minutes,
+                world_km_per_min: pace,
+            });
+        }
+    }
+    if d.driven_game_min >= r.average_pace_min_game_min && d.driven_game_clock_min > 0.0 {
+        let pace = d.driven_whole_world_km / d.driven_game_clock_min;
+        if pace > r.review_over_average_world_km_per_game_clock_min {
+            review.push(ReviewReason::FastAverageGame {
+                world_km: d.driven_whole_world_km,
+                game_clock_min: d.driven_game_clock_min,
+                world_km_per_min: pace,
+            });
+        }
     }
 
     // Points: rules 5, 6, 7 (bonus on the cargo first tracked after a switch).

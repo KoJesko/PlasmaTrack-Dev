@@ -50,6 +50,8 @@ Oldest first, with `total`. Each item:
 | `code` | Meaning | `details` |
 |---|---|---|
 | `long_job` | Rule 3: loaded world distance over the threshold (150 km) | `world_km`, `threshold_world_km` |
+| `fast_average` | The whole job averaged over 5 1:1 km per real (unpaused) minute, i.e. 300 km/h | `world_km`, `driving_min`, `world_km_per_min` |
+| `fast_average_game` | The same, timed by the game's clock: in-game minutes turned back into real minutes at the map scale (singleplayer) or 6 per minute (TruckersMP) | `world_km`, `game_clock_min`, `world_km_per_min` |
 | `negative_fuel` | Rule 4: fuel used below −tolerance in a run | `run`, `used_l` |
 | `fuel_jump` | Rule 4: fuel rose outside a detected refuel | `at`, `litres` |
 | `gap` | Data missing mid-job (crash, client offline) | `count` |
@@ -319,6 +321,14 @@ The public profile (PUBLIC_API §2) plus `role`, `created_at`, the active token'
 **Showing the token:** the bot shows it only to the player, never in a moderator channel. It can
 put it in an ephemeral message the player opens with a button, or a DM. The moderator who issued
 it does not see it.
+
+**Collecting it later is fine.** The bot may make this call when the player clicks "Get your
+token", minutes or days after the moderator's command. It sends the issuing moderator as
+`X-PlasmaTrack-Actor` and their stored reason.
+- The audit entry records that moderator, the reason, and the time of the call. That time is the
+  moment the token came into existence.
+- If that moderator is no longer an admin by then, the call returns `403 forbidden`, and the
+  player has to ask again.
 
 ### `DELETE /api/v1/admin/players/{discord_id}/token`
 

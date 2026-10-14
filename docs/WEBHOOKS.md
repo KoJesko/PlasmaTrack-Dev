@@ -66,6 +66,7 @@ request with each listed secret, one `v1` per secret. After that:
 }
 ```
 
+- **Body size:** at most **256 KiB**. A 1000-recipient revocation batch is about 25 KB.
 - **Success** is any `2xx` within 10 s. The bot should answer once the event is queued.
 - **Retries:** on any other status, a timeout or a network error, the server retries after
   30 s, 2 min, 10 min, 30 min, 1 h, 2 h and 4 h, then every 8 h. An event older than **72 h**
@@ -121,7 +122,7 @@ The bot updates or closes the matching review-queue message.
 ### `job.discarded`
 
 ```json
-{"job_id": "4QH8-2KDM", "game": "ats", "job_version": 1,
+{"job_id": "4QH82KDM", "game": "ats", "job_version": 1,
  "player": {"user_id": "usr_8f3k2m", "discord_user_id": "123456789012345678", "display_name": "KoJesko"},
  "reasons": ["integrity"]}
 ```

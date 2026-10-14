@@ -34,6 +34,20 @@ pub struct Config {
 #[serde(deny_unknown_fields)]
 pub struct Rules {
     pub manual_review_over_world_km: f64,
+    /// A whole job averaging more than this many 1:1 km per real (unpaused)
+    /// minute is held for review (5 = 300 km/h; you, 2026-10-14).
+    pub review_over_average_world_km_per_min: f64,
+    /// Jobs with less driving time than this are not averaged (too noisy).
+    pub average_pace_min_driving_s: f64,
+    /// The same check timed by the game's own clock: 1:1 km per minute, where
+    /// in-game minutes are turned back into real minutes at the game's time rate
+    /// (`local.scale` in singleplayer, `truckersmp_game_min_per_real_min` on
+    /// TruckersMP). 5 = 300 km/h. Used in tandem with the above.
+    pub review_over_average_world_km_per_game_clock_min: f64,
+    /// TruckersMP's server clock: one in-game minute every 10 real seconds.
+    pub truckersmp_game_min_per_real_min: f64,
+    /// Jobs with fewer in-game minutes of driving than this are not averaged.
+    pub average_pace_min_game_min: f64,
     pub speed_penalty_factor: f64,
     pub points_per_world_mi: f64,
     pub points_decimals: u32,
@@ -328,6 +342,11 @@ impl Config {
         let r = &self.rules;
         for (name, v) in [
             ("rules.manual_review_over_world_km", r.manual_review_over_world_km),
+            ("rules.review_over_average_world_km_per_min", r.review_over_average_world_km_per_min),
+            ("rules.average_pace_min_driving_s", r.average_pace_min_driving_s),
+            ("rules.review_over_average_world_km_per_game_clock_min", r.review_over_average_world_km_per_game_clock_min),
+            ("rules.truckersmp_game_min_per_real_min", r.truckersmp_game_min_per_real_min),
+            ("rules.average_pace_min_game_min", r.average_pace_min_game_min),
             ("rules.points_per_world_mi", r.points_per_world_mi),
             ("rules.speed.sustained_window_s", r.speed.sustained_window_s),
             ("rules.speed.compare_precision_mph", r.speed.compare_precision_mph),

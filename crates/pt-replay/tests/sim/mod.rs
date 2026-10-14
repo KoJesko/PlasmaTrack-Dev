@@ -75,6 +75,9 @@ pub struct Sim {
     pub truck: String,
     pub connected: bool,
     pub mp_offset: i64,
+    /// In-game minutes per real minute; `None` = `scale` (singleplayer). A
+    /// TruckersMP server runs at 6 (one in-game minute every 10 s).
+    pub time_rate: Option<f64>,
     pub job: Option<JobSpec>,
     pub lines: Vec<String>,
     paused: bool,
@@ -103,6 +106,7 @@ impl Sim {
             truck: "vehicle.volvo.vnl2025".into(),
             connected: true,
             mp_offset: 0,
+            time_rate: None,
             job,
             lines: Vec::new(),
             paused: true,
@@ -223,7 +227,7 @@ impl Sim {
             self.pos[0] += world_m;
             self.odo += world_m * self.scale / 1000.0;
             self.fuel -= world_m * 0.0004;
-            self.gt += 0.05 * self.scale / 60.0;
+            self.gt += 0.05 * self.time_rate.unwrap_or(self.scale) / 60.0;
             self.sample(v);
         }
     }

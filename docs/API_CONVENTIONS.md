@@ -113,6 +113,8 @@ returns `429`.
   ```
   - `next_cursor` is `null` on the last page.
   - `total` is present where it is cheap to compute (each list says so); otherwise it is absent.
+- `next_cursor` is at most **64 printable ASCII characters** (base64url), so it fits in a
+  Discord button `custom_id`.
 - Cursors are valid for 24 hours. An expired cursor returns `400 bad_request`
   (`details.cursor = "expired"`).
 
@@ -132,9 +134,9 @@ returns `429`.
 - **Game:** `"ets2"` or `"ats"` on every job, leaderboard, bonus and stats object. No endpoint
   mixes the two games.
 - **IDs:**
-  - **Jobs:** `job_id` is 8 Crockford base32 characters, shown as `7K2M-9QXA`. Players can type
-    it. It is case-insensitive, and the hyphen is optional on input; `I`, `L` and `O` are read as
-    `1`, `1` and `0`.
+  - **Jobs:** `job_id` is 8 Crockford base32 characters. **In JSON it is always uppercase
+    without a hyphen** (`7K2M9QXA`); show it as `7K2M-9QXA`. On input it is case-insensitive,
+    the hyphen is optional, and `I`, `L` and `O` are read as `1`, `1` and `0`.
   - **Others:** opaque strings with a type prefix (`usr_…`, `bon_…`, `cfg_…`, `rel_…`, `rev_…`,
     `op_…`, `evt_…`, `tok_…`).
   - **Discord IDs** are decimal strings.
@@ -169,3 +171,7 @@ change.** Each change will be announced.
 ## Changes
 
 - 2026-10-14: first draft.
+- 2026-10-14: job IDs in JSON are uppercase without a hyphen; `next_cursor` is at most 64
+  characters; webhook bodies are at most 256 KiB; moderator-issued tokens may be collected
+  later (ADMIN_API §10); new review reasons `fast_average` and `fast_average_game`
+  (ADMIN_API §2).

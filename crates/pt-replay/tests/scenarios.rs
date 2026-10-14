@@ -773,3 +773,71 @@ fn a_save_with_a_job_loaded_after_a_jobless_one_is_still_a_late_start() {
     let (job, _) = s.job("bricks");
     assert_eq!(job.start, StartKind::LateStart);
 }
+
+#[test]
+fn a_whole_job_averaging_over_5_km_per_minute_goes_to_review() {
+    // 200 mph = 5.36 1:1 km per real minute, and the same per in-game minute
+    // in game km: both pace checks fire (2026-10-14).
+    let mut s = Sim::new("ats");
+    s.accept(JobSpec::new("tyres"));
+    s.drive_secs(180.0, 200.0);
+    s.deliver(64.0);
+    let (_, r) = s.job("tyres");
+    assert!(r.review.iter().any(|x| matches!(x, ReviewReason::FastAverage { world_km_per_min, .. } if *world_km_per_min > 5.0)), "{:?}", r.review);
+    assert!(r.review.iter().any(|x| matches!(x, ReviewReason::FastAverageGame { world_km_per_min, .. } if *world_km_per_min > 5.0)), "{:?}", r.review);
+}
+
+#[test]
+fn normal_driving_and_pauses_do_not_trip_the_pace_checks() {
+    let mut s = Sim::new("ats");
+    s.accept(JobSpec::new("tyres"));
+    s.drive_secs(300.0, 60.0);
+    s.pause();
+    s.idle(0.0);
+    s.drive_secs(300.0, 60.0);
+    s.deliver(40.0);
+    let (_, r) = s.job("tyres");
+    assert!(
+        !r.review.iter().any(|x| matches!(x, ReviewReason::FastAverage { .. } | ReviewReason::FastAverageGame { .. })),
+        "{:?}",
+        r.review
+    );
+}
+
+#[test]
+fn a_short_burst_is_not_averaged() {
+    // Under a minute of driving: too short to average.
+    let mut s = Sim::new("ats");
+    s.accept(JobSpec::new("tyres"));
+    s.drive_secs(30.0, 200.0);
+    s.deliver(18.0);
+    let (_, r) = s.job("tyres");
+    assert!(!r.review.iter().any(|x| matches!(x, ReviewReason::FastAverage { .. } | ReviewReason::FastAverageGame { .. })));
+}
+
+#[test]
+fn the_in_game_pace_check_uses_the_truckersmp_clock() {
+    // On TruckersMP one in-game minute is 10 real seconds (6 per real minute),
+    // not the map scale. 75 mph at road scale 20 would read 6.7 "km per minute"
+    // if TruckersMP game minutes were treated like singleplayer ones.
+    let mut s = Sim::new("ats");
+    s.truckersmp_sdk(true);
+    s.time_rate = Some(6.0);
+    s.accept(JobSpec::new("tyres"));
+    s.drive_secs(1800.0, 75.0);
+    s.deliver(1207.0);
+    let (_, r) = s.job("tyres");
+    assert!(r.truckersmp);
+    assert!(!r.review.iter().any(|x| matches!(x, ReviewReason::FastAverage { .. } | ReviewReason::FastAverageGame { .. })), "{:?}", r.review);
+
+    // A TruckersMP speed hack still trips both.
+    let mut s = Sim::new("ats");
+    s.truckersmp_sdk(true);
+    s.time_rate = Some(6.0);
+    s.accept(JobSpec::new("tyres"));
+    s.drive_secs(240.0, 200.0); // 24 in-game minutes at the TruckersMP rate
+    s.deliver(429.0);
+    let (_, r) = s.job("tyres");
+    assert!(r.review.iter().any(|x| matches!(x, ReviewReason::FastAverage { .. })), "{:?}", r.review);
+    assert!(r.review.iter().any(|x| matches!(x, ReviewReason::FastAverageGame { .. })), "{:?}", r.review);
+}
