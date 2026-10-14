@@ -41,7 +41,7 @@ apply.
 | C6 | Load into a delivered job | Deliver a job, then load a save from the middle of that job. | — | — |
 | C7 | Delivery | Deliver normally, and note when the results screen appears and closes. | ✅ Chicago → Chicago (3.6 points), Chicago → Sioux Falls (36.1 points) | — |
 | C8 | Cancel | Cancel a job from the job info screen. | ✅ empty `job`, then `job.cancelled` | — |
-| C9 | Ferry and train | Take one ferry and one train (or Channel Tunnel) crossing. | ✅ ferry (event, no odometer change); no trains in ATS | — train still needed |
+| C9 | Ferry and train | Take one ferry and one train (or Channel Tunnel) crossing. | ✅ ferry (event, no odometer change); vanilla ATS has no trains, but mods can add them (you, 2026-10-13) and they are handled like any train: a teleport that adds no distance | — train still needed |
 | C10 | Refuel | Refuel at a station: once partially, once full. | ✅ 0.3 s steps, about 54 L/s | — |
 | C11 | Quick job accept | Take a quick job (company truck, teleport). | ◐ quick-job config seen after a profile switch; accepting one not recorded | — |
 | C12 | Truck purchase / switch | Buy or switch trucks. | n/a: truck buying is separate from job logging (you, 2026-10-13) | n/a |
