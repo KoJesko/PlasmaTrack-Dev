@@ -1,0 +1,111 @@
+{
+  "config": {
+    "config_version": 1,
+    "map": {
+      "scale": {
+        "ats": {
+          "city_local_scale": 3.0,
+          "road_local_scales": [
+            20.0
+          ]
+        },
+        "ets2": {
+          "city_local_scale": 3.0,
+          "road_local_scales": [
+            19.0,
+            15.0
+          ]
+        }
+      }
+    },
+    "multiplayer": {
+      "truckersmp_module_names": [
+        "core_atsmp.dll",
+        "core_ets2mp.dll"
+      ]
+    },
+    "notifications": {
+      "delay_max_wall_s": 30.0,
+      "delay_min_wall_s": 5.0,
+      "enabled": true
+    },
+    "plugin": {
+      "replay_buffer_wall_s": 120.0,
+      "sample_rate_hz": 20.0
+    },
+    "review_flags": {
+      "impossible_delivery_time": false,
+      "odometer_jump": false,
+      "params": {
+        "max_plausible_avg_speed_mph": 150.0,
+        "min_plausible_avg_speed_mph": 0.0,
+        "odometer_jump_min_km": 1.0
+      }
+    },
+    "review_policy": {
+      "gap": "review",
+      "late_start": "review",
+      "min_gap_distance_mi": 0.1,
+      "min_gap_duration_s": 5.0,
+      "trace_checks": "review"
+    },
+    "rules": {
+      "average_pace_min_driving_s": 60.0,
+      "average_pace_min_game_min": 20.0,
+      "distance": {
+        "compare_precision_km": 0.001,
+        "delivered_distance_resolution_km": 1.0,
+        "delivered_vs_trace_short_job_max_pct": 5.0,
+        "delivered_vs_trace_short_job_under_mi": 100.0,
+        "delivered_vs_trace_tolerance_min_mi": 30.0,
+        "delivered_vs_trace_tolerance_pct": 1.0,
+        "odometer_epsilon_km": 0.005
+      },
+      "fuel": {
+        "mid_job_jump_tolerance_l": 0.5,
+        "negative_fuel_tolerance_l": 0.5
+      },
+      "manual_review_over_world_km": 150.0,
+      "points_decimals": 1,
+      "points_per_world_mi": 1.0,
+      "refuel": {
+        "max_rate_l_per_s": 200.0,
+        "min_duration_s": 1.0,
+        "min_rate_l_per_s": 0.5,
+        "stationary_below_mph": 1.0
+      },
+      "review_over_average_world_km_per_game_clock_min": 5.0,
+      "review_over_average_world_km_per_min": 5.0,
+      "speed": {
+        "ats": {
+          "invalid_over_mph": 125.0,
+          "penalty_over_mph": 105.0
+        },
+        "compare_precision_mph": 0.001,
+        "ets2": {
+          "invalid_over_mph": 150.0,
+          "penalty_over_mph": 100.0
+        },
+        "sustained_window_s": 3.0
+      },
+      "speed_penalty_factor": 0.85,
+      "truckersmp_game_min_per_real_min": 6.0
+    },
+    "sync": {
+      "retry_interval_wall_s": 20.0
+    },
+    "timeline": {
+      "bracket_min_live_frames_after_started_frames": 30,
+      "bracket_wall_cap_wall_s": 600.0,
+      "ferry_train_explain_window_wall_s": 10.0,
+      "game_time_decrease_min_game": 1,
+      "gameplay_event_explain_window_wall_s": 2.0,
+      "match_fuel_tolerance_l": 1.0,
+      "match_game_time_tolerance_min_game": 2,
+      "match_position_tolerance_world_m": 50.0,
+      "reopen_window_wall_h": 48.0,
+      "teleport_min_distance_world_m": 500.0
+    }
+  },
+  "hash": "37b16360fb88293742498e06351590d31df333882ff0cfd72e5852a71e689872"
+}

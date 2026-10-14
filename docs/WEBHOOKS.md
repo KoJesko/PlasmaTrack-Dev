@@ -7,13 +7,12 @@ The server POSTs signed JSON events to one URL that the bot owns.
 
 ## 1. Registration (§5.38)
 
-There is no API for this. Both values live in the **server's** own configuration (not the
-players' `plasmatrack.toml`):
+There is no API for this. Both values are **Worker secrets** of the server (docs/SERVER.md),
+one set per deployment (production and test):
 
-```toml
-[webhooks]
-url = "https://plasmatrack-bot.<account>.workers.dev/webhooks/plasmatrack"
-secrets = ["<current secret>"]   # two entries during rotation, see §2
+```sh
+wrangler secret put WEBHOOK_URL       # https://plasmatrack-bot.<account>.workers.dev/webhooks/plasmatrack
+wrangler secret put WEBHOOK_SECRETS   # the current secret; "new,old" during rotation (§2)
 ```
 
 - **One URL receives every event type.**
@@ -49,10 +48,10 @@ const mac = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(`${t}
 const hex = [...new Uint8Array(mac)].map(b => b.toString(16).padStart(2, "0")).join("");
 ```
 
-**Rotation:** add the new secret to the server's `secrets` list. The server then signs every
+**Rotation:** set `WEBHOOK_SECRETS` to `new,old`. The server then signs every
 request with each listed secret, one `v1` per secret. After that:
-1. Switch the Worker to the new secret.
-2. Remove the old secret from the server's list.
+1. Switch the bot to the new secret.
+2. Set `WEBHOOK_SECRETS` to the new secret alone.
 
 ## 3. Envelope and delivery (§5.36, §5.37)
 

@@ -41,7 +41,8 @@ user ID>` (a decimal snowflake string).
   second layer, not the authority.
 - The actor's Discord ID is written into the audit log with every write.
 - **Admins** are added in two ways:
-  - **Bootstrap:** on the server host, `plasmatrack-server admin add <discord_id>`.
+  - **Bootstrap:** the Discord IDs in the Worker variable `BOOTSTRAP_ADMINS` are admins from
+    their first call (docs/SERVER.md).
   - **Later:** `POST /api/v1/admin/admins` by an existing admin (ADMIN_API §12).
 
 **Player self-service** (`/api/v1/players/{discord_id}/...`, bot token): the bot vouches that the
@@ -99,7 +100,7 @@ Every non-2xx response has this body:
 | 500 / 503 | `internal` / `unavailable` | retry with backoff; `Retry-After` on 503 |
 
 **Rate limits:** 600 requests per minute per token, and 60 writes per minute per actor. Over that
-returns `429`.
+returns `429`. *Not enforced yet in the first deployment*; the bot should still handle `429`.
 
 **Latency:** every call answers within 10 s. Anything slower is an asynchronous operation
 (ADMIN_API §7).
@@ -179,3 +180,10 @@ These answer the bot's open questions "(Q)". **The project owner confirmed all o
   Workers (PLAN decision 15); the contract is unchanged by that.
 - 2026-10-14: `distance_by_scale_class` (PUBLIC_API §3) carries `world_mi` and `game_mi` per
   class as well (requested by the bot).
+- 2026-10-15: the server is built (stage 4). Deployment details:
+  - admins are bootstrapped with the Worker variable `BOOTSTRAP_ADMINS` (§2);
+  - webhook URL and secrets are Worker secrets (WEBHOOKS §1);
+  - trace downloads are streamed from storage by the Worker (ADMIN_API §6);
+  - the two route endpoints answer `501 not_implemented` until stage 5 (map projection);
+  - rate limits (§4) are not enforced yet;
+  - a second, separate **test** deployment runs the same code with its own data and tokens.

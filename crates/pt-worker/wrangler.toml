@@ -1,0 +1,114 @@
+# PlasmaTrack server on Cloudflare Workers (PLAN §7a, docs/SERVER.md).
+#
+#   production: wrangler deploy
+#   test:       wrangler deploy --env test   (its own D1, R2, queues and
+#               Durable Objects; it never sees production data)
+#
+# Secrets (per environment, `wrangler secret put NAME [--env test]`):
+#   READ_TOKEN, BOT_TOKEN      the bot's service tokens (API_CONVENTIONS §2)
+#   WEBHOOK_URL                where webhooks go (the bot's /webhooks/plasmatrack)
+#   WEBHOOK_SECRETS            HMAC secret(s), comma-separated during rotation
+#   DOWNLOAD_SECRET            signs trace download links
+# Variables below: BOOTSTRAP_ADMINS (comma-separated Discord IDs).
+# The database_id values are filled in by `wrangler d1 create` (docs/SERVER.md).
+
+name = "plasmatrack-server"
+main = "build/worker/shim.mjs"
+compatibility_date = "2026-10-01"
+workers_dev = true
+
+[build]
+command = "worker-build --release"
+
+[limits]
+cpu_ms = 300000
+
+[vars]
+BOOTSTRAP_ADMINS = ""
+
+[[d1_databases]]
+binding = "DB"
+database_name = "plasmatrack"
+database_id = "REPLACE_WITH_PRODUCTION_D1_ID"
+migrations_dir = "../pt-server/migrations"
+
+[[r2_buckets]]
+binding = "RAW"
+bucket_name = "plasmatrack-raw"
+
+[[queues.producers]]
+binding = "WEBHOOKS"
+queue = "plasmatrack-webhooks"
+
+[[queues.producers]]
+binding = "OPS"
+queue = "plasmatrack-ops"
+
+[[queues.consumers]]
+queue = "plasmatrack-webhooks"
+max_batch_size = 10
+max_retries = 100
+
+[[queues.consumers]]
+queue = "plasmatrack-ops"
+max_batch_size = 1
+max_retries = 10
+
+[[durable_objects.bindings]]
+name = "SCORER"
+class_name = "ScorerObject"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["ScorerObject"]
+
+[triggers]
+crons = ["*/5 * * * *"]
+
+# ---------------------------------------------------------------------------
+# Test instance: the same code with its own everything.
+# ---------------------------------------------------------------------------
+[env.test]
+name = "plasmatrack-server-test"
+workers_dev = true
+
+[env.test.limits]
+cpu_ms = 300000
+
+[env.test.vars]
+BOOTSTRAP_ADMINS = ""
+
+[[env.test.d1_databases]]
+binding = "DB"
+database_name = "plasmatrack-test"
+database_id = "REPLACE_WITH_TEST_D1_ID"
+migrations_dir = "../pt-server/migrations"
+
+[[env.test.r2_buckets]]
+binding = "RAW"
+bucket_name = "plasmatrack-raw-test"
+
+[[env.test.queues.producers]]
+binding = "WEBHOOKS"
+queue = "plasmatrack-webhooks-test"
+
+[[env.test.queues.producers]]
+binding = "OPS"
+queue = "plasmatrack-ops-test"
+
+[[env.test.queues.consumers]]
+queue = "plasmatrack-webhooks-test"
+max_batch_size = 10
+max_retries = 100
+
+[[env.test.queues.consumers]]
+queue = "plasmatrack-ops-test"
+max_batch_size = 1
+max_retries = 10
+
+[[env.test.durable_objects.bindings]]
+name = "SCORER"
+class_name = "ScorerObject"
+
+[env.test.triggers]
+crons = ["*/5 * * * *"]

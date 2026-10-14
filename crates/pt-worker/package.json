@@ -1,0 +1,14 @@
+{
+  "name": "plasmatrack-server-deploy",
+  "private": true,
+  "description": "Wrangler for building, testing and deploying the PlasmaTrack server (docs/SERVER.md).",
+  "license": "UNLICENSED",
+  "scripts": {
+    "dev": "wrangler dev --local",
+    "deploy": "wrangler deploy",
+    "deploy:test": "wrangler deploy --env test"
+  },
+  "devDependencies": {
+    "wrangler": "4.145.0"
+  }
+}

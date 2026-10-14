@@ -1,6 +1,8 @@
 [workspace]
 resolver = "2"
-members = ["crates/pt-core", "crates/pt-client", "crates/pt-replay", "crates/pt-server"]
+members = ["crates/pt-core", "crates/pt-client", "crates/pt-replay", "crates/pt-server", "crates/pt-worker"]
+# pt-worker only builds for wasm32 (worker-build); `cargo test` skips it.
+default-members = ["crates/pt-core", "crates/pt-client", "crates/pt-replay", "crates/pt-server"]
 
 [workspace.package]
 edition = "2021"

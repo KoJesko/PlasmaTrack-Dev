@@ -23,3 +23,9 @@ Thumbs.db
 /installer/node_modules/
 /installer/dist/
 /installer/payload/
+
+# Server (Cloudflare Worker)
+/crates/pt-worker/node_modules/
+/crates/pt-worker/build/
+/crates/pt-worker/.wrangler/
+/crates/pt-worker/.dev.vars*

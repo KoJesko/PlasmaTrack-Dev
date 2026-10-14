@@ -1,0 +1,19 @@
+[package]
+name = "pt-worker"
+version = "0.1.0"
+description = "PlasmaTrack server on Cloudflare Workers: binds pt-server to D1, R2, Queues, a Durable Object and a Cron Trigger."
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+license.workspace = true
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+pt-core = { path = "../pt-core" }
+pt-server = { path = "../pt-server" }
+serde_json.workspace = true
+worker = { version = "0.8.7", features = ["d1", "queue"] }
+getrandom = { version = "0.4", features = ["wasm_js"] }
+futures-util = { version = "0.3", default-features = false }

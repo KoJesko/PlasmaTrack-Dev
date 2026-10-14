@@ -188,7 +188,7 @@ The same schema as PUBLIC_API §4, with these differences:
 
 ### `GET /api/v1/admin/jobs/{job_id}/trace`
 
-Returns a time-limited signed URL. The file itself never passes through the Worker.
+Returns a time-limited signed URL. The Worker streams the file from storage.
 
 ```json
 {"url": "https://pt.example.org/dl/trace/7K2M9QXA?exp=1792000000&sig=…",
