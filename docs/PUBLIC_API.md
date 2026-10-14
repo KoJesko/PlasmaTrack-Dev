@@ -169,11 +169,11 @@ The job summary plus:
   "speed_penalty_applied": false,
   "bonus": {"bonus_id": "bon_2kd8", "label": "Medical week", "kind": "multiplier", "amount": 1.5},
   "distance_by_scale_class": {
-    "city": {"world_km": 2.81, "game_km": 8.43},
-    "road": {"world_km": 8.57, "game_km": 117.27},
-    "one_to_one": {"world_km": 0.0, "game_km": 0.0},
-    "nonstandard": {"world_km": 0.0, "game_km": 0.0},
-    "unknown": {"world_km": 0.0, "game_km": 0.0}
+    "city": {"world_km": 2.81, "world_mi": 1.75, "game_km": 8.43, "game_mi": 5.24},
+    "road": {"world_km": 8.57, "world_mi": 5.33, "game_km": 117.27, "game_mi": 72.87},
+    "one_to_one": {"world_km": 0.0, "world_mi": 0.0, "game_km": 0.0, "game_mi": 0.0},
+    "nonstandard": {"world_km": 0.0, "world_mi": 0.0, "game_km": 0.0, "game_mi": 0.0},
+    "unknown": {"world_km": 0.0, "world_mi": 0.0, "game_km": 0.0, "game_mi": 0.0}
   },
   "public_notes": [
     {"code": "speed_penalty", "text": "Speed penalty applied: 0.85× distance."}
@@ -183,7 +183,8 @@ The job summary plus:
 
 - **`bonus`** is `null` when no bonus applied. `kind` is `flat` (points added) or `multiplier`.
   Only the greatest matching bonus ever applies.
-- **`distance_by_scale_class`** covers the driven, counted part. It always has all five classes.
+- **`distance_by_scale_class`** covers the driven, counted part. It always has all five classes. Each class
+  carries both units.
   - **ETS2 `road`** includes UK roads (scale 15) as well as 19.
   - **ATS `road`** is scale 20.
   - **`city`** is scale 3 in both games.

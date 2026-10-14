@@ -177,3 +177,5 @@ These answer the bot's open questions "(Q)". **The project owner confirmed all o
   (ADMIN_API §2).
 - 2026-10-14: the project owner confirmed every decision in §8. The server runs on Cloudflare
   Workers (PLAN decision 15); the contract is unchanged by that.
+- 2026-10-14: `distance_by_scale_class` (PUBLIC_API §3) carries `world_mi` and `game_mi` per
+  class as well (requested by the bot).

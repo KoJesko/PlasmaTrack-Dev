@@ -49,6 +49,17 @@ pub struct JobInfo {
     pub cargo_mass_kg: Option<f64>,
     /// `cargo.loaded`: false while driving to the pickup with an owned trailer.
     pub cargo_loaded: bool,
+    /// Display names (configs.h:532-586): shown, never part of the identity.
+    #[serde(default)]
+    pub names: JobNames,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct JobNames {
+    pub source_city: String,
+    pub source_company: String,
+    pub destination_city: String,
+    pub destination_company: String,
 }
 
 /// `job.market` values (configs.h:627-641).
@@ -89,6 +100,12 @@ impl JobInfo {
             cargo_mass_kg: mass,
             // Older game versions lack the attribute; then the cargo is loaded.
             cargo_loaded: attr(attrs, "cargo.loaded").and_then(Value::as_bool).unwrap_or(true),
+            names: JobNames {
+                source_city: s("source.city"),
+                source_company: s("source.company"),
+                destination_city: s("destination.city"),
+                destination_company: s("destination.company"),
+            },
         })
     }
 
