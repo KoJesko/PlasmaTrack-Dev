@@ -954,6 +954,22 @@ impl Profiles {
         &self.active
     }
 
+    /// The plugin sessions a job's points (kept and reverted) came from, in
+    /// first-seen order.
+    pub fn sessions_of(&self, job: &Job) -> Vec<String> {
+        let Some((_, t)) = self.timelines.iter().find(|(k, _)| *k == job.profile) else { return Vec::new() };
+        let mut idx: Vec<u32> = job.kept.iter().chain(job.reverted.iter().flat_map(|b| b.points.iter())).map(|p| p.sess).collect();
+        idx.sort_unstable();
+        idx.dedup();
+        idx.into_iter().filter_map(|i| t.sess_ids.get(i as usize).cloned()).collect()
+    }
+
+    /// The session id behind a point's `sess` index in a profile's timeline.
+    pub fn session_id(&self, profile: &str, idx: u32) -> Option<&str> {
+        let (_, t) = self.timelines.iter().find(|(k, _)| k == profile)?;
+        t.sess_ids.get(idx as usize).map(String::as_str)
+    }
+
     pub fn into_jobs(self) -> Vec<Job> {
         let mut jobs: Vec<Job> = self.timelines.into_iter().flat_map(|(_, t)| t.into_jobs()).collect();
         jobs.sort_by_key(|j| j.events.first().map(event_wall).unwrap_or(0));

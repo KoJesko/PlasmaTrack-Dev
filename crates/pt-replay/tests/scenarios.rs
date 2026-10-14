@@ -230,6 +230,8 @@ fn the_greatest_bonus_applies_and_stacks_with_the_penalty() {
     s.deliver(whole.round());
     let (job, _) = s.job("dynamite");
     let bonus = |kind, amount, m: &str| Bonus {
+        id: String::new(),
+        exact: false,
         game: Game::Ats,
         cargo_match: m.into(),
         kind,
@@ -702,6 +704,8 @@ fn a_cargo_switch_goes_to_review_and_keeps_the_original_bonus_basis() {
     assert!(r.review.iter().any(|x| matches!(x, ReviewReason::CargoSwitch)));
     let ctx = Context {
         bonuses: vec![Bonus {
+            id: String::new(),
+            exact: false,
             game: Game::Ats,
             cargo_match: "gold".into(),
             kind: BonusKind::Multiplier,

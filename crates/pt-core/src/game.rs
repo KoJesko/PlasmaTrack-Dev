@@ -23,6 +23,22 @@ impl Game {
         }
     }
 
+    /// The API name (`"ets2"` / `"ats"`), the same as the serde form.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Game::Ets2 => "ets2",
+            Game::Ats => "ats",
+        }
+    }
+
+    pub fn from_api(s: &str) -> Option<Game> {
+        match s {
+            "ets2" => Some(Game::Ets2),
+            "ats" => Some(Game::Ats),
+            _ => None,
+        }
+    }
+
     pub fn sdk_game_id(self) -> &'static str {
         match self {
             Game::Ets2 => "eut2",

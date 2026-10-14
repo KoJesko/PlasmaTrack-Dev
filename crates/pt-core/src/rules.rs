@@ -17,11 +17,19 @@ use crate::units::{exceeds, km_to_mi};
 /// A bonus-cargo entry (server-side table, PLAN §7 `bonus_cargo`).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Bonus {
+    /// Server id (`bon_…`); empty in tests.
+    #[serde(default)]
+    pub id: String,
     pub game: crate::game::Game,
-    /// Exact cargo id, or a glob with `*`.
+    /// Matched against `cargo.id`, ignoring case: equal when `exact`, else a glob
+    /// where `*` is any run of characters and `?` one character.
     pub cargo_match: String,
+    #[serde(default)]
+    pub exact: bool,
     pub kind: BonusKind,
     pub amount: f64,
+    /// Half-open window `[active_from_ms, active_to_ms)` on the server's
+    /// delivery time.
     pub active_from_ms: Option<i64>,
     pub active_to_ms: Option<i64>,
 }
@@ -181,9 +189,12 @@ pub struct JobResult {
 
 fn glob(pat: &str, s: &str) -> bool {
     match pat.split_once('*') {
-        None => pat == s,
+        None => pat.len() == s.len() && pat.chars().zip(s.chars()).all(|(p, c)| p == '?' || p == c),
         Some((pre, rest)) => {
-            let Some(tail) = s.strip_prefix(pre) else { return false };
+            if s.len() < pre.len() || !s.is_char_boundary(pre.len()) || !glob(pre, &s[..pre.len()]) {
+                return false;
+            }
+            let tail = &s[pre.len()..];
             (0..=tail.len()).any(|i| tail.is_char_boundary(i) && glob(rest, &tail[i..]))
         }
     }
@@ -361,9 +372,16 @@ fn pick_bonus(info: &JobInfo, base: f64, ctx: &Context) -> Option<(Bonus, f64)> 
     let game = info.fingerprint.route.game;
     ctx.bonuses
         .iter()
-        .filter(|b| b.game == game && glob(&b.cargo_match, cargo))
+        .filter(|b| {
+            b.game == game
+                && if b.exact {
+                    b.cargo_match.eq_ignore_ascii_case(cargo)
+                } else {
+                    glob(&b.cargo_match.to_ascii_lowercase(), &cargo.to_ascii_lowercase())
+                }
+        })
         .filter(|b| match ctx.delivered_at_ms {
-            Some(t) => b.active_from_ms.map_or(true, |from| from <= t) && b.active_to_ms.map_or(true, |to| t <= to),
+            Some(t) => b.active_from_ms.map_or(true, |from| from <= t) && b.active_to_ms.map_or(true, |to| t < to),
             None => true,
         })
         .map(|b| {
@@ -539,6 +557,9 @@ mod tests {
         assert!(glob("d*n*e", "dynamite"));
         assert!(!glob("dyna", "dynamite"));
         assert!(!glob("x*", "dynamite"));
+        assert!(glob("dyn?mite", "dynamite"));
+        assert!(glob("d?n*", "dynamite"));
+        assert!(!glob("dyn?", "dynamite"));
     }
 
     #[test]
