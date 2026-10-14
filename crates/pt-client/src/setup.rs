@@ -118,6 +118,35 @@ pub fn set_local(config_text: &str, server_url: Option<&str>, token: Option<&str
     Ok(text)
 }
 
+/// The shipped config with the `[local]` values of an existing config carried
+/// over. Everything else must match a published config version (rule 0), so an
+/// install or update always starts from the config it ships; an old file that
+/// lacks newer keys, or no longer parses, cannot stop the client. Values of
+/// `[local]` keys the shipped config does not have are dropped.
+pub fn rebase_config(existing: Option<&str>, shipped: &str) -> Result<String, String> {
+    let mut doc: toml_edit::DocumentMut = shipped.parse().map_err(|e| format!("shipped config: {e}"))?;
+    let old: Option<toml_edit::DocumentMut> = existing.and_then(|t| t.parse().ok());
+    if let (Some(old_local), Some(new_local)) = (
+        old.as_ref().and_then(|d| d.get("local")).and_then(|t| t.as_table_like()),
+        doc.get_mut("local").and_then(|t| t.as_table_like_mut()),
+    ) {
+        let keys: Vec<String> = new_local.iter().map(|(k, _)| k.to_string()).collect();
+        for k in keys {
+            if let Some(v) = old_local.get(&k).and_then(|i| i.as_value()) {
+                // Keep the shipped line's decoration (comments stay where they are).
+                let mut v = v.clone();
+                v.decor_mut().clear();
+                if let Some(item) = new_local.get_mut(&k) {
+                    *item = toml_edit::Item::Value(v);
+                }
+            }
+        }
+    }
+    let text = doc.to_string();
+    Config::from_toml_str(&text).map_err(|e| format!("config: {e}"))?;
+    Ok(text)
+}
+
 /// Writes `text` to `path` through a temporary file, so a crash never leaves a
 /// half-written config.
 pub fn write_atomically(path: &Path, text: &str) -> std::io::Result<()> {
@@ -210,6 +239,28 @@ mod tests {
         // Token only: the URL stays.
         let again = set_local(&text, None, Some("xyz")).unwrap();
         assert_eq!(Config::from_toml_str(&again).unwrap().local.server_url, "https://pt.example.org");
+    }
+
+    #[test]
+    fn rebase_keeps_local_and_takes_everything_else_from_the_shipped_config() {
+        let mine = set_local(SAMPLE_CONFIG, Some("https://pt.example.org"), Some("tok")).unwrap();
+        // An old config: a rule changed, a newer key missing, a custom port.
+        let old = mine
+            .replace("speed_penalty_factor = 0.85", "speed_penalty_factor = 0.5")
+            .replace("port = 30455", "port = 31111")
+            .lines()
+            .filter(|l| !l.starts_with("delivered_distance_resolution_km"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert!(Config::from_toml_str(&old).is_err(), "the old file no longer loads");
+        let text = rebase_config(Some(&old), SAMPLE_CONFIG).unwrap();
+        let cfg = Config::from_toml_str(&text).unwrap();
+        assert_eq!(cfg.integrity_hash(), Config::from_toml_str(SAMPLE_CONFIG).unwrap().integrity_hash());
+        assert_eq!((cfg.local.server_url.as_str(), cfg.local.token.as_str(), cfg.local.port), ("https://pt.example.org", "tok", 31111));
+        assert!(text.contains("# Player token issued by the server"));
+        // Nothing to carry over: the shipped config as is.
+        assert_eq!(rebase_config(None, SAMPLE_CONFIG).unwrap(), SAMPLE_CONFIG);
+        assert_eq!(rebase_config(Some("not toml ["), SAMPLE_CONFIG).unwrap(), SAMPLE_CONFIG);
     }
 
     #[test]

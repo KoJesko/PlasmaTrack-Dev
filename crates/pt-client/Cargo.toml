@@ -1,6 +1,6 @@
 [package]
 name = "pt-client"
-version = "0.1.0"
+version = "0.1.1"
 description = "PlasmaTrack client: receives plugin telemetry, keeps the local SQLite log, uploads raw chunks to the server."
 edition.workspace = true
 rust-version.workspace = true

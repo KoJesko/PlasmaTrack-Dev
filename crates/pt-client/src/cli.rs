@@ -13,7 +13,8 @@
 //!   uninstall-plugin                                 remove it (and plasmatrack.ini) again
 //!   set-local        [--config PATH]   reads {"server_url": .., "token": ..} (both optional)
 //!                                      as JSON on stdin, so the token never shows up
-//!                                      in a process list; creates the config if missing
+//!                                      in a process list; writes the config this build
+//!                                      ships, keeping the existing [local] values
 //!   show-local       [--config PATH]   [local] as JSON, with the token only as set/unset
 
 use std::io::Read;
@@ -394,11 +395,13 @@ fn set_local(args: &Args) -> Result<(), String> {
     std::io::stdin().read_to_string(&mut input).map_err(|e| format!("stdin: {e}"))?;
     let input: LocalInput = serde_json::from_str(&input).map_err(|e| format!("stdin JSON: {e}"))?;
     let existing = match std::fs::read_to_string(&args.config) {
-        Ok(t) => t,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => paths::SAMPLE_CONFIG.to_string(),
+        Ok(t) => Some(t),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => None,
         Err(e) => return Err(format!("{}: {e}", args.config.display())),
     };
-    let text = setup::set_local(&existing, input.server_url.as_deref(), input.token.as_deref())?;
+    // Always the config this build ships, with the player's [local] kept.
+    let rebased = setup::rebase_config(existing.as_deref(), paths::SAMPLE_CONFIG)?;
+    let text = setup::set_local(&rebased, input.server_url.as_deref(), input.token.as_deref())?;
     setup::write_atomically(&args.config, &text).map_err(|e| format!("{}: {e}", args.config.display()))?;
     println!("wrote {}", args.config.display());
     Ok(())
