@@ -358,11 +358,12 @@ pub fn evaluate(job: &Job, cfg: &Config, ctx: &Context) -> JobResult {
     let ratio = if d.driven_counted_game_km > 0.0 {
         d.driven_counted_world_km / d.driven_counted_game_km
     } else {
-        1.0 / cfg.map.scale.vanilla(job.game).road_local_scale
+        1.0 / cfg.map.scale.vanilla(job.game).main_road_local_scale()
     };
     match d.delivered_game_km {
         Some(delivered) => {
-            let tol_km = r.distance.delivered_vs_trace_tolerance_mi(km_to_mi(delivered)) / crate::units::MI_PER_KM;
+            let tol_km = r.distance.delivered_vs_trace_tolerance_mi(km_to_mi(delivered)) / crate::units::MI_PER_KM
+                + r.distance.delivered_distance_resolution_km;
             let off = match job.start {
                 // Only the part that was seen can be checked: the game may know more.
                 StartKind::LateStart => (d.tracked_whole_game_km - delivered).max(0.0),

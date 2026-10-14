@@ -104,3 +104,49 @@ fn save_edits_are_held_for_review() {
     // The other profile's quick job is a separate (late-start) job.
     assert_eq!(find(&jobs, "moving_cont").job.info.fingerprint.route.job_market, "quick_job");
 }
+
+/// ETS2 1.61.1.1s on TruckersMP (2026-10-13; account ID replaced). Four jobs in one
+/// session: a Norway job continued from an earlier session (four ferries,
+/// delivered, a manual save loaded seven seconds later and delivered again);
+/// Dover → Calais through the Channel Tunnel with the empty drive to the
+/// pickup; a 1 km quick job interrupted by a switch to another profile (whose
+/// own quick job was accepted) and back.
+#[test]
+fn ets2_truckersmp_norway_tunnel_and_profiles() {
+    let jobs = run("ets2-tmp-norway-tunnel-profiles.jsonl.gz");
+    assert_eq!(jobs.len(), 4);
+    for r in &jobs {
+        assert!(r.result.truckersmp && !r.result.convoy, "TruckersMP SDK says connected");
+    }
+
+    // Loaded back into a delivered job and delivered again: counted once.
+    let norway = jobs.iter().find(|r| r.job.info.fingerprint.route.source_city == "honningsvag").expect("norway");
+    assert_eq!((norway.job.state, norway.job.start), (JobState::Stopped, StartKind::LateStart));
+    assert_eq!(count(&norway.job.events, |e| matches!(e, JobEvent::Delivered { .. })), 1);
+    assert_eq!(count(&norway.job.events, |e| matches!(e, JobEvent::DuplicateDelivery { .. })), 1);
+    assert_eq!(norway.result.distances.delivered_game_km, Some(2512.0));
+    assert_eq!(norway.result.outcome, Outcome::PendingReview);
+    assert_eq!(norway.result.review, vec![ReviewReason::LateStart]);
+
+    // The tunnel is a teleport and adds nothing; distance.km leaves it out too
+    // (239 reported, 238.87 tracked). UK roads are scale 15.
+    let tunnel = jobs.iter().find(|r| r.job.info.fingerprint.route.source_city == "dover").expect("dover");
+    assert_eq!((tunnel.job.state, tunnel.job.start), (JobState::Delivered, StartKind::Tracked));
+    assert_eq!(count(&tunnel.job.events, |e| matches!(e, JobEvent::Teleport { ferry_or_train: true, .. })), 1);
+    let d = &tunnel.result.distances;
+    assert_eq!(d.delivered_game_km, Some(239.0));
+    assert!(close(d.tracked_whole_game_km, 238.87, 0.01));
+    assert!(close(d.tracked_uncounted_game_km, 113.30, 0.01), "empty drive to the pickup");
+    assert_eq!(tunnel.result.outcome, Outcome::Valid, "{:?}", tunnel.result.review);
+    assert_eq!(tunnel.result.points, 7.0);
+
+    // 1 km quick job: tracked 1.8 km against a whole-km report of 1 km is within
+    // the reporting resolution. The return to its profile reloads its autosave.
+    let quick = find(&jobs, "med_equip");
+    assert_eq!(quick.job.state, JobState::Delivered);
+    assert_eq!(count(&quick.job.events, |e| matches!(e, JobEvent::LoadTruncate { .. })), 1);
+    assert_eq!(quick.result.outcome, Outcome::Valid, "{:?}", quick.result.review);
+
+    // The other profile's quick job was never delivered.
+    assert_eq!(find(&jobs, "apples").result.outcome, Outcome::Incomplete);
+}

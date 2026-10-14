@@ -201,6 +201,23 @@ Profile and TruckersMP:
   Observed types: 0 = autosave on start, 3 = drive autosave, 5 = manual save.
 - **TruckersMP:** `core_atsmp.dll` was loaded from process start, and the TruckersMP mods were mounted. TruckersMP allows save loading, so every load rule applies to TruckersMP jobs too. `multiplayer.time.offset` was 0 in this session, but about 24,136,737 in the later Sioux Falls TruckersMP session, so it is not a Convoy signal on its own (§6b).
 
+**ETS2 capture** (ETS2 1.61.1.1s, TruckersMP, 2026-10-13 20:18–21:30, one session, plugin `572f0d20`; fixture `ets2-tmp-norway-tunnel-profiles`):
+- **TruckersMP SDK verified in the real client.** It called `truckersmp_init` (`loaded`), then reported connected on server 4 with the account ID, and server 30 after a server switch.
+  - While reconnecting, `account_id` was briefly 0 with `connected=true`. The server ignores 0.
+  - ETS2 module name: `core_ets2mp.dll`.
+- **Scales:** city 3, road 19, and **15 on UK roads** (Dover/Folkestone, switching back to 19 in France). Confirmed by you (2026-10-13): the UK in ETS2 is **currently** 1:15, so it may change (for example with a UK rework). It lives in config (`road_local_scales`), not code.
+- **Train (Channel Tunnel):** `paused` → `player.use.train` (`tunnel_d` → `tunnel_c`, `pay.amount` 300) → `started`. The position jumps 6.57 world km and the odometer does not change.
+- **`distance.km` leaves out train crossings** (Dover → Calais: 239 reported vs 238.87 tracked without the tunnel). It is reported in whole km: a 1 km quick job tracked 1.8 km. The cross-check therefore allows 1 km on top of its tolerance (`delivered_distance_resolution_km`).
+- **Loading into a delivered job (C6):** delivered at 21:03:43, a manual save (type 5) was loaded seven seconds later, and the job was delivered again with `delivery.time` 984 instead of 981. The timeline counts it once (`Stopped` and `DuplicateDelivery`).
+- **Profile switch through a TruckersMP server change:**
+  - `exit` to the menu → `New profile selected` → that profile's autosave (type 0) → `timer_restart`.
+  - Back again the same way, which restored the first profile's quick job from its autosave; the timeline truncated the 51 points driven after that save.
+  - With `game.log` profile detection the switch would not look like a load, but the result is the same here.
+- **Quick jobs:** the game log prints `[job selection]`, and the truck and trailer configs change.
+  - A quick job accepted straight after a load (no sample in between) cannot be told apart from a job already in the save, so it starts as `LateStart`. That only matters if it is delivered, and then it goes to review.
+  - The Cagliari → Napoli quick job is a ferry crossing (`player.use.ferry`, `pay.amount` 0).
+
+
 ## 4. Wire protocol (plugin → client)
 
 **Transport**
@@ -644,7 +661,7 @@ I cannot run the games in this session, so the following steps need a real game 
     - In the first capture, 79.5 game km equals 7.9 world km.
     - World distance = the game's `job.delivered` `distance.km` at the delivery point. That figure is in game scale (measured), so it is converted to 1:1 with the job's own tracked world/game ratio. The tracked odometer distance cross-checks it, and a mismatch goes to review (§6).
     - Rule 3 moves to world distance too: over **150 world km** goes to review (§6).
-    - ETS2 uses 1:19 on roads and ATS 1:20; both are read from `local.scale`.
+    - ETS2 uses 1:19 on roads (1:15 on UK roads) and ATS 1:20; all are read from `local.scale`.
     - **Purpose: it must work with 1:1 scale mods** (you, 2026-09-28). Nothing assumes vanilla scale.
       - The scored distance is the game's own delivery figure.
       - The cross-check divides by whatever `local.scale` the game reports.

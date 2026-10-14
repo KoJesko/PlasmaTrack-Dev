@@ -77,6 +77,10 @@ pub struct DistanceRules {
     pub delivered_vs_trace_tolerance_min_mi: f64,
     pub delivered_vs_trace_short_job_under_mi: f64,
     pub delivered_vs_trace_short_job_max_pct: f64,
+    /// `distance.km` is reported in whole km, so the comparison always allows this
+    /// much on top of the tolerance (measured: 1.8 tracked vs 1 reported, 238.87 vs
+    /// 239, 1232.14 vs 1233).
+    pub delivered_distance_resolution_km: f64,
 }
 
 impl Rules {
@@ -207,11 +211,13 @@ impl MapScales {
 }
 
 /// The `local.scale` values the unmodded game uses (common_channels.h:13-23).
+/// A game can have more than one road scale: ETS2 uses 19, and 15 in the UK
+/// (measured 2026-10-13). The first is the main one.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct VanillaScale {
     pub city_local_scale: f64,
-    pub road_local_scale: f64,
+    pub road_local_scales: Vec<f64>,
 }
 
 /// How a stretch of route is coloured on the map (PLAN §8).
@@ -226,11 +232,16 @@ pub enum ScaleClass {
 }
 
 impl VanillaScale {
+    /// The main road scale, for jobs too short to measure their own mix.
+    pub fn main_road_local_scale(&self) -> f64 {
+        self.road_local_scales.first().copied().unwrap_or(1.0)
+    }
+
     pub fn classify(&self, local_scale: Option<f64>) -> ScaleClass {
         let Some(s) = local_scale else { return ScaleClass::Unknown };
         if s == self.city_local_scale {
             ScaleClass::City
-        } else if s == self.road_local_scale {
+        } else if self.road_local_scales.contains(&s) {
             ScaleClass::Road
         } else if s == 1.0 {
             ScaleClass::OneToOne
@@ -326,6 +337,7 @@ impl Config {
             ("rules.distance.delivered_vs_trace_tolerance_min_mi", r.distance.delivered_vs_trace_tolerance_min_mi),
             ("rules.distance.delivered_vs_trace_short_job_under_mi", r.distance.delivered_vs_trace_short_job_under_mi),
             ("rules.distance.delivered_vs_trace_short_job_max_pct", r.distance.delivered_vs_trace_short_job_max_pct),
+            ("rules.distance.delivered_distance_resolution_km", r.distance.delivered_distance_resolution_km),
             ("plugin.sample_rate_hz", self.plugin.sample_rate_hz),
             ("sync.retry_interval_wall_s", self.sync.retry_interval_wall_s),
         ] {
@@ -412,6 +424,9 @@ mod tests {
         let ets2 = c.map.scale.vanilla(Game::Ets2);
         assert_eq!(ats.classify(Some(20.0)), ScaleClass::Road);
         assert_eq!(ets2.classify(Some(19.0)), ScaleClass::Road);
+        assert_eq!(ets2.classify(Some(15.0)), ScaleClass::Road, "ETS2 UK roads");
+        assert_eq!(ats.classify(Some(15.0)), ScaleClass::Nonstandard);
+        assert_eq!(ets2.main_road_local_scale(), 19.0);
         assert_eq!(ets2.classify(Some(20.0)), ScaleClass::Nonstandard);
         assert_eq!(ats.classify(Some(3.0)), ScaleClass::City);
         assert_eq!(ats.classify(Some(1.0)), ScaleClass::OneToOne);

@@ -73,6 +73,9 @@ delivered_vs_trace_tolerance_min_mi = 30.0
 # Jobs shorter than short_job_under_mi are hard-capped at short_job_max_pct.
 delivered_vs_trace_short_job_under_mi = 100.0
 delivered_vs_trace_short_job_max_pct = 5.0
+# distance.km is reported in whole km, so the comparison always allows 1 km on
+# top of the tolerance (a 1 km quick job tracked 1.8 km, 2026-10-13).
+delivered_distance_resolution_km = 1.0
 
 [rules.fuel]
 # Rule 4: job fuel used below -tolerance is flagged (float noise stays silent).
@@ -145,16 +148,18 @@ match_game_time_tolerance_min_game = 2
 # Route map scale classes (PLAN §8). Each stretch of a route is coloured by the
 # local.scale it was driven at: 1 = one_to_one (1:1 mod), these vanilla values =
 # city / road, anything else = nonstandard (modded). Display only: scale never
-# sends a job to review by itself. ATS values measured in the first capture;
-# ETS2 road = 19 per the maintainer, ETS2 city PROVISIONAL until an ETS2 capture.
+# sends a job to review by itself. A game can have several road scales; the
+# first is the main one. Measured: ATS 3 / 20 (2026-09-28); ETS2 3 / 19, and 15
+# on UK roads (2026-10-13; the UK is "currently" 1:15 per the maintainer, so
+# re-check after UK map updates).
 # ---------------------------------------------------------------------------
 [map.scale.ats]
 city_local_scale = 3.0
-road_local_scale = 20.0
+road_local_scales = [20.0]
 
 [map.scale.ets2]
 city_local_scale = 3.0
-road_local_scale = 19.0
+road_local_scales = [19.0, 15.0]
 
 # ---------------------------------------------------------------------------
 # Player notifications (desktop notification from the client).
@@ -177,9 +182,9 @@ delay_max_wall_s = 30.0
 # Users with the "Singleplayer Division" flag have TruckersMP jobs discarded.
 # ---------------------------------------------------------------------------
 [multiplayer]
-# Confirmed: core_atsmp.dll (ATS, first capture 2026-09-28). ETS2 name to be
-# confirmed by an ETS2 TruckersMP capture.
-truckersmp_module_names = ["core_atsmp.dll"]
+# Confirmed: core_atsmp.dll (ATS, 2026-09-28) and core_ets2mp.dll (ETS2,
+# 2026-10-13). Only a fallback: the TruckersMP SDK messages decide (PLAN §6b).
+truckersmp_module_names = ["core_atsmp.dll", "core_ets2mp.dll"]
 
 # ---------------------------------------------------------------------------
 # Plugin <-> client transport (localhost only).
