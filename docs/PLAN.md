@@ -653,7 +653,7 @@ I cannot run the games in this session, so the following steps need a real game 
      - 4 real-capture regressions in `tests/real_captures.rs` pass (Chicago 3.6 points, Sioux Falls 36.1, six-load TruckersMP session, the tampered 1000 km delivery → review).
      - **Done (2026-10-14):** `profile_key` from `game.log.txt`, live provisional results with the two alerts, and the job list on the status page (`docs/CLIENT.md`).
 4. **Server APIs.** Ingest, scoring, rule 0, auth, the public read API, the admin API and webhooks for the Discord bot, audit log, recalculation, and OpenAPI contract tests.
-   - **Status (2026-10-14): deployed** on Cloudflare, production and a separate test instance (docs/SERVER.md). `pt-server` has 12 end-to-end tests that upload a real capture through the API. Still to come: the OpenAPI file and example payloads for the bot.
+   - **Status (2026-10-14): deployed** on Cloudflare, production and a separate test instance (docs/SERVER.md). `pt-server` has 11 end-to-end tests that upload a real capture through the API. Still to come: the OpenAPI file and example payloads for the bot.
 5. **Route projection and GeoJSON endpoint.** Rendering route images happens in the bot repo.
 
 **Fixtures.** One fixture per bullet below.
