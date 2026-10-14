@@ -19,11 +19,11 @@ Requirement changes folded in from our conversation:
 |---|---|---|
 | Plugin | C++17, CMake + Ninja. Primary toolchain is **llvm-mingw (UCRT)**; distro `x86_64-w64-mingw32-g++-posix` is the fallback. Two toolchain files (llvm-mingw layout, Debian layout). Fully static (`-static`), exports via `.def` | The SDK headers are C++-only (they do not compile as C). One toolchain covers Windows and Linux-cross, needs no thread-model choice, and is FOSS (ISC / Apache-2.0-LLVM / ZPL). A static build keeps the game directory free of runtime DLLs. |
 | Client | **Rust**, headless background app with a small status/settings page on `127.0.0.1` | The overlay is gone, so a webview is unnecessary. This avoids Tauri's proprietary MSVC Build Tools and WebView2. The GNU Rust toolchain is already installed. The client runs the exact same `pt-core` code as the server. |
-| Server | **Rust**: axum + tokio + **rusqlite (SQLite, WAL)** | Same language and same `pt-core` crate. SQLite keeps it a single binary. **rusqlite on both sides** avoids the `libsqlite3-sys` `links` conflict that sqlx-sqlite + rusqlite hit in one workspace. Postgres remains possible later. |
+| Server | **Rust on Cloudflare Workers** (Workers Paid; decision 15). The `worker` crate (workers-rs, Apache-2.0) compiled to wasm, with D1 (SQLite) for records, R2 for raw chunks, job points and timeline snapshots, one Durable Object per (player, game) that runs the timeline, Queues for webhooks and bulk recalculation, and a Cron Trigger for revocations (§7a) | The same `pt-core` crate runs in wasm. All request logic lives in `pt-server`, plain Rust tested natively against rusqlite (D1 is SQLite); `pt-worker` only binds it to Cloudflare. |
 | Shared | `pt-core`: pure, with no I/O, no clock and no RNG | Deterministic. Client and server produce bit-identical results. The replay harness uses it directly. |
 | Web | **None.** There is no website. All public info (per-job route maps, leaderboards) and all admin actions go through the **Discord bot (separate repo)**, which consumes this server's JSON API | Your decision. This repo owns the API contract and route projection. |
 | Admin | Admin API + signed webhooks consumed by your **Discord bot (separate repo)** | Your decision; this repo only owns the API contract. |
-| Auth | Admins: argon2id password + session cookie. Players: 256-bit server-issued token, stored as SHA-256 | As specified. |
+| Auth | The bot: two service tokens plus the acting moderator's Discord ID (API_CONVENTIONS §2). Players: 256-bit server-issued token, stored as SHA-256 | As specified. There is no admin login: moderators act through the bot. |
 
 Rejected alternatives:
 - **Tauri:** needs MSVC Build Tools (proprietary). Its only purpose was the overlay, which is now dropped.
@@ -43,7 +43,8 @@ plugin/                    CMakeLists.txt, cmake/toolchain-{llvm-mingw,debian-mi
 crates/pt-core/            units, config, wire decode, timeline reconstruction, rules, route projection
 crates/pt-replay/          CLI: replay a trace file through pt-core, diff against expected results
 crates/pt-client/          binary: plugin listener, SQLite log, uploader, status page
-crates/pt-server/          binary: ingest API, scoring, public pages, admin panel
+crates/pt-server/          library: ingest, scoring, public/admin API, webhooks (native-testable)
+crates/pt-worker/          Cloudflare Worker: binds pt-server to D1, R2, Durable Objects, Queues
 fixtures/                  *.trace.jsonl + *.expected.json (one per rule / boundary / load scenario)
 config/                    plasmatrack.sample.toml
 scripts/                   install (Windows / Proton / Flatpak), loopback verification, capture tooling
@@ -500,6 +501,57 @@ The fingerprint has two parts:
 - Chunks are queued in SQLite. Failures retry every `sync.retry_interval_wall_s` (20 s) until they succeed.
 - The server derives all jobs itself. A client-computed result is never an input.
 
+## 7a. The server on Cloudflare (stage 4; decision 15)
+
+Everything runs on Cloudflare Workers Paid. Limits that shape the design (checked 2026-10-14,
+developers.cloudflare.com): 30 s CPU per request (up to 5 min), **128 MB memory per isolate**,
+D1 rows ≤ 2 MB and 10 GB per database, Queue messages ≤ 128 KB with delays ≤ 24 h and
+retention ≤ 14 days.
+
+**Bindings**
+
+| Binding | Holds |
+|---|---|
+| D1 `DB` | every table in §7 except the raw data; idempotency keys; the webhook outbox |
+| R2 `RAW` | raw upload chunks (`raw/{user}/{sess}/{seq_from}.jsonl.gz`), each scored job's points (`jobs/{job_id}.json.gz`, for the series, trace and route endpoints), timeline snapshots (`snap/{user}/{game}.json.gz`) |
+| Durable Object `Scorer` | one per (player, game): the only place that runs the timeline, so a player's frames are processed strictly in order, one batch at a time |
+| Queue `webhooks` | event ids to deliver; the body stays in the D1 outbox (bodies can be 256 KiB) |
+| Queue `ops` | bulk recalculation: one message per (player, game) |
+| Cron | every 5 min: revocations that took effect, expired idempotency keys and cursors |
+
+**Upload path**
+1. `POST /api/v1/chunks`: the Worker checks the token, then writes the chunk to R2 and records
+   it in D1.
+2. It answers `200` with the ack straight away; scoring never delays the client.
+3. It then pokes the player's `Scorer`.
+
+**Scoring path**
+1. The `Scorer` keeps the player's `pt_core::timeline::Profiles` in memory. After a restart it
+   loads the snapshot from R2 and replays the chunks uploaded since.
+2. Each batch pushes the new frames. Every job whose state changed is evaluated with
+   `pt_core::rules`, then written to D1 (and its points to R2).
+3. The webhook events are emitted: `job.needs_review`, `job.scored`, `job.discarded`, and
+   `player.notification` with its random 5–30 s delay as the Queue delay.
+4. The snapshot is written back once the player has been idle for a minute, and at least
+   every 10 minutes.
+5. **Out-of-order data** (a chunk for a session older than the snapshot's position) rebuilds
+   that (player, game) from the raw chunks. A recalculation does the same.
+
+**Bounded memory (decided 2026-10-14).** Samples arrive at 20 Hz, so a timeline that kept every
+job forever would outgrow 128 MB.
+- When a new session starts, a profile timeline drops jobs that finished (delivered,
+  cancelled or stopped) more than `[timeline] reopen_window_wall_h` (48 h) before it.
+- Those jobs are already stored, so nothing is lost. The only effect: a save from such a job
+  loaded *after* the window is no longer recognised as that job. Its driving then starts a
+  new late-start job, which goes to manual review.
+- The window is measured on frame wall-clock times, never on the server's clock. A full
+  replay therefore reaches exactly the same result as incremental scoring.
+- The client applies the same rule to its own provisional timeline.
+
+**Contract tests.** `pt-server` is exercised natively: a rusqlite database runs the same SQL
+migrations as D1, R2 is an in-memory map, and the clock and RNG are injected. Every example
+in the four contract files is checked against the real responses.
+
 ## 8. Server APIs (all consumed by the Discord bot, a separate repo; there is no website)
 
 This repo ships **no HTML**. The server exposes versioned JSON APIs, and two separate repos consume them:
@@ -659,7 +711,7 @@ I cannot run the games in this session, so the following steps need a real game 
 12. **Profiles:** separate timelines per profile (§6b).
 13. **Bonuses:** only the greatest bonus applies, and it stacks with the 0.85× penalty (§6).
 14. **License:** PolyForm Noncommercial 1.0.0 is a **placeholder**. The final license will be settled with the client you are building this for.
-15. **Hosting:** deferred.
+15. **Hosting (2026-10-14): Cloudflare**, on your existing Workers Paid plan (§1, §7a).
 
 16. **Notifications also go to Discord DMs.** The server emits a signed `player.notification` webhook (Invalid delivery, speed penalty activated), and the bot DMs the player. The server applies its own random 5–30 s delay before sending it. The server only learns of the penalty once the chunk containing it is uploaded.
 17. **Revocation.** Admins can revoke a release or config version, and it takes effect **21 days after it is announced**.
@@ -691,4 +743,4 @@ I cannot run the games in this session, so the following steps need a real game 
 
 1. ~~**Route images.**~~ Settled: the bot repo renders all images; this server serves GeoJSON and series only (bot contract requirements, 2026-10-14).
 
-Hosting and the final license are deferred to you.
+The final license is deferred to you.
