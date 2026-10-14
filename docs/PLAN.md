@@ -501,7 +501,7 @@ This repo ships **no HTML**. The server exposes versioned JSON APIs, and two sep
 - the **Discord bot repo**: everything user-facing. That covers public job info, per-job route maps and leaderboards, plus all admin actions.
 - the **Discord bot repo**: all admin actions.
 
-The contracts are documented here as OpenAPI (`docs/PUBLIC_API.md`, `docs/ADMIN_API.md`), with contract tests.
+The contracts are `docs/API_CONVENTIONS.md`, `docs/PUBLIC_API.md`, `docs/ADMIN_API.md` and `docs/WEBHOOKS.md` (v1 draft 2026-10-14, written against the bot's `docs/CONTRACT_REQUIREMENTS.md`). OpenAPI and example payloads follow in stage 4, with contract tests.
 
 **Public read API** (`/api/v1/public/...`, authenticated with the bot service token; no browser CORS needed):
 - Per-game job list and leaderboard: `/ets2/...` and `/ats/...`. Games are never combined.
@@ -509,7 +509,7 @@ The contracts are documented here as OpenAPI (`docs/PUBLIC_API.md`, `docs/ADMIN_
 - **Route as GeoJSON** in lon/lat, already projected, split into LineStrings at ferries, trains, pauses and gaps.
 - **Scale colouring (decided 2026-09-28):** the route is also split at every `scale` change. Each LineString carries `local_scale` and a `scale_class`, so the bot can colour them for moderators:
   - `city` = 3;
-  - `road` = the vanilla road scale (ATS 20, ETS2 19);
+  - `road` = a vanilla road scale (ATS 20; ETS2 19, and 15 on UK roads);
   - `one_to_one` = 1, a 1:1 mod;
   - `nonstandard` = any other value, a modded scale;
   - `unknown` = not reported.
@@ -540,8 +540,8 @@ The contracts are documented here as OpenAPI (`docs/PUBLIC_API.md`, `docs/ADMIN_
 - issue and revoke player tokens;
 - publish config versions and release manifests (rule 0), and schedule revocations (effective 21 days after announcement).
 - **Auth:** a bot service token plus the acting admin's Discord user ID on every call. That ID goes into the audit log.
-- **Webhooks:** signed POSTs (`job.needs_review`, `job.scored`, `job.discarded`, `player.notification`, `version.revocation_scheduled`) to a URL the bot registers.
-- **Gap and late-start jobs are held for admin approval** (`review_policy = "hold"`).
+- **Webhooks:** signed POSTs (`job.needs_review`, `job.scored`, `job.discarded`, `player.notification`, `version.revocation_scheduled`, `version.revocation_cancelled`, `operation.completed`) to one URL set in the server config (`docs/WEBHOOKS.md`).
+- **Gap and late-start jobs are held for admin approval** (`review_policy = "review"`).
 
 **Map basemap (decided; built and used in the bot repo):**
 - You generate ETS2 and ATS vector tiles (PMTiles) with truckermudgeon/maps (GPL-3.0) from your own game install. This is allowed for modding as long as nothing is sold, so **PlasmaTrack must stay non-commercial**.
@@ -684,6 +684,6 @@ I cannot run the games in this session, so the following steps need a real game 
 
 ## 12. Open questions
 
-1. **Route images.** I assume the bot repo renders route images from the GeoJSON, because it holds the tiles. Should this server render the PNGs instead?
+1. ~~**Route images.**~~ Settled: the bot repo renders all images; this server serves GeoJSON and series only (bot contract requirements, 2026-10-14).
 
 Hosting and the final license are deferred to you.
