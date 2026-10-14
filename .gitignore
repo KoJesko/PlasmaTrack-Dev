@@ -29,3 +29,4 @@ Thumbs.db
 /crates/pt-worker/build/
 /crates/pt-worker/.wrangler/
 /crates/pt-worker/.dev.vars*
+/crates/pt-worker/.secrets.*

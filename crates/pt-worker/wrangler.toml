@@ -9,7 +9,7 @@
 #   WEBHOOK_URL                where webhooks go (the bot's /webhooks/plasmatrack)
 #   WEBHOOK_SECRETS            HMAC secret(s), comma-separated during rotation
 #   DOWNLOAD_SECRET            signs trace download links
-# Variables below: BOOTSTRAP_ADMINS (comma-separated Discord IDs).
+#   BOOTSTRAP_ADMINS           Discord IDs that are admins from the start (comma-separated)
 # The database_id values are filled in by `wrangler d1 create` (docs/SERVER.md).
 
 name = "plasmatrack-server"
@@ -23,13 +23,10 @@ command = "worker-build --release"
 [limits]
 cpu_ms = 300000
 
-[vars]
-BOOTSTRAP_ADMINS = ""
-
 [[d1_databases]]
 binding = "DB"
 database_name = "plasmatrack"
-database_id = "REPLACE_WITH_PRODUCTION_D1_ID"
+database_id = "f77c2251-67b5-42ad-bbbd-f65885200dd0"
 migrations_dir = "../pt-server/migrations"
 
 [[r2_buckets]]
@@ -75,13 +72,10 @@ workers_dev = true
 [env.test.limits]
 cpu_ms = 300000
 
-[env.test.vars]
-BOOTSTRAP_ADMINS = ""
-
 [[env.test.d1_databases]]
 binding = "DB"
 database_name = "plasmatrack-test"
-database_id = "REPLACE_WITH_TEST_D1_ID"
+database_id = "cc6f20a8-08a3-48a4-8d91-cf50335d4ffa"
 migrations_dir = "../pt-server/migrations"
 
 [[env.test.r2_buckets]]
