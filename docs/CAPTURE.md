@@ -73,15 +73,14 @@ in `config.cfg` should make the game write them that way (unverified).
 
 | # | Scenario | What to do | ATS | ETS2 |
 |---|---|---|---|---|
-| C23 | Bobtail during a job | After the pickup, unhook the trailer, drive about 2 km without it, re-hook it and deliver. Settles whether `distance.km` includes bobtail driving (it includes the empty leg). | — | — (the trailer stayed hooked all session) |
+| C23 | Bobtail during a job | After the pickup, unhook the trailer, drive about 2 km without it, re-hook it and deliver. Settles whether `distance.km` includes bobtail driving (it includes the empty leg). | — | ✅ Dover → Calais cargo market: 113 game km to the pickup with the trailer hooked and no cargo (the only way to bobtail without World of Trucks, you, 2026-10-13). `distance.km` includes it (239 vs 238.87 tracked); it earns no points |
 | C24 | Delivery through a city | A clean delivery that passes through a city. Confirms the scales and the cross-check. | ✅ (C7) | ✅ city 3, road 19, **UK roads 15**; 239 reported vs 238.87 tracked |
 | C25 | TruckersMP with the SDK plugin | Start TruckersMP with the current plugin and join a server for a minute. | n/a: ETS2 settled it | ✅ loaded by the TruckersMP client; connected, server IDs 4 and 30, account ID (briefly 0 while reconnecting) |
 
 ## What remains, in order of value
 
-1. **C23:** bobtail during a job (either game).
-2. **C19–C21:** the cargo, truck and fuel save edits (either game).
-3. **C17:** Convoy (either game).
+1. **C19–C21:** the cargo, truck and fuel save edits (either game).
+2. **C17:** Convoy (either game).
 
 ## After capturing
 
@@ -99,11 +98,11 @@ in `config.cfg` should make the game write them that way (unverified).
 - the TruckersMP module names (`core_atsmp.dll`, `core_ets2mp.dll`) and the TruckersMP SDK in
   the real TruckersMP client;
 - that the active profile can be read from `game.log.txt`, and how profile switches look;
-- that `distance.km` is in game scale and in whole km, includes the empty leg and leaves out
+- that `distance.km` is in game scale and in whole km, includes the empty leg and bobtail
+  driving and leaves out
   ferries and trains;
 - the scales of both games (ETS2 UK roads are 15).
 
 **Still open:**
-- bobtail in `distance.km`;
 - a cargo or truck change through a save edit (C19, C20);
 - Convoy.

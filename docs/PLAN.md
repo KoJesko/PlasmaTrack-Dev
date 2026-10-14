@@ -207,6 +207,7 @@ Profile and TruckersMP:
   - ETS2 module name: `core_ets2mp.dll`.
 - **Scales:** city 3, road 19, and **15 on UK roads** (Dover/Folkestone, switching back to 19 in France). Confirmed by you (2026-10-13): the UK in ETS2 is **currently** 1:15, so it may change (for example with a UK rework). It lives in config (`road_local_scales`), not code.
 - **Train (Channel Tunnel):** `paused` → `player.use.train` (`tunnel_d` → `tunnel_c`, `pay.amount` 300) → `started`. The position jumps 6.57 world km and the odometer does not change.
+- **Bobtail (C23):** on the Dover → Calais cargo-market job, the 113 game km to the pickup were driven with the trailer hooked and no cargo. Without World of Trucks, that is the only way to bobtail (you, 2026-10-13). `distance.km` includes it, and the counted distance excludes it.
 - **`distance.km` leaves out train crossings** (Dover → Calais: 239 reported vs 238.87 tracked without the tunnel). It is reported in whole km: a 1 km quick job tracked 1.8 km. The cross-check therefore allows 1 km on top of its tolerance (`delivered_distance_resolution_km`).
 - **Loading into a delivered job (C6):** delivered at 21:03:43, a manual save (type 5) was loaded seven seconds later, and the job was delivered again with `delivery.time` 984 instead of 981. The timeline counts it once (`Stopped` and `DuplicateDelivery`).
 - **Profile switch through a TruckersMP server change:**
