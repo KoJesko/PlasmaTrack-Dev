@@ -33,7 +33,7 @@ apply.
 
 | # | Scenario | What to do | ATS | ETS2 |
 |---|---|---|---|---|
-| C1 | Quick-save → drive → quick-load | On a job: quick-save, drive ≥ 2 km, quick-load. | ✅ five manual-save loads (TruckersMP capture) | — |
+| C1 | Quick-save → drive → quick-load | On a job: quick-save, drive ≥ 2 km, quick-load. | ✅ five manual-save loads (TruckersMP capture) | n/a: loads work the same in both games |
 | C2 | Autosave load | On a job, load the latest autosave from the menu. | ✅ `autosave_drive_7`; also in the Sioux Falls session | — |
 | C3 | Load from main menu | Exit to the main menu, then load a mid-job save. | ✅ raises `timer_restart`; in-game loads do not | — |
 | C4 | Crash mid-job | On a job, kill the game process (Task Manager / `kill -9`). Restart it and continue from the autosave. | ✅ a real crash in the Sioux Falls session; the job continued and was scored | — |
@@ -44,10 +44,10 @@ apply.
 | C9 | Ferry and train | Take one ferry and one train (or Channel Tunnel) crossing. | ✅ ferry (event, no odometer change); no trains in ATS | — train still needed |
 | C10 | Refuel | Refuel at a station: once partially, once full. | ✅ 0.3 s steps, about 54 L/s | — |
 | C11 | Quick job accept | Take a quick job (company truck, teleport). | ◐ quick-job config seen after a profile switch; accepting one not recorded | — |
-| C12 | Truck purchase / switch | Buy or switch trucks. | — | — |
+| C12 | Truck purchase / switch | Buy or switch trucks. | n/a: truck buying is separate from job logging (you, 2026-10-13) | n/a |
 | C13 | Repair / service teleport | Use "call for help" or a service that teleports the truck. | ✅ F7: position jump inside a pause, no config change, no load signature | — |
 | C14 | Profile switch | With a job active in profile P1, switch to profile P2 (also with a job), then back to P1. | ◐ one switch via the main menu; the back-and-forth with jobs in both profiles is still needed | — |
-| C15 | Pause behaviour | ESC menu for ~10 s, map screen, photo mode. | ◐ ESC pauses seen (samples stop, heartbeats continue); map screen and photo mode not recorded | — |
+| C15 | Pause behaviour | ESC menu for ~10 s, map screen, photo mode. | ✅ ESC pauses (samples stop, heartbeats continue); map screen and photo mode are not tracked (you, 2026-10-13) | n/a |
 | C16 | TruckersMP session | One short drive on TruckersMP. | ◐ `core_atsmp.dll` found; **redo with the new plugin** to check the TruckersMP SDK side | — |
 | C17 | Convoy session | One short drive in Convoy (multiplayer time offset). | — | — |
 | C18 | Falling under the map | Only if it happens naturally. Note it if it does. | n/a | n/a |
@@ -76,15 +76,14 @@ in `config.cfg` should make the game write them that way (unverified).
 
 ## What remains, in order of value
 
-1. **ETS2:** C7/C24 (a clean delivery through a city), C1, C9 (train), then the rest as time
-   allows.
+1. **ETS2:** C7/C24 (a clean delivery through a city) and C9 (train). Loads, cancel, refuel,
+   F7 and crashes behave the same as in ATS and are not repeated.
 2. **C25:** TruckersMP with the SDK plugin.
 3. **C23:** bobtail during a job.
-4. **C6, C11, C12, C14:** load into a delivered job, accepting a quick job, a truck switch, and
-   the full profile back-and-forth. These confirm that W (the load signature) does not appear
-   where it should not.
+4. **C6, C11, C14:** load into a delivered job, accepting a quick job, and the full profile
+   back-and-forth. These confirm that W (the load signature) does not appear where it should not.
 5. **C19–C21:** the remaining save edits.
-6. **C17:** Convoy, and **C15:** map screen and photo mode.
+6. **C17:** Convoy.
 
 ## After capturing
 
@@ -105,7 +104,7 @@ in `config.cfg` should make the game write them that way (unverified).
 
 **Still open:**
 - train timing;
-- truck changes (C12, C20);
+- a truck change through a save edit (C20);
 - bobtail in `distance.km`;
 - ETS2 behaviour;
 - Convoy;

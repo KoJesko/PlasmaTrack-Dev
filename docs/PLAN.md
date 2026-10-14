@@ -264,7 +264,7 @@ This model incorporates the red-team findings. All thresholds are in `[timeline]
   - It reverts nothing, and it is stored in the trace for admins to see.
 - **A pause bracket alone is not evidence.** In the capture, the teleports happened inside pauses, so a pause plus a position jump would otherwise look like a load.
 - **Other config changes never count as evidence.** A job or truck config that is re-sent without emptying `truck` only decides which case below applies. This stops ordinary job accepts, cargo loading, quick-job teleports and deliveries from looking like loads.
-- **Provisional:** W must still be confirmed not to occur on a quick job (C11) or a truck purchase or switch (C12). Call for help (C13, F7) was captured without it. If one of them does produce W, the rows below still match against the kept timeline. A truck change itself never sends the job to review (see "Truck changes" below).
+- **Provisional:** W must still be confirmed not to occur on a quick job (C11). Truck purchases (C12) are separate from job logging and are not captured (you, 2026-10-13). Call for help (C13, F7) was captured without it. If one of them does produce W, the rows below still match against the kept timeline. A truck change itself never sends the job to review (see "Truck changes" below).
 - Signals are correlated per **bracket**: from the last live sample before the pause, restart or gap to the first live sample after it. They are not correlated per time window, so a player who waits in the menu after loading is handled correctly.
 - `job.delivered` and `job.cancelled` are attributed to the last known job. The job config empties before or around these events (event.h:82-89; RenCloud changelog).
 
