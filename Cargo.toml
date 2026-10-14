@@ -4,7 +4,7 @@ members = ["crates/pt-core", "crates/pt-client", "crates/pt-replay", "crates/pt-
 
 [workspace.package]
 edition = "2021"
-rust-version = "1.80"
+rust-version = "1.82"
 publish = false
 license = "PolyForm-Noncommercial-1.0.0"
 

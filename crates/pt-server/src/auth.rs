@@ -54,7 +54,7 @@ pub async fn admin<H: Host>(h: &H, req: &Request) -> ApiResult<User> {
         return Err(ApiError::forbidden("X-PlasmaTrack-Actor is required on admin calls."));
     }
     store::check_discord_id(&actor)?;
-    if h.settings().bootstrap_admins.iter().any(|a| *a == actor) {
+    if h.settings().bootstrap_admins.contains(&actor) {
         let (u, _) = store::ensure_user(h, &actor, None).await?;
         if u.role != "admin" {
             h.run("UPDATE users SET role = 'admin' WHERE user_id = ?1", params![&u.user_id]).await?;

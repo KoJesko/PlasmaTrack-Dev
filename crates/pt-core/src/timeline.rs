@@ -125,7 +125,14 @@ pub enum JobEvent {
     LoadGap { game_km: Option<f64>, wall_ms: i64 },
     /// A session change with no discontinuity: the job simply continues.
     SessionContinue { wall_ms: i64 },
-    Teleport { world_m: f64, ferry_or_train: bool, wall_ms: i64 },
+    Teleport {
+        world_m: f64,
+        ferry_or_train: bool,
+        /// `ferry` or `train` when the game said which.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        via: Option<String>,
+        wall_ms: i64,
+    },
     Suspended { wall_ms: i64 },
     Resumed { wall_ms: i64 },
     CargoLoaded { wall_ms: i64 },
@@ -184,6 +191,7 @@ pub enum Notice {
 }
 
 #[derive(Default, Serialize, Deserialize)]
+#[serde(default)]
 struct Bracket {
     /// New plugin session or a seq gap: the plugin re-sends empty configs at
     /// init, so W is not evidence here; only a discontinuity is.
@@ -193,6 +201,8 @@ struct Bracket {
     truck_emptied: bool,
     truck_changed: bool,
     transfer: bool,
+    /// `ferry` or `train`, from the gameplay event.
+    transfer_kind: Option<String>,
     /// The game sent a truck while no job was set: the state it is in (after a
     /// load, a cancel or a delivery) has no job.
     no_job_state: bool,
@@ -398,7 +408,10 @@ impl Timeline {
                 // to the job that was current (PLAN §5).
                 "job.delivered" => self.deliver(Delivered::from_attrs(attrs), f.wall_ms),
                 "job.cancelled" => self.cancel(attr(attrs, "cancel.penalty").and_then(|v| v.as_i64()), f.wall_ms),
-                "player.use.ferry" | "player.use.train" => self.bracket.transfer = true,
+                "player.use.ferry" | "player.use.train" => {
+                    self.bracket.transfer = true;
+                    self.bracket.transfer_kind = id.strip_prefix("player.use.").map(str::to_string);
+                }
                 _ => {}
             },
             Body::Modules { truckersmp } => {
@@ -621,7 +634,12 @@ impl Timeline {
         let cfg = self.job_cfg.clone();
         if teleport {
             if let Some(i) = self.current {
-                self.jobs[i].events.push(JobEvent::Teleport { world_m: jump_m, ferry_or_train: b.transfer, wall_ms: wall });
+                self.jobs[i].events.push(JobEvent::Teleport {
+                    world_m: jump_m,
+                    ferry_or_train: b.transfer,
+                    via: b.transfer_kind.clone(),
+                    wall_ms: wall,
+                });
             }
         }
         if b.truck_changed {

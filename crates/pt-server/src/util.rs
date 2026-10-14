@@ -205,7 +205,7 @@ pub fn constant_eq(a: &[u8], b: &[u8]) -> bool {
 
 pub fn gunzip(data: &[u8], limit: usize) -> std::io::Result<Vec<u8>> {
     let mut out = Vec::new();
-    flate2::read::GzDecoder::new(data).take(limit as u64 + 1).read_to_end(&mut out)?;
+    flate2::read::GzDecoder::new(data).take((limit as u64).saturating_add(1)).read_to_end(&mut out)?;
     if out.len() > limit {
         return Err(std::io::Error::other("too large"));
     }
@@ -216,6 +216,34 @@ pub fn gzip(data: &[u8]) -> Vec<u8> {
     let mut enc = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
     enc.write_all(data).expect("in-memory write");
     enc.finish().expect("in-memory finish")
+}
+
+/// `*` matches any run of characters (slashes included), `?` one character;
+/// ASCII case is ignored and `\` counts as `/` (Windows paths).
+pub fn glob(pattern: &str, s: &str) -> bool {
+    fn norm(x: &str) -> Vec<char> {
+        x.chars().map(|c| if c == '\\' { '/' } else { c.to_ascii_lowercase() }).collect()
+    }
+    let (p, s) = (norm(pattern), norm(s));
+    // Iterative wildcard matching with backtracking to the last `*`.
+    let (mut pi, mut si, mut star, mut mark) = (0, 0, None, 0);
+    while si < s.len() {
+        if pi < p.len() && (p[pi] == '?' || p[pi] == s[si]) {
+            pi += 1;
+            si += 1;
+        } else if pi < p.len() && p[pi] == '*' {
+            star = Some(pi);
+            mark = si;
+            pi += 1;
+        } else if let Some(st) = star {
+            pi = st + 1;
+            mark += 1;
+            si = mark;
+        } else {
+            return false;
+        }
+    }
+    p[pi..].iter().all(|c| *c == '*')
 }
 
 /// km → miles, the contract's two-decimal rounding for shown distances.
@@ -270,6 +298,15 @@ mod tests {
         assert_eq!(normalize_job_id("OIL00000").as_deref(), Some("01100000"));
         assert_eq!(normalize_job_id("7K2M9QX"), None);
         assert_eq!(normalize_job_id("7K2M9QXU"), None);
+    }
+
+    #[test]
+    fn globs() {
+        assert!(glob("*/bin/win_x64/plugins/plasmatrack.dll", r"C:\Steam\steamapps\common\ETS2\bin\win_x64\plugins\PlasmaTrack.dll"));
+        assert!(glob("a?c", "abc"));
+        assert!(!glob("a?c", "ac"));
+        assert!(glob("*", ""));
+        assert!(!glob("*.dll", "x.exe"));
     }
 
     #[test]

@@ -156,6 +156,9 @@ pub struct Distances {
     pub game_mi: f64,
     /// Counted game km per scale class (route map colouring and admin detail).
     pub game_km_by_scale: Vec<(ScaleClass, f64)>,
+    /// The same in 1:1 km.
+    #[serde(default)]
+    pub world_km_by_scale: Vec<(ScaleClass, f64)>,
     /// Whole job, driven only (no gaps): 1:1 km and unpaused simulation
     /// seconds, for the average-pace check.
     pub driven_whole_world_km: f64,
@@ -211,15 +214,18 @@ fn distances(job: &Job, cfg: &Config) -> Distances {
     let eps = cfg.rules.distance.odometer_epsilon_km;
     let mut d = Distances::default();
     let mut by_scale: Vec<(ScaleClass, f64)> = Vec::new();
+    let mut world_by_scale: Vec<(ScaleClass, f64)> = Vec::new();
     let mut add = |d: &mut Distances, km: f64, counted: bool, scale: f64| {
         d.tracked_whole_game_km += km;
         if counted || wot {
             d.tracked_counted_game_km += km;
             d.tracked_counted_world_km += km / scale;
             let class = vanilla.classify(Some(scale));
-            match by_scale.iter_mut().find(|(c, _)| *c == class) {
-                Some((_, v)) => *v += km,
-                None => by_scale.push((class, km)),
+            for (list, v) in [(&mut by_scale, km), (&mut world_by_scale, km / scale)] {
+                match list.iter_mut().find(|(c, _)| *c == class) {
+                    Some((_, x)) => *x += v,
+                    None => list.push((class, v)),
+                }
             }
         } else {
             d.tracked_uncounted_game_km += km;
@@ -254,6 +260,7 @@ fn distances(job: &Job, cfg: &Config) -> Distances {
         }
     }
     d.game_km_by_scale = by_scale;
+    d.world_km_by_scale = world_by_scale;
     d
 }
 
@@ -381,7 +388,7 @@ fn pick_bonus(info: &JobInfo, base: f64, ctx: &Context) -> Option<(Bonus, f64)> 
                 }
         })
         .filter(|b| match ctx.delivered_at_ms {
-            Some(t) => b.active_from_ms.map_or(true, |from| from <= t) && b.active_to_ms.map_or(true, |to| t < to),
+            Some(t) => b.active_from_ms.is_none_or(|from| from <= t) && b.active_to_ms.is_none_or(|to| t < to),
             None => true,
         })
         .map(|b| {
