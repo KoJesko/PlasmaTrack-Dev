@@ -6,9 +6,9 @@ These captures turn that behaviour into facts and replay fixtures. Every value m
 PROVISIONAL in `config/plasmatrack.sample.toml` gets calibrated from them.
 
 **Status (2026-10-13):**
-- **Captured:** four ATS sessions (2026-09-28, ATS 1.61.2.0s, one of them on TruckersMP) and one
-  ETS2 session (2026-10-13, ETS2 1.61.1.1s, on TruckersMP).
-- **Regression tests:** all five, trimmed, are regression tests in
+- **Captured:** four ATS sessions (2026-09-28, ATS 1.61.2.0s, one of them on TruckersMP) and two
+  ETS2 sessions (2026-10-13, ETS2 1.61.1.1s: one on TruckersMP, one in Convoy).
+- **Regression tests:** all six, trimmed, are regression tests in
   `crates/pt-replay/tests/fixtures/real/`.
 - **Findings:** in `docs/PLAN.md` §3 and §6.
 
@@ -52,7 +52,7 @@ apply or not needed.
 | C14 | Profile switch | With a job active in profile P1, switch to profile P2 (also with a job), then back to P1. | ◐ one switch via the main menu | ✅ A (quick job) → B (quick job) → A, through TruckersMP server changes |
 | C15 | Pause behaviour | ESC menu for ~10 s, map screen, photo mode. | ✅ ESC pauses (samples stop, heartbeats continue); map screen and photo mode are not tracked (you, 2026-10-13) | n/a |
 | C16 | TruckersMP session | One short drive on TruckersMP. | ✅ `core_atsmp.dll` | ✅ `core_ets2mp.dll` |
-| C17 | Convoy session | One short drive in Convoy (multiplayer time offset). | — | — |
+| C17 | Convoy session | One short drive in Convoy (multiplayer time offset). | n/a: same as ETS2 | ✅ hosted alone: offset 3–5 in the session, TruckersMP not loaded, hosting is not a load; job labelled Convoy |
 | C18 | Falling under the map | Only if it happens naturally. Note it if it does. | n/a | n/a |
 
 ### Save edits (one change per recording, all mid-job)
@@ -80,7 +80,7 @@ in `config.cfg` should make the game write them that way (unverified).
 ## What remains, in order of value
 
 1. **C19–C21:** the cargo, truck and fuel save edits (either game).
-2. **C17:** Convoy (either game).
+2. Optional: joining someone else's Convoy, and leaving one mid-job and driving on in singleplayer.
 
 ## After capturing
 
@@ -102,7 +102,8 @@ in `config.cfg` should make the game write them that way (unverified).
   driving and leaves out
   ferries and trains;
 - the scales of both games (ETS2 UK roads are 15).
+- Convoy detection, and that hosting a Convoy is not a load.
 
 **Still open:**
 - a cargo or truck change through a save edit (C19, C20);
-- Convoy.
+- joining someone else's Convoy, and leaving one mid-job.

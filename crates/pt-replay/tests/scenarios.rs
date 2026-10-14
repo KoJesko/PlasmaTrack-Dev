@@ -741,3 +741,35 @@ fn the_truckersmp_sdk_tells_server_play_from_launcher_singleplayer() {
     let sp = rescore(&job, &Context { singleplayer_division: true, ..Default::default() });
     assert_eq!(sp.discard, Some(DiscardReason::SingleplayerDivisionTruckersmp));
 }
+
+#[test]
+fn a_quick_job_taken_right_after_loading_a_jobless_save_is_tracked() {
+    // ETS2 Convoy capture (2026-10-13): the loaded save had no job (job config
+    // re-sent empty with a full truck), and a quick job was accepted 19 s later,
+    // before the first sample.
+    let mut s = Sim::new("ats");
+    s.drive_km(5.0);
+    let jobless = future(&s, 30.0);
+    s.load(&jobless);
+    s.accept(JobSpec::new("hvac").market("quick_job"));
+    s.drive_km(20.0);
+    s.deliver(20.0);
+    let (job, r) = s.job("hvac");
+    assert_eq!(job.start, StartKind::Tracked);
+    assert_eq!(r.outcome, Outcome::Valid, "{:?}", r.review);
+}
+
+#[test]
+fn a_save_with_a_job_loaded_after_a_jobless_one_is_still_a_late_start() {
+    // Two loads in one pause: the second brings a job already in progress.
+    let mut s = Sim::new("ats");
+    s.drive_km(5.0);
+    let jobless = future(&s, 30.0);
+    let mut with_job = future(&s, 60.0);
+    with_job.job = Some(JobSpec::new("bricks"));
+    s.load(&jobless);
+    s.load(&with_job);
+    s.drive_km(10.0);
+    let (job, _) = s.job("bricks");
+    assert_eq!(job.start, StartKind::LateStart);
+}

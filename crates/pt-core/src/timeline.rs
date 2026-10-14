@@ -193,6 +193,12 @@ struct Bracket {
     truck_emptied: bool,
     truck_changed: bool,
     transfer: bool,
+    /// The game sent a truck while no job was set: the state it is in (after a
+    /// load, a cancel or a delivery) has no job.
+    no_job_state: bool,
+    /// A job config arrived after that: the job was accepted in this bracket,
+    /// so its start was seen (quick job taken right after loading, 2026-10-13).
+    job_after_no_job: bool,
 }
 
 /// Streaming overspeed state for the penalty notification.
@@ -309,12 +315,20 @@ impl Timeline {
                 self.job_cfg = JobInfo::from_config(game, attrs);
                 if self.job_cfg.is_none() {
                     self.bracket.job_emptied = true;
+                } else if self.bracket.no_job_state {
+                    self.bracket.job_after_no_job = true;
                 }
             }
             Body::Config { id, attrs } if id == "truck" => {
                 if attrs.is_empty() {
                     self.bracket.truck_emptied = true;
+                    // Another load starts: whatever it brings is not known yet.
+                    self.bracket.no_job_state = false;
+                    self.bracket.job_after_no_job = false;
                 } else {
+                    if self.job_cfg.is_none() {
+                        self.bracket.no_job_state = true;
+                    }
                     let tid = attr(attrs, "id").and_then(|v| v.as_str()).unwrap_or_default().to_string();
                     let idx = match self.truck_ids.iter().position(|t| *t == tid) {
                         Some(i) => i,
@@ -415,7 +429,7 @@ impl Timeline {
 
         if is_load {
             p.run = self.new_run();
-            self.on_load(&mut p, session, wall);
+            self.on_load(&mut p, session, bracket.job_after_no_job, wall);
         } else {
             let teleport = jump_m >= teleport_min;
             if session || bracket.truck_changed {
@@ -578,10 +592,10 @@ impl Timeline {
             (Some(_), Some(info)) => {
                 // A different job without a load or an end event.
                 self.suspend_current(wall);
-                self.begin(info, session || prev.is_none(), wall);
+                self.begin(info, (session || prev.is_none()) && !b.job_after_no_job, wall);
             }
             (Some(_), None) => self.suspend_current(wall),
-            (None, Some(info)) => self.begin(info, session || prev.is_none(), wall),
+            (None, Some(info)) => self.begin(info, (session || prev.is_none()) && !b.job_after_no_job, wall),
             (None, None) => {}
         }
     }
@@ -629,7 +643,9 @@ impl Timeline {
         self.current = Some(self.start_job(info, kind, wall));
     }
 
-    fn on_load(&mut self, p: &mut Point, session: bool, wall: i64) {
+    /// `accepted_here`: the job appeared after the loaded state had none, so it
+    /// was accepted after the load and its start was seen.
+    fn on_load(&mut self, p: &mut Point, session: bool, accepted_here: bool, wall: i64) {
         let before = self.current;
         let Some(info) = self.job_cfg.clone() else {
             self.suspend_current(wall);
@@ -637,7 +653,8 @@ impl Timeline {
         };
         let Some(k) = self.find_job(&info.fingerprint) else {
             self.suspend_current(wall);
-            self.current = Some(self.start_job(info, StartKind::LateStart, wall));
+            let kind = if accepted_here { StartKind::Tracked } else { StartKind::LateStart };
+            self.current = Some(self.start_job(info, kind, wall));
             return;
         };
         if before != Some(k) {

@@ -215,9 +215,16 @@ Profile and TruckersMP:
   - Back again the same way, which restored the first profile's quick job from its autosave; the timeline truncated the 51 points driven after that save.
   - With `game.log` profile detection the switch would not look like a load, but the result is the same here.
 - **Quick jobs:** the game log prints `[job selection]`, and the truck and trailer configs change.
-  - A quick job accepted straight after a load (no sample in between) cannot be told apart from a job already in the save, so it starts as `LateStart`. That only matters if it is delivered, and then it goes to review.
+  - A quick job is often accepted straight after a load, before any sample. The game first sends the loaded state (the job config empty, the truck full), and the quick job's config arrives later on its own. A job that appears after such a jobless state is tracked from its start, not a `LateStart` (fixed 2026-10-13). A save with a job in progress still sends its job before the truck, so it stays a `LateStart`.
   - The Cagliari → Napoli quick job is a ferry crossing (`player.use.ferry`, `pay.amount` 0).
 
+
+**Convoy capture** (ETS2 1.61.1.1s, 2026-10-13 21:52–21:56; fixture `ets2-convoy-quick-job`): a Convoy hosted alone, with a quick job accepted right after the start autosave.
+- The game log shows `[MP] Session started` / `Lobby created` / `Session running`, and later `Session closing` / `Session closed`.
+- `multiplayer.time.offset` was 0 before the session and 3 → 4 → 5 during it. The plugin's `truckersmp` message said `loaded=false`. So the job is Convoy, not TruckersMP or singleplayer.
+- **Hosting is not a load:** no configs were re-sent and no `timer_restart` was raised, so the job continued unbroken.
+- A job that is partly driven in a Convoy is labelled Convoy.
+- Joining someone else's Convoy, and leaving one while still driving, were not captured.
 
 ## 4. Wire protocol (plugin → client)
 

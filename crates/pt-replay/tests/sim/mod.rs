@@ -171,9 +171,10 @@ impl Sim {
         self.emit("config", json!({"id": "job", "attrs": []}));
         self.emit("config", json!({"id": "truck", "attrs": []}));
         let _ = first;
-        // The world loads: configs re-sent, then timer_restart (PLAN §3).
-        self.cfg_truck(false);
+        // The world loads: configs re-sent (job before truck, as the game does),
+        // then timer_restart (PLAN §3).
         self.cfg_job();
+        self.cfg_truck(false);
         self.emit("timer_restart", json!({"simulation_us": 16666, "render_us": 0}));
         self.sim_us = 16_666;
         self.paused = true;
@@ -267,8 +268,8 @@ impl Sim {
         self.emit("config", json!({"id": "truck", "attrs": []}));
         self.restore(s);
         self.wall_ms += 15_000;
-        self.cfg_truck(false);
         self.cfg_job();
+        self.cfg_truck(false);
         self.start();
     }
 

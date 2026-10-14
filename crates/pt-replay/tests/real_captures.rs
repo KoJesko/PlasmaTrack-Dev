@@ -147,6 +147,24 @@ fn ets2_truckersmp_norway_tunnel_and_profiles() {
     assert_eq!(count(&quick.job.events, |e| matches!(e, JobEvent::LoadTruncate { .. })), 1);
     assert_eq!(quick.result.outcome, Outcome::Valid, "{:?}", quick.result.review);
 
-    // The other profile's quick job was never delivered.
-    assert_eq!(find(&jobs, "apples").result.outcome, Outcome::Incomplete);
+    // The other profile's quick job, accepted right after its autosave loaded
+    // (no job in the save), was seen from its start; it was never delivered.
+    let apples = find(&jobs, "apples");
+    assert_eq!(apples.job.start, StartKind::Tracked);
+    assert_eq!(apples.result.outcome, Outcome::Incomplete);
+}
+
+/// ETS2 1.61.1.1s, a Convoy hosted alone (2026-10-13): a quick job accepted
+/// right after the start autosave loaded, then the Convoy session started and
+/// the job was driven about 80 s. TruckersMP was not loaded.
+#[test]
+fn ets2_convoy_with_a_quick_job() {
+    let jobs = run("ets2-convoy-quick-job.jsonl.gz");
+    assert_eq!(jobs.len(), 1);
+    let r = &jobs[0];
+    assert_eq!(r.job.info.fingerprint.cargo.cargo_id, "hvac");
+    assert_eq!((r.job.state, r.job.start), (JobState::Tracking, StartKind::Tracked));
+    assert!(r.result.convoy && !r.result.truckersmp, "multiplayer.time.offset 3..5, no TruckersMP");
+    assert!(r.job.events.iter().all(|e| !matches!(e, JobEvent::LoadTruncate { .. } | JobEvent::LoadGap { .. })), "hosting is not a load");
+    assert_eq!(r.result.outcome, Outcome::Incomplete);
 }
