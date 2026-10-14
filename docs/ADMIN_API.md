@@ -25,7 +25,7 @@ Oldest first, with `total`. Each item:
 ```json
 {
   "job_id": "7K2M9QXA", "game": "ets2", "outcome": "pending_review",
-  "player": {"user_id": "usr_8f3k2m", "discord_user_id": "123456789012345678", "display_name": "KoJesko"},
+  "player": {"user_id": "usr_8f3k2m", "discord_user_id": "123456789012345678", "display_name": "Example Driver"},
   "held_points": 90.3, "world_km": 145.33, "game_km": 2512.0,
   "cargo": {"id": "med_vaccine", "name": "Vaccines"},
   "source": {"city_id": "honningsvag", "city_name": "Honningsvåg"},
@@ -414,7 +414,7 @@ Filters: `?job_id=`, `?actor=<discord id>`, `?target_user=<discord id>`, `?actio
 ```json
 {"items": [
   {"audit_id": "aud_77", "at": "2026-10-14T09:20:11.000Z",
-   "actor": {"discord_user_id": "1234…", "display_name": "KoJesko"},
+   "actor": {"discord_user_id": "1234…", "display_name": "Example Driver"},
    "action": "job.approve", "target": {"kind": "job", "id": "7K2M9QXA"},
    "reason": "Fell through the map at Calais, confirmed on the route.",
    "before": {"outcome": "invalid"}, "after": {"outcome": "approved", "points": 90.3}}

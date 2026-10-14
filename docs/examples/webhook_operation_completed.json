@@ -1,0 +1,20 @@
+{
+  "data": {
+    "finished_at": "2026-10-14T09:00:27.000Z",
+    "kind": "recalculation",
+    "operation_id": "op_arsm3am5s1",
+    "requested_by": {
+      "discord_user_id": "900000000000000001"
+    },
+    "started_at": "2026-10-14T09:00:26.000Z",
+    "status": "succeeded",
+    "summary": {
+      "changed": {},
+      "jobs": 3
+    }
+  },
+  "event_id": "evt_q1be9hsw53",
+  "occurred_at": "2026-10-14T09:00:27.000Z",
+  "payload_version": 1,
+  "type": "operation.completed"
+}

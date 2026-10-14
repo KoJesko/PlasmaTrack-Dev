@@ -1,0 +1,80 @@
+{
+  "items": [
+    {
+      "cargo": {
+        "id": "med_equip",
+        "name": "Medical Equipment"
+      },
+      "delivered_at": "2026-10-14T09:00:01.000Z",
+      "destination": {
+        "city_id": "napoli",
+        "city_name": "Napoli",
+        "company_id": "eolo_lines",
+        "company_name": "Eolo Lines"
+      },
+      "game": "ets2",
+      "game_km": 1.0,
+      "game_mi": 0.62,
+      "held_points": null,
+      "job_id": "1XW08CFJ",
+      "market": "quick_job",
+      "multiplayer": {
+        "kind": "truckersmp",
+        "truckersmp": {
+          "account_id": 1234567,
+          "server_id": 30
+        }
+      },
+      "outcome": "valid",
+      "points": 0.2,
+      "reported_delivered_at": "2026-10-14T01:29:53.859Z",
+      "source": {
+        "city_id": "cagliari",
+        "city_name": "Cagliari",
+        "company_id": "eolo_lines",
+        "company_name": "Eolo Lines"
+      },
+      "world_km": 0.33,
+      "world_mi": 0.21
+    },
+    {
+      "cargo": {
+        "id": "med_vaccine",
+        "name": "Medical Vaccines"
+      },
+      "delivered_at": "2026-10-14T09:00:01.000Z",
+      "destination": {
+        "city_id": "bergen",
+        "city_name": "Bergen",
+        "company_id": "polarislines",
+        "company_name": "Polaris Lines"
+      },
+      "game": "ets2",
+      "game_km": 2512.0,
+      "game_mi": 1560.88,
+      "held_points": 90.3,
+      "job_id": "2RG8X3RX",
+      "market": "cargo_market",
+      "multiplayer": {
+        "kind": "truckersmp",
+        "truckersmp": {
+          "account_id": 1234567,
+          "server_id": 30
+        }
+      },
+      "outcome": "pending_review",
+      "points": null,
+      "reported_delivered_at": "2026-10-14T01:03:43.006Z",
+      "source": {
+        "city_id": "honningsvag",
+        "city_name": "Honningsvåg",
+        "company_id": "renar",
+        "company_name": "Renar Logistik"
+      },
+      "world_km": 145.33,
+      "world_mi": 90.3
+    }
+  ],
+  "next_cursor": "bzIudDE3OTE5Njg0MDY",
+  "total": 3
+}

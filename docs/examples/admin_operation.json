@@ -1,0 +1,12 @@
+{
+  "finished_at": "2026-10-14T09:00:27.000Z",
+  "kind": "recalculation",
+  "operation_id": "op_arsm3am5s1",
+  "progress": {
+    "done": 3,
+    "total": 3
+  },
+  "started_at": "2026-10-14T09:00:26.000Z",
+  "status": "succeeded",
+  "summary": {}
+}

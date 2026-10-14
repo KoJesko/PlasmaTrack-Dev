@@ -88,7 +88,7 @@ A job has entered the review queue: either `pending_review` or `invalid`.
 
 ```json
 {"job_id": "7K2M9QXA", "game": "ets2", "job_version": 3,
- "player": {"user_id": "usr_8f3k2m", "discord_user_id": "123456789012345678", "display_name": "KoJesko"},
+ "player": {"user_id": "usr_8f3k2m", "discord_user_id": "123456789012345678", "display_name": "Example Driver"},
  "outcome": "pending_review", "held_points": 90.3,
  "reasons": [{"code": "late_start", "text": "Tracking started after the job was accepted.", "details": {}}],
  "delivered_at": "2026-10-13T21:03:46.120Z"}
@@ -105,7 +105,7 @@ The bot updates or closes the matching review-queue message.
 
 ```json
 {"job_id": "7K2M9QXA", "game": "ets2", "job_version": 4,
- "player": {"user_id": "usr_8f3k2m", "discord_user_id": "123456789012345678", "display_name": "KoJesko"},
+ "player": {"user_id": "usr_8f3k2m", "discord_user_id": "123456789012345678", "display_name": "Example Driver"},
  "outcome": "approved", "previous_outcome": "pending_review",
  "points": 90.3, "held_points": null,
  "by": {"kind": "moderator", "discord_user_id": "987654321098765432"}}
@@ -122,7 +122,7 @@ The bot updates or closes the matching review-queue message.
 
 ```json
 {"job_id": "4QH82KDM", "game": "ats", "job_version": 1,
- "player": {"user_id": "usr_8f3k2m", "discord_user_id": "123456789012345678", "display_name": "KoJesko"},
+ "player": {"user_id": "usr_8f3k2m", "discord_user_id": "123456789012345678", "display_name": "Example Driver"},
  "reasons": ["integrity"]}
 ```
 

@@ -1,0 +1,14 @@
+{
+  "active_from": "2026-10-01T00:00:00.000Z",
+  "active_to": "2026-11-01T00:00:00.000Z",
+  "amount": 1.5,
+  "bonus_id": "bon_3a051hzcz0",
+  "created_at": "2026-10-14T09:00:21.000Z",
+  "game": "ets2",
+  "kind": "multiplier",
+  "label": "Medical week",
+  "match": "med_*",
+  "match_kind": "glob",
+  "status": "active",
+  "updated_at": "2026-10-14T09:00:21.000Z"
+}

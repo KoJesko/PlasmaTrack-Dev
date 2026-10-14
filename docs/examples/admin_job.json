@@ -1,0 +1,252 @@
+{
+  "audit": [],
+  "bonus": null,
+  "bonus_set": [],
+  "cargo": {
+    "id": "med_vaccine",
+    "name": "Medical Vaccines"
+  },
+  "config_version": {
+    "current": true,
+    "integrity_hash": "37b16360fb88293742498e06351590d31df333882ff0cfd72e5852a71e689872",
+    "version_id": "cfg_1"
+  },
+  "delivered_at": "2026-10-14T09:00:01.000Z",
+  "destination": {
+    "city_id": "bergen",
+    "city_name": "Bergen",
+    "company_id": "polarislines",
+    "company_name": "Polaris Lines"
+  },
+  "distance_by_scale_class": {
+    "city": {
+      "game_km": 18.43,
+      "game_mi": 11.45,
+      "world_km": 6.14,
+      "world_mi": 3.82
+    },
+    "nonstandard": {
+      "game_km": 0.0,
+      "game_mi": 0.0,
+      "world_km": 0.0,
+      "world_mi": 0.0
+    },
+    "one_to_one": {
+      "game_km": 0.0,
+      "game_mi": 0.0,
+      "world_km": 0.0,
+      "world_mi": 0.0
+    },
+    "road": {
+      "game_km": 972.45,
+      "game_mi": 604.25,
+      "world_km": 51.18,
+      "world_mi": 31.8
+    },
+    "unknown": {
+      "game_km": 0.0,
+      "game_mi": 0.0,
+      "world_km": 0.0,
+      "world_mi": 0.0
+    }
+  },
+  "distances": {
+    "accepted_world_mi": 90.303,
+    "counted_game_km": 2512.0,
+    "delivered_game_km": 2512.0,
+    "tracked_counted_game_km": 990.88,
+    "tracked_uncounted_game_km": 0.0,
+    "tracked_whole_game_km": 990.88,
+    "world_km": 145.328,
+    "world_mi": 90.303
+  },
+  "etag": "\"j2RG8X3RX-v1\"",
+  "fuel": {
+    "refuels": [],
+    "used_l": 0.0
+  },
+  "game": "ets2",
+  "game_km": 2512.0,
+  "game_mi": 1560.88,
+  "held_points": 90.3,
+  "integrity": {
+    "config_diff": [],
+    "config_hash": "37b16360fb88293742498e06351590d31df333882ff0cfd72e5852a71e689872",
+    "config_matched_version": "cfg_1",
+    "manifest": [
+      {
+        "matched_release": "rel_0_1_0_windows",
+        "path": "C:\\Steam\\steamapps\\common\\American Truck Simulator\\bin\\win_x64\\plugins\\plasmatrack.dll",
+        "role": "plugin",
+        "sha256": "aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11"
+      },
+      {
+        "matched_release": "rel_0_1_0_windows",
+        "path": "C:\\PlasmaTrack\\bin\\plasmatrack-clientw.exe",
+        "role": "client_binary",
+        "sha256": "bb22bb22bb22bb22bb22bb22bb22bb22bb22bb22bb22bb22bb22bb22bb22bb22"
+      }
+    ],
+    "manifest_result": "ok",
+    "trace_checks": [
+      {
+        "check": "sample_rate",
+        "details": {
+          "declared_hz": 20.0,
+          "measured_hz": 4.04
+        },
+        "ok": true
+      }
+    ]
+  },
+  "job_id": "2RG8X3RX",
+  "market": "cargo_market",
+  "multiplayer": {
+    "kind": "truckersmp",
+    "truckersmp": {
+      "account_id": 1234567,
+      "server_id": 30
+    }
+  },
+  "outcome": "pending_review",
+  "planned_distance_km": 2291,
+  "player": {
+    "discord_user_id": "123456789012345678",
+    "display_name": "Example Driver",
+    "user_id": "usr_cy3x405w4v"
+  },
+  "plugin_sessions": [
+    "13a7da3ef251e81e32ac4c9b3e53d29c"
+  ],
+  "points": null,
+  "profile_key": "unknown",
+  "public_notes": [
+    {
+      "code": "under_review",
+      "text": "A moderator will check this job."
+    }
+  ],
+  "reasons": [
+    {
+      "code": "late_start",
+      "details": {},
+      "text": "Tracking started after the job was accepted."
+    }
+  ],
+  "reported_delivered_at": "2026-10-14T01:03:43.006Z",
+  "rules": [
+    {
+      "details": {},
+      "rule": "integrity",
+      "triggered": false
+    },
+    {
+      "details": {
+        "negative_km": 0.0
+      },
+      "rule": "negative_distance",
+      "triggered": false
+    },
+    {
+      "details": {
+        "over_invalid_s": 0.0
+      },
+      "rule": "overspeed_invalid",
+      "triggered": false
+    },
+    {
+      "details": {
+        "world_km": 145.33
+      },
+      "rule": "long_job",
+      "triggered": false
+    },
+    {
+      "details": {},
+      "rule": "fuel",
+      "triggered": false
+    },
+    {
+      "details": {
+        "over_penalty_s": 0.0
+      },
+      "rule": "overspeed_penalty",
+      "triggered": false
+    },
+    {
+      "details": {},
+      "rule": "bonus",
+      "triggered": false
+    }
+  ],
+  "segments": [
+    {
+      "from": "2026-10-14T00:21:06.342Z",
+      "seq_from": 45,
+      "seq_to": 10291,
+      "sess": "13a7da3ef251e81e32ac4c9b3e53d29c",
+      "status": "kept",
+      "to": "2026-10-14T01:03:41.672Z"
+    }
+  ],
+  "source": {
+    "city_id": "honningsvag",
+    "city_name": "Honningsvåg",
+    "company_id": "renar",
+    "company_name": "Renar Logistik"
+  },
+  "speed": {
+    "invalid_over_mph": 150.0,
+    "over_invalid_s": 0.0,
+    "over_penalty_s": 0.0,
+    "peak_mph": 74.77,
+    "penalty_over_mph": 100.0
+  },
+  "speed_penalty_applied": false,
+  "start_kind": "late_start",
+  "state": "stopped",
+  "timeline": [
+    {
+      "at": "2026-10-14T00:21:06.342Z",
+      "details": {
+        "start": "late_start"
+      },
+      "event": "started"
+    },
+    {
+      "at": "2026-10-14T00:54:02.154Z",
+      "details": {
+        "ferry_or_train": true,
+        "via": "ferry",
+        "world_m": 541.2104588682733
+      },
+      "event": "teleport"
+    },
+    {
+      "at": "2026-10-14T00:58:29.194Z",
+      "details": {
+        "ferry_or_train": true,
+        "via": "ferry",
+        "world_m": 576.5315509823612
+      },
+      "event": "teleport"
+    },
+    {
+      "at": "2026-10-14T01:03:43.006Z",
+      "details": {},
+      "event": "delivered"
+    },
+    {
+      "at": "2026-10-14T01:04:09.978Z",
+      "details": {},
+      "event": "stopped_after_delivery"
+    },
+    {
+      "at": "2026-10-14T01:04:50.039Z",
+      "details": {},
+      "event": "duplicate_delivery"
+    }
+  ],
+  "world_km": 145.33,
+  "world_mi": 90.3
+}

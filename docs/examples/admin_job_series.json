@@ -1,0 +1,427 @@
+{
+  "bucket_s": 13.19,
+  "game": "ats",
+  "invalid_over_mph": 125.0,
+  "job_id": "A2NDM8HC",
+  "markers": [],
+  "penalty_over_mph": 105.0,
+  "points": [
+    {
+      "fuel_l_max": 1034.58,
+      "fuel_l_min": 1034.58,
+      "reverted": false,
+      "speed_mph_max": 21.18,
+      "speed_mph_min": 0.0,
+      "t": "2026-09-28T17:47:21.596Z"
+    },
+    {
+      "fuel_l_max": 1034.58,
+      "fuel_l_min": 1034.58,
+      "reverted": false,
+      "speed_mph_max": 7.86,
+      "speed_mph_min": 0.04,
+      "t": "2026-09-28T17:47:34.785Z"
+    },
+    {
+      "fuel_l_max": 1034.58,
+      "fuel_l_min": 1034.58,
+      "reverted": false,
+      "speed_mph_max": 12.84,
+      "speed_mph_min": 0.47,
+      "t": "2026-09-28T17:47:47.975Z"
+    },
+    {
+      "fuel_l_max": 1034.58,
+      "fuel_l_min": 1034.58,
+      "reverted": false,
+      "speed_mph_max": 12.88,
+      "speed_mph_min": 0.0,
+      "t": "2026-09-28T17:48:01.165Z"
+    },
+    {
+      "fuel_l_max": 1034.58,
+      "fuel_l_min": 1034.58,
+      "reverted": false,
+      "speed_mph_max": 8.22,
+      "speed_mph_min": 0.0,
+      "t": "2026-09-28T17:48:14.355Z"
+    },
+    {
+      "fuel_l_max": 1034.58,
+      "fuel_l_min": 1034.58,
+      "reverted": false,
+      "speed_mph_max": 10.18,
+      "speed_mph_min": 0.06,
+      "t": "2026-09-28T17:48:27.545Z"
+    },
+    {
+      "fuel_l_max": 1034.58,
+      "fuel_l_min": 1034.58,
+      "reverted": false,
+      "speed_mph_max": 13.21,
+      "speed_mph_min": 0.02,
+      "t": "2026-09-28T17:48:40.735Z"
+    },
+    {
+      "fuel_l_max": 1034.58,
+      "fuel_l_min": 1034.58,
+      "reverted": false,
+      "speed_mph_max": 7.58,
+      "speed_mph_min": 0.0,
+      "t": "2026-09-28T17:48:53.925Z"
+    },
+    {
+      "fuel_l_max": 1034.26,
+      "fuel_l_min": 1034.26,
+      "reverted": false,
+      "speed_mph_max": 10.24,
+      "speed_mph_min": 0.0,
+      "t": "2026-09-28T17:49:07.115Z"
+    },
+    {
+      "fuel_l_max": 1034.26,
+      "fuel_l_min": 1033.94,
+      "reverted": false,
+      "speed_mph_max": 26.98,
+      "speed_mph_min": 9.43,
+      "t": "2026-09-28T17:49:20.305Z"
+    },
+    {
+      "fuel_l_max": 1033.94,
+      "fuel_l_min": 1033.94,
+      "reverted": false,
+      "speed_mph_max": 27.02,
+      "speed_mph_min": 0.0,
+      "t": "2026-09-28T17:49:33.495Z"
+    },
+    {
+      "fuel_l_max": 1033.94,
+      "fuel_l_min": 1033.94,
+      "reverted": false,
+      "speed_mph_max": 17.6,
+      "speed_mph_min": 0.0,
+      "t": "2026-09-28T17:49:46.685Z"
+    },
+    {
+      "fuel_l_max": 1033.94,
+      "fuel_l_min": 1033.94,
+      "reverted": false,
+      "speed_mph_max": 37.17,
+      "speed_mph_min": 18.44,
+      "t": "2026-09-28T17:49:59.875Z"
+    },
+    {
+      "fuel_l_max": 1033.94,
+      "fuel_l_min": 1033.62,
+      "reverted": false,
+      "speed_mph_max": 40.01,
+      "speed_mph_min": 0.0,
+      "t": "2026-09-28T17:50:13.065Z"
+    },
+    {
+      "fuel_l_max": 1033.62,
+      "fuel_l_min": 1032.66,
+      "reverted": false,
+      "speed_mph_max": 40.48,
+      "speed_mph_min": 10.76,
+      "t": "2026-09-28T17:50:26.255Z"
+    },
+    {
+      "fuel_l_max": 1032.66,
+      "fuel_l_min": 1031.7,
+      "reverted": false,
+      "speed_mph_max": 46.44,
+      "speed_mph_min": 41.02,
+      "t": "2026-09-28T17:50:39.445Z"
+    },
+    {
+      "fuel_l_max": 1031.7,
+      "fuel_l_min": 1029.78,
+      "reverted": false,
+      "speed_mph_max": 55.39,
+      "speed_mph_min": 46.78,
+      "t": "2026-09-28T17:50:52.635Z"
+    },
+    {
+      "fuel_l_max": 1029.78,
+      "fuel_l_min": 1028.18,
+      "reverted": false,
+      "speed_mph_max": 45.41,
+      "speed_mph_min": 43.85,
+      "t": "2026-09-28T17:51:05.825Z"
+    },
+    {
+      "fuel_l_max": 1028.18,
+      "fuel_l_min": 1026.26,
+      "reverted": false,
+      "speed_mph_max": 50.38,
+      "speed_mph_min": 44.37,
+      "t": "2026-09-28T17:51:19.015Z"
+    },
+    {
+      "fuel_l_max": 1026.26,
+      "fuel_l_min": 1024.66,
+      "reverted": false,
+      "speed_mph_max": 45.32,
+      "speed_mph_min": 45.1,
+      "t": "2026-09-28T17:51:32.205Z"
+    },
+    {
+      "fuel_l_max": 1024.66,
+      "fuel_l_min": 1023.06,
+      "reverted": false,
+      "speed_mph_max": 45.07,
+      "speed_mph_min": 44.72,
+      "t": "2026-09-28T17:51:45.395Z"
+    },
+    {
+      "fuel_l_max": 1023.06,
+      "fuel_l_min": 1021.14,
+      "reverted": false,
+      "speed_mph_max": 45.2,
+      "speed_mph_min": 44.74,
+      "t": "2026-09-28T17:51:58.585Z"
+    },
+    {
+      "fuel_l_max": 1021.14,
+      "fuel_l_min": 1019.54,
+      "reverted": false,
+      "speed_mph_max": 45.19,
+      "speed_mph_min": 44.67,
+      "t": "2026-09-28T17:52:11.775Z"
+    },
+    {
+      "fuel_l_max": 1019.54,
+      "fuel_l_min": 1017.94,
+      "reverted": false,
+      "speed_mph_max": 45.2,
+      "speed_mph_min": 39.86,
+      "t": "2026-09-28T17:52:24.965Z"
+    },
+    {
+      "fuel_l_max": 1017.94,
+      "fuel_l_min": 1016.02,
+      "reverted": false,
+      "speed_mph_max": 54.03,
+      "speed_mph_min": 41.72,
+      "t": "2026-09-28T17:52:38.155Z"
+    },
+    {
+      "fuel_l_max": 1016.02,
+      "fuel_l_min": 1015.38,
+      "reverted": false,
+      "speed_mph_max": 54.18,
+      "speed_mph_min": 50.51,
+      "t": "2026-09-28T17:52:51.345Z"
+    },
+    {
+      "fuel_l_max": 1015.38,
+      "fuel_l_min": 1014.1,
+      "reverted": false,
+      "speed_mph_max": 50.5,
+      "speed_mph_min": 42.78,
+      "t": "2026-09-28T17:53:04.535Z"
+    },
+    {
+      "fuel_l_max": 1014.1,
+      "fuel_l_min": 1013.46,
+      "reverted": false,
+      "speed_mph_max": 41.19,
+      "speed_mph_min": 1.5,
+      "t": "2026-09-28T17:53:17.725Z"
+    },
+    {
+      "fuel_l_max": 1013.46,
+      "fuel_l_min": 1013.43,
+      "reverted": false,
+      "speed_mph_max": 0.23,
+      "speed_mph_min": 0.0,
+      "t": "2026-09-28T17:53:30.915Z"
+    },
+    {
+      "fuel_l_max": 1013.43,
+      "fuel_l_min": 1013.43,
+      "reverted": false,
+      "speed_mph_max": 10.02,
+      "speed_mph_min": 0.0,
+      "t": "2026-09-28T17:53:44.105Z"
+    },
+    {
+      "fuel_l_max": 1013.43,
+      "fuel_l_min": 1013.43,
+      "reverted": false,
+      "speed_mph_max": 25.71,
+      "speed_mph_min": 9.89,
+      "t": "2026-09-28T17:53:57.295Z"
+    },
+    {
+      "fuel_l_max": 1013.43,
+      "fuel_l_min": 1013.43,
+      "reverted": false,
+      "speed_mph_max": 25.4,
+      "speed_mph_min": 0.0,
+      "t": "2026-09-28T17:54:10.485Z"
+    },
+    {
+      "fuel_l_max": 1013.43,
+      "fuel_l_min": 1013.43,
+      "reverted": false,
+      "speed_mph_max": 19.83,
+      "speed_mph_min": 9.7,
+      "t": "2026-09-28T17:54:23.675Z"
+    },
+    {
+      "fuel_l_max": 1013.43,
+      "fuel_l_min": 1013.11,
+      "reverted": false,
+      "speed_mph_max": 42.31,
+      "speed_mph_min": 20.5,
+      "t": "2026-09-28T17:54:36.865Z"
+    },
+    {
+      "fuel_l_max": 1013.11,
+      "fuel_l_min": 1012.79,
+      "reverted": false,
+      "speed_mph_max": 41.34,
+      "speed_mph_min": 34.06,
+      "t": "2026-09-28T17:54:50.055Z"
+    },
+    {
+      "fuel_l_max": 1012.79,
+      "fuel_l_min": 1012.79,
+      "reverted": false,
+      "speed_mph_max": 48.76,
+      "speed_mph_min": 39.93,
+      "t": "2026-09-28T17:55:03.245Z"
+    },
+    {
+      "fuel_l_max": 1012.79,
+      "fuel_l_min": 1012.47,
+      "reverted": false,
+      "speed_mph_max": 55.52,
+      "speed_mph_min": 30.5,
+      "t": "2026-09-28T17:55:16.435Z"
+    },
+    {
+      "fuel_l_max": 1012.47,
+      "fuel_l_min": 1012.47,
+      "reverted": false,
+      "speed_mph_max": 29.3,
+      "speed_mph_min": 0.0,
+      "t": "2026-09-28T17:55:29.625Z"
+    },
+    {
+      "fuel_l_max": 1012.47,
+      "fuel_l_min": 1012.47,
+      "reverted": false,
+      "speed_mph_max": 26.29,
+      "speed_mph_min": 2.89,
+      "t": "2026-09-28T17:55:42.815Z"
+    },
+    {
+      "fuel_l_max": 1012.47,
+      "fuel_l_min": 1012.15,
+      "reverted": false,
+      "speed_mph_max": 31.25,
+      "speed_mph_min": 0.01,
+      "t": "2026-09-28T17:55:56.005Z"
+    },
+    {
+      "fuel_l_max": 1012.15,
+      "fuel_l_min": 1012.15,
+      "reverted": false,
+      "speed_mph_max": 16.39,
+      "speed_mph_min": 7.58,
+      "t": "2026-09-28T17:56:09.195Z"
+    },
+    {
+      "fuel_l_max": 1012.15,
+      "fuel_l_min": 1012.15,
+      "reverted": false,
+      "speed_mph_max": 29.95,
+      "speed_mph_min": 8.78,
+      "t": "2026-09-28T17:56:22.385Z"
+    },
+    {
+      "fuel_l_max": 1012.15,
+      "fuel_l_min": 1012.11,
+      "reverted": false,
+      "speed_mph_max": 11.57,
+      "speed_mph_min": 0.0,
+      "t": "2026-09-28T17:56:35.575Z"
+    },
+    {
+      "fuel_l_max": 1012.11,
+      "fuel_l_min": 1012.11,
+      "reverted": false,
+      "speed_mph_max": 3.11,
+      "speed_mph_min": 0.0,
+      "t": "2026-09-28T17:56:48.765Z"
+    },
+    {
+      "fuel_l_max": 1012.11,
+      "fuel_l_min": 1011.79,
+      "reverted": false,
+      "speed_mph_max": 24.02,
+      "speed_mph_min": 3.5,
+      "t": "2026-09-28T17:57:01.955Z"
+    },
+    {
+      "fuel_l_max": 1011.79,
+      "fuel_l_min": 1011.79,
+      "reverted": false,
+      "speed_mph_max": 17.69,
+      "speed_mph_min": 0.0,
+      "t": "2026-09-28T17:57:15.145Z"
+    },
+    {
+      "fuel_l_max": 1011.79,
+      "fuel_l_min": 1011.79,
+      "reverted": false,
+      "speed_mph_max": 29.44,
+      "speed_mph_min": 0.0,
+      "t": "2026-09-28T17:57:28.335Z"
+    },
+    {
+      "fuel_l_max": 1011.79,
+      "fuel_l_min": 1011.76,
+      "reverted": false,
+      "speed_mph_max": 16.69,
+      "speed_mph_min": 0.0,
+      "t": "2026-09-28T17:57:41.525Z"
+    },
+    {
+      "fuel_l_max": 1011.76,
+      "fuel_l_min": 1011.44,
+      "reverted": false,
+      "speed_mph_max": 33.38,
+      "speed_mph_min": 17.64,
+      "t": "2026-09-28T17:57:54.715Z"
+    },
+    {
+      "fuel_l_max": 1011.44,
+      "fuel_l_min": 1011.44,
+      "reverted": false,
+      "speed_mph_max": 24.45,
+      "speed_mph_min": 0.06,
+      "t": "2026-09-28T17:58:07.905Z"
+    }
+  ],
+  "windows": [
+    {
+      "from": "2026-09-28T17:49:05.649Z",
+      "kind": "pause",
+      "to": "2026-09-28T17:49:11.218Z"
+    },
+    {
+      "from": "2026-09-28T17:52:56.464Z",
+      "kind": "pause",
+      "to": "2026-09-28T17:53:08.251Z"
+    },
+    {
+      "from": "2026-09-28T17:53:47.662Z",
+      "kind": "pause",
+      "to": "2026-09-28T17:53:52.896Z"
+    }
+  ]
+}

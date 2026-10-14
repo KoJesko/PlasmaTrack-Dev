@@ -1,0 +1,23 @@
+{
+  "data": {
+    "by": {
+      "kind": "rules"
+    },
+    "game": "ets2",
+    "held_points": null,
+    "job_id": "R5025PTS",
+    "job_version": 1,
+    "outcome": "valid",
+    "player": {
+      "discord_user_id": "123456789012345678",
+      "display_name": "Example Driver",
+      "user_id": "usr_cy3x405w4v"
+    },
+    "points": 7.0,
+    "previous_outcome": null
+  },
+  "event_id": "evt_4fyz0r2etm",
+  "occurred_at": "2026-10-14T09:00:01.000Z",
+  "payload_version": 1,
+  "type": "job.scored"
+}

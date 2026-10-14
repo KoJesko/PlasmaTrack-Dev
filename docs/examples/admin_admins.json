@@ -1,0 +1,12 @@
+{
+  "items": [
+    {
+      "bootstrap": true,
+      "discord_user_id": "900000000000000001",
+      "display_name": "Player 0001",
+      "user_id": "usr_1naagzcgkq"
+    }
+  ],
+  "next_cursor": null,
+  "total": 1
+}

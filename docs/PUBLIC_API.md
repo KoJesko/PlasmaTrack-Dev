@@ -20,7 +20,7 @@ Issues a new token. It creates the user if this Discord ID has none, and revokes
 token (one active token per user).
 
 ```json
-{"display_name": "KoJesko"}
+{"display_name": "Example Driver"}
 ```
 
 `display_name` is used only when the user is created: 2–32 characters, the Discord display name
@@ -29,7 +29,7 @@ by default. Requires `Idempotency-Key`.
 **`201`:**
 ```json
 {
-  "user": {"user_id": "usr_8f3k2m", "discord_user_id": "123456789012345678", "display_name": "KoJesko", "created": true},
+  "user": {"user_id": "usr_8f3k2m", "discord_user_id": "123456789012345678", "display_name": "Example Driver", "created": true},
   "token": {
     "token_id": "tok_4hq9x2",
     "token": "pt_live_3uJ8sX0mQ2vR7kLp9wZc4bNf6tYh1aEd",
@@ -68,7 +68,7 @@ The client then gets `401` on upload and keeps its data locally until a new toke
 ### `PATCH /api/v1/players/{discord_id}`: change display name
 
 ```json
-{"display_name": "KoJesko"}
+{"display_name": "Example Driver"}
 ```
 
 Returns `200` with the player object (§2 below). Requires `Idempotency-Key`. Display names are
@@ -83,7 +83,7 @@ not unique.
   "linked": true,
   "user_id": "usr_8f3k2m",
   "discord_user_id": "123456789012345678",
-  "display_name": "KoJesko",
+  "display_name": "Example Driver",
   "singleplayer_division": false,
   "disabled": false,
   "truckersmp_accounts": [
@@ -164,7 +164,7 @@ The job summary plus:
 
 ```json
 {
-  "player": {"user_id": "usr_8f3k2m", "discord_user_id": "123456789012345678", "display_name": "KoJesko"},
+  "player": {"user_id": "usr_8f3k2m", "discord_user_id": "123456789012345678", "display_name": "Example Driver"},
   "planned_distance_km": 62,
   "speed_penalty_applied": false,
   "bonus": {"bonus_id": "bon_2kd8", "label": "Medical week", "kind": "multiplier", "amount": 1.5},
@@ -270,7 +270,7 @@ The job summary plus:
   "period_start": "2026-10-01T00:00:00.000Z", "period_end": "2026-11-01T00:00:00.000Z",
   "generated_at": "2026-10-14T09:15:00.000Z",
   "items": [
-    {"rank": 1, "user_id": "usr_8f3k2m", "discord_user_id": "123456789012345678", "display_name": "KoJesko",
+    {"rank": 1, "user_id": "usr_8f3k2m", "discord_user_id": "123456789012345678", "display_name": "Example Driver",
      "points": 97.4, "job_count": 5, "world_km": 158.2, "world_mi": 98.3, "game_km": 2850.0, "game_mi": 1770.9}
   ],
   "next_cursor": null, "total": 1

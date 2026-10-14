@@ -1,0 +1,11 @@
+{
+  "error": {
+    "code": "validation_failed",
+    "details": {
+      "fields": {
+        "reason": "required"
+      }
+    },
+    "message": "Some fields are invalid."
+  }
+}

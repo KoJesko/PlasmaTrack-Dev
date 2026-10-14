@@ -1,0 +1,78 @@
+{
+  "items": [
+    {
+      "age_s": 10,
+      "cargo": {
+        "id": "med_vaccine",
+        "name": "Medical Vaccines"
+      },
+      "delivered_at": "2026-10-14T09:00:01.000Z",
+      "destination": {
+        "city_id": "bergen",
+        "city_name": "Bergen"
+      },
+      "game": "ets2",
+      "game_km": 2512.0,
+      "held_points": 90.3,
+      "job_id": "2RG8X3RX",
+      "outcome": "pending_review",
+      "player": {
+        "discord_user_id": "123456789012345678",
+        "display_name": "Example Driver",
+        "user_id": "usr_cy3x405w4v"
+      },
+      "reasons": [
+        {
+          "code": "late_start",
+          "details": {},
+          "text": "Tracking started after the job was accepted."
+        }
+      ],
+      "source": {
+        "city_id": "honningsvag",
+        "city_name": "Honningsvåg"
+      },
+      "world_km": 145.33
+    },
+    {
+      "age_s": 10,
+      "cargo": {
+        "id": "tyres",
+        "name": "Tyres"
+      },
+      "delivered_at": "2026-10-14T09:00:01.000Z",
+      "destination": {
+        "city_id": "joliet",
+        "city_name": "Joliet"
+      },
+      "game": "ats",
+      "game_km": 171.0,
+      "held_points": null,
+      "job_id": "Y1SEMGH2",
+      "outcome": "invalid",
+      "player": {
+        "discord_user_id": "456789012345678901",
+        "display_name": "Lead Foot",
+        "user_id": "usr_z2vj46h8yd"
+      },
+      "reasons": [
+        {
+          "code": "overspeed_invalid",
+          "details": {
+            "invalid_over_mph": 125.0,
+            "over_invalid_s": 119.95,
+            "peak_mph": 160.0
+          },
+          "text": "Sustained speed over the invalid limit."
+        }
+      ],
+      "source": {
+        "city_id": "chicago",
+        "city_name": "Chicago"
+      },
+      "world_km": 8.55
+    }
+  ],
+  "next_cursor": null,
+  "total": 2
+}

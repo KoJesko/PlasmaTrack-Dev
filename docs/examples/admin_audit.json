@@ -1,0 +1,29 @@
+{
+  "items": [
+    {
+      "action": "job.approve",
+      "actor": {
+        "discord_user_id": "900000000000000001",
+        "display_name": "Player 0001"
+      },
+      "after": {
+        "held_points": null,
+        "outcome": "approved",
+        "points": 90.3
+      },
+      "at": "2026-10-14T09:00:17.000Z",
+      "audit_id": "aud_8",
+      "before": {
+        "held_points": 90.3,
+        "outcome": "pending_review",
+        "points": null
+      },
+      "reason": "Checked the route: fine.",
+      "target": {
+        "id": "2RG8X3RX",
+        "kind": "job"
+      }
+    }
+  ],
+  "next_cursor": null
+}

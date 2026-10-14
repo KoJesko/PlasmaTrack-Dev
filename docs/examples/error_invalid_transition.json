@@ -1,0 +1,10 @@
+{
+  "error": {
+    "code": "invalid_transition",
+    "details": {
+      "action": "restore",
+      "from": "approved"
+    },
+    "message": "A approved job cannot be restored."
+  }
+}

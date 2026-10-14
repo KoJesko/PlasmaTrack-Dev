@@ -1,0 +1,83 @@
+{
+  "bonus": null,
+  "cargo": {
+    "id": "med_vaccine",
+    "name": "Medical Vaccines"
+  },
+  "delivered_at": "2026-10-14T09:00:01.000Z",
+  "destination": {
+    "city_id": "bergen",
+    "city_name": "Bergen",
+    "company_id": "polarislines",
+    "company_name": "Polaris Lines"
+  },
+  "distance_by_scale_class": {
+    "city": {
+      "game_km": 18.43,
+      "game_mi": 11.45,
+      "world_km": 6.14,
+      "world_mi": 3.82
+    },
+    "nonstandard": {
+      "game_km": 0.0,
+      "game_mi": 0.0,
+      "world_km": 0.0,
+      "world_mi": 0.0
+    },
+    "one_to_one": {
+      "game_km": 0.0,
+      "game_mi": 0.0,
+      "world_km": 0.0,
+      "world_mi": 0.0
+    },
+    "road": {
+      "game_km": 972.45,
+      "game_mi": 604.25,
+      "world_km": 51.18,
+      "world_mi": 31.8
+    },
+    "unknown": {
+      "game_km": 0.0,
+      "game_mi": 0.0,
+      "world_km": 0.0,
+      "world_mi": 0.0
+    }
+  },
+  "game": "ets2",
+  "game_km": 2512.0,
+  "game_mi": 1560.88,
+  "held_points": 90.3,
+  "job_id": "2RG8X3RX",
+  "market": "cargo_market",
+  "multiplayer": {
+    "kind": "truckersmp",
+    "truckersmp": {
+      "account_id": 1234567,
+      "server_id": 30
+    }
+  },
+  "outcome": "pending_review",
+  "planned_distance_km": 2291,
+  "player": {
+    "discord_user_id": "123456789012345678",
+    "display_name": "Example Driver",
+    "user_id": "usr_cy3x405w4v"
+  },
+  "points": null,
+  "public_notes": [
+    {
+      "code": "under_review",
+      "text": "A moderator will check this job."
+    }
+  ],
+  "reported_delivered_at": "2026-10-14T01:03:43.006Z",
+  "source": {
+    "city_id": "honningsvag",
+    "city_name": "Honningsvåg",
+    "company_id": "renar",
+    "company_name": "Renar Logistik"
+  },
+  "speed_penalty_applied": false,
+  "world_km": 145.33,
+  "world_mi": 90.3
+}

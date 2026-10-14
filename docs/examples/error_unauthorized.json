@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "unauthorized",
+    "details": {},
+    "message": "Missing or unknown token."
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "data": {
+    "game": "ats",
+    "job_id": "048QW280",
+    "job_version": 1,
+    "player": {
+      "discord_user_id": "345678901234567890",
+      "display_name": "Unreleased Build",
+      "user_id": "usr_g6mgjss22e"
+    },
+    "reasons": [
+      "integrity"
+    ]
+  },
+  "event_id": "evt_r7eq9g19zj",
+  "occurred_at": "2026-10-14T09:00:01.000Z",
+  "payload_version": 1,
+  "type": "job.discarded"
+}

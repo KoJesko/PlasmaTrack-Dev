@@ -3,113 +3,15 @@
 
 mod common;
 
-use std::path::Path;
 
+use common::seed::*;
 use common::{block_on, TestHost, ADMIN, BOT_TOKEN, READ_TOKEN, WEBHOOK_SECRET};
-use pt_core::upload::{ManifestEntry, UploadChunk, UPLOAD_PROTOCOL};
 use pt_core::Game;
 use pt_server::http::Request;
 use pt_server::scorer::Scorer;
-use pt_server::{config, util, webhooks};
+use pt_server::{util, webhooks};
 use serde_json::{json, Value};
-use serde_json::value::RawValue;
 
-const PLAYER: &str = "123456789012345678";
-const PLUGIN_SHA: &str = "aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11aa11";
-const CLIENT_SHA: &str = "bb22bb22bb22bb22bb22bb22bb22bb22bb22bb22bb22bb22bb22bb22bb22bb22";
-
-fn fixture(name: &str) -> Vec<String> {
-    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../pt-replay/tests/fixtures/real").join(name);
-    pt_replay::read_lines(&path).unwrap()
-}
-
-fn manifest() -> Vec<ManifestEntry> {
-    vec![
-        ManifestEntry {
-            role: "plugin".into(),
-            path: r"C:\Steam\steamapps\common\American Truck Simulator\bin\win_x64\plugins\plasmatrack.dll".into(),
-            sha256: PLUGIN_SHA.into(),
-        },
-        ManifestEntry { role: "client_binary".into(), path: r"C:\PlasmaTrack\bin\plasmatrack-clientw.exe".into(), sha256: CLIENT_SHA.into() },
-        ManifestEntry { role: "config_file".into(), path: r"C:\Users\x\plasmatrack.toml".into(), sha256: "00".repeat(32) },
-    ]
-}
-
-/// Publishes the sample config and a release matching [`manifest`].
-fn publish(t: &TestHost) {
-    let r = t.call(t.admin("POST", "/api/v1/admin/config-versions").with_json(&json!({
-        "toml": config::SAMPLE_TOML, "make_current": true, "reason": "Initial config"})));
-    assert_eq!(r.status, 201, "{}", r.body_json());
-    let r = t.call(t.admin("POST", "/api/v1/admin/releases").with_json(&json!({
-        "release_version": "0.1.0", "platform": "windows", "reason": "Release 0.1.0",
-        "files": [{"role": "plugin", "path_pattern": "*/bin/win_x64/plugins/plasmatrack.dll", "sha256": PLUGIN_SHA},
-                  {"role": "client_binary", "path_pattern": "*/plasmatrack-clientw.exe", "sha256": CLIENT_SHA}]})));
-    assert_eq!(r.status, 201, "{}", r.body_json());
-}
-
-fn link(t: &TestHost) -> String {
-    let r = t.call(t.bot("POST", &format!("/api/v1/players/{PLAYER}/token")).with_header("idempotency-key", "link-1").with_json(&json!({"display_name": "KoJesko"})));
-    assert_eq!(r.status, 201, "{}", r.body_json());
-    r.body_json()["token"]["token"].as_str().unwrap().to_string()
-}
-
-/// Uploads a capture session by session, in chunks, like the client.
-fn upload(t: &TestHost, token: &str, lines: &[String], per_chunk: usize) {
-    let cfg = config::sample();
-    let mut sessions: Vec<(String, Vec<&String>)> = Vec::new();
-    for l in lines {
-        let v: Value = serde_json::from_str(l).unwrap();
-        let s = v["sess"].as_str().unwrap().to_string();
-        match sessions.iter_mut().find(|(x, _)| *x == s) {
-            Some((_, v)) => v.push(l),
-            None => sessions.push((s, vec![l])),
-        }
-    }
-    for (sess, frames) in sessions {
-        for c in frames.chunks(per_chunk) {
-            let seq = |l: &String| serde_json::from_str::<Value>(l).unwrap()["seq"].as_u64().unwrap_or(0);
-            let chunk = UploadChunk {
-                protocol: UPLOAD_PROTOCOL,
-                client_version: "0.1.0".into(),
-                sess: sess.clone(),
-                hello: None,
-                seq_from: c.iter().map(|l| seq(l)).filter(|s| *s > 0).min().unwrap_or(0),
-                seq_to: c.iter().map(|l| seq(l)).max().unwrap_or(0),
-                frames: c.iter().map(|l| RawValue::from_string(l.to_string()).unwrap()).collect(),
-                config_hash: cfg.integrity_hash(),
-                config: RawValue::from_string(cfg.integrity_canonical_json()).unwrap(),
-                manifest: manifest(),
-            };
-            let body = util::gzip(&serde_json::to_vec(&chunk).unwrap());
-            let mut req = Request::new("POST", "/api/v1/chunks")
-                .with_header("authorization", &format!("Bearer {token}"))
-                .with_header("content-type", "application/json")
-                .with_header("content-encoding", "gzip");
-            req.body = body;
-            let r = t.call(req);
-            assert_eq!(r.status, 200, "{}", r.body_json());
-            assert!(r.body_json()["accepted_through"].as_u64().unwrap() >= chunk.seq_to);
-        }
-    }
-}
-
-fn user_id(t: &TestHost) -> String {
-    t.q(&format!("SELECT user_id FROM users WHERE discord_user_id = '{PLAYER}'"))[0]["user_id"].as_str().unwrap().to_string()
-}
-
-fn score(t: &TestHost, game: Game) -> pt_server::scorer::Report {
-    let mut s = Scorer::new(&user_id(t), game);
-    block_on(s.process(t)).unwrap()
-}
-
-fn chicago(t: &TestHost) -> String {
-    publish(t);
-    let token = link(t);
-    upload(t, &token, &fixture("ats-chicago-clean-delivery.jsonl.gz"), 400);
-    let report = score(t, Game::Ats);
-    assert_eq!(report.jobs_stored, 1, "{report:?}");
-    t.q("SELECT job_id FROM jobs")[0]["job_id"].as_str().unwrap().to_string()
-}
 
 #[test]
 fn upload_score_and_read_a_real_delivery() {
@@ -243,7 +145,7 @@ fn auth_is_enforced() {
 #[test]
 fn token_replays_never_show_the_plaintext_again() {
     let t = TestHost::new();
-    let req = || t.bot("POST", &format!("/api/v1/players/{PLAYER}/token")).with_header("idempotency-key", "same").with_json(&json!({"display_name": "KoJesko"}));
+    let req = || t.bot("POST", &format!("/api/v1/players/{PLAYER}/token")).with_header("idempotency-key", "same").with_json(&json!({"display_name": "Example Driver"}));
     let first = t.call(req());
     assert_eq!(first.status, 201);
     assert!(first.body_json()["token"]["token"].as_str().unwrap().starts_with("pt_live_"));

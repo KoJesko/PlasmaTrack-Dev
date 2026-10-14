@@ -1,0 +1,18 @@
+{
+  "data": {
+    "game": "ats",
+    "happened_at": "2026-10-03T04:00:03.100Z",
+    "job_id": "Y1SEMGH2",
+    "kind": "speed_penalty_activated",
+    "recipient": {
+      "discord_user_id": "456789012345678901",
+      "user_id": "usr_z2vj46h8yd"
+    },
+    "text": "Tyres: you drove over 105 mph for too long. This job's distance now counts at 0.85×.",
+    "title": "Speed penalty"
+  },
+  "event_id": "evt_qhax521nnm",
+  "occurred_at": "2026-10-14T09:00:01.000Z",
+  "payload_version": 1,
+  "type": "player.notification"
+}

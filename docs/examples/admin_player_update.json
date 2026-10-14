@@ -1,0 +1,38 @@
+{
+  "disabled": false,
+  "discord_user_id": "123456789012345678",
+  "display_name": "Example Driver",
+  "linked": true,
+  "role": "player",
+  "singleplayer_division": true,
+  "stats": {
+    "ats": {
+      "game_km": 70.25,
+      "game_mi": 43.65,
+      "job_count": 1,
+      "pending_review_count": 0,
+      "points": 3.6,
+      "world_km": 5.89,
+      "world_mi": 3.66
+    },
+    "ets2": {
+      "game_km": 2638.7,
+      "game_mi": 1639.61,
+      "job_count": 3,
+      "pending_review_count": 0,
+      "points": 195.1,
+      "world_km": 157.04,
+      "world_mi": 97.58
+    }
+  },
+  "truckersmp_accounts": [
+    {
+      "account_id": 1234567,
+      "first_seen_at": "2026-10-14T00:21:12.047Z",
+      "job_count": 3,
+      "last_seen_at": "2026-10-14T01:28:19.052Z",
+      "profile_url": "https://truckersmp.com/user/1234567"
+    }
+  ],
+  "user_id": "usr_cy3x405w4v"
+}

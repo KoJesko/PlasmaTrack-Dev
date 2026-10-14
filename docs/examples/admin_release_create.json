@@ -1,0 +1,13 @@
+{
+  "created_at": "2026-10-14T09:00:38.000Z",
+  "files": [
+    {
+      "path_pattern": "*/plugins/plasmatrack.dll",
+      "role": "plugin",
+      "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    }
+  ],
+  "platform": "windows",
+  "release_id": "rel_0_2_0_windows",
+  "release_version": "0.2.0"
+}
