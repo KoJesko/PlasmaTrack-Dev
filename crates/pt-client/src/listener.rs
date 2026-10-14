@@ -12,6 +12,7 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 
 use crate::db::{Db, Incoming};
+use crate::live::Feed;
 use crate::log;
 use crate::status::SharedStatus;
 
@@ -20,7 +21,8 @@ use crate::status::SharedStatus;
 pub const FLUSH_INTERVAL: Duration = Duration::from_millis(200);
 pub const MAX_BATCH: usize = 1000;
 
-pub async fn serve(listener: TcpListener, db: Arc<Mutex<Db>>, status: SharedStatus) {
+/// `feed` gets every newly stored frame for the live results.
+pub async fn serve(listener: TcpListener, db: Arc<Mutex<Db>>, status: SharedStatus, feed: Option<Feed>) {
     loop {
         match listener.accept().await {
             Ok((stream, peer)) => {
@@ -29,10 +31,11 @@ pub async fn serve(listener: TcpListener, db: Arc<Mutex<Db>>, status: SharedStat
                 }
                 let db = db.clone();
                 let status = status.clone();
+                let feed = feed.clone();
                 tokio::spawn(async move {
                     status.lock().expect("status").plugin_connections += 1;
                     log!("plugin connected from {peer}");
-                    if let Err(e) = handle(stream, db, status.clone()).await {
+                    if let Err(e) = handle(stream, db, status.clone(), feed).await {
                         log!("plugin connection error: {e}");
                     }
                     status.lock().expect("status").plugin_connections -= 1;
@@ -51,6 +54,7 @@ async fn flush(
     pending: &mut Vec<Incoming>,
     db: &Arc<Mutex<Db>>,
     status: &SharedStatus,
+    feed: &Option<Feed>,
     writer: &mut tokio::net::tcp::OwnedWriteHalf,
 ) -> std::io::Result<()> {
     if pending.is_empty() {
@@ -60,10 +64,17 @@ async fn flush(
     let count = batch.len() as u64;
     let last = batch.last().map(|m| (m.env.sess.clone(), m.env.kind.clone()));
     let db = db.clone();
-    let acks = tokio::task::spawn_blocking(move || db.lock().expect("db").store(&batch, crate::now_ms()))
-        .await
-        .map_err(std::io::Error::other)?
-        .map_err(std::io::Error::other)?;
+    let now = crate::now_ms();
+    let (acks, batch) = tokio::task::spawn_blocking(move || {
+        let stored = db.lock().expect("db").store_fresh(&batch, now);
+        stored.map(|(acks, fresh)| (acks, fresh.into_iter().map(|i| batch[i].raw.clone()).collect::<Vec<_>>()))
+    })
+    .await
+    .map_err(std::io::Error::other)?
+    .map_err(std::io::Error::other)?;
+    if let Some(feed) = feed {
+        feed.send(now, batch);
+    }
     // Only after the commit: acknowledge what is now durable.
     let mut out = Vec::new();
     for (sess, seq) in &acks {
@@ -80,7 +91,7 @@ async fn flush(
     Ok(())
 }
 
-async fn handle(stream: TcpStream, db: Arc<Mutex<Db>>, status: SharedStatus) -> std::io::Result<()> {
+async fn handle(stream: TcpStream, db: Arc<Mutex<Db>>, status: SharedStatus, feed: Option<Feed>) -> std::io::Result<()> {
     stream.set_nodelay(true)?;
     let (mut reader, mut writer) = stream.into_split();
     let mut decoder = FrameDecoder::new();
@@ -113,22 +124,22 @@ async fn handle(stream: TcpStream, db: Arc<Mutex<Db>>, status: SharedStatus) -> 
                         },
                         Ok(None) => break,
                         Err(e) => {
-                            flush(&mut pending, &db, &status, &mut writer).await?;
+                            flush(&mut pending, &db, &status, &feed, &mut writer).await?;
                             return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, e));
                         }
                     }
                 }
                 if pending.len() >= MAX_BATCH {
-                    flush(&mut pending, &db, &status, &mut writer).await?;
+                    flush(&mut pending, &db, &status, &feed, &mut writer).await?;
                 }
             }
             _ = tick.tick() => {
-                flush(&mut pending, &db, &status, &mut writer).await?;
+                flush(&mut pending, &db, &status, &feed, &mut writer).await?;
             }
         }
     }
     // Connection closed: persist what arrived (it will be re-sent by the plugin
     // anyway, because it was never acknowledged).
-    let _ = flush(&mut pending, &db, &status, &mut writer).await;
+    let _ = flush(&mut pending, &db, &status, &feed, &mut writer).await;
     Ok(())
 }

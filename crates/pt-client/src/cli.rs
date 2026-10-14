@@ -29,7 +29,8 @@ use tokio::sync::Notify;
 use crate::db::Db;
 use crate::status::{SharedStatus, Status};
 use crate::uploader::UploaderConfig;
-use crate::{listener, log, manifest, paths, setup, status, steam, uploader};
+use crate::live::{self, Alert, LiveJobs};
+use crate::{gamelog, listener, log, manifest, paths, setup, status, steam, uploader};
 
 /// Log file of the windowless client, in the data directory.
 pub const LOG_FILE: &str = "client.log";
@@ -98,7 +99,11 @@ fn write_inis(cfg: &Config, installs: &[steam::GameInstall]) {
 pub struct Hooks {
     pub shutdown: Arc<Notify>,
     pub live: Arc<OnceLock<Live>>,
+    /// Shows a desktop notification (title, text); the tray sets it.
+    pub notify: Arc<OnceLock<NotifyFn>>,
 }
+
+pub type NotifyFn = Box<dyn Fn(&str, &str) + Send + Sync>;
 
 pub struct Live {
     pub status: SharedStatus,
@@ -166,14 +171,23 @@ async fn run(args: Args, hooks: Hooks) -> Result<(), RunError> {
     }));
     let manifest = Arc::new(Mutex::new(manifest));
 
+    // Provisional results and alerts (PLAN §6b), rebuilt from what is stored.
+    let live_jobs = Arc::new(Mutex::new(LiveJobs::new(cfg.clone())));
+    let (alert_tx, alert_rx) = tokio::sync::mpsc::unbounded_channel();
+    let since = crate::now_ms() - (cfg.timeline.reopen_window_wall_h * 3_600_000.0) as i64;
+    let feed = live::spawn_worker(live_jobs.clone(), db.clone(), since, alert_tx);
+    tokio::spawn(show_alerts(alert_rx, cfg.clone(), hooks.notify.clone()));
+    let libraries = steam::library_folders(&steam::steam_roots());
+    tokio::spawn(gamelog::watch(db.clone(), Some(feed.clone()), libraries));
+
     log!("waiting for the plugin on {ip}:{}", cfg.local.port);
-    tokio::spawn(listener::serve(plugin_listener, db.clone(), status.clone()));
+    tokio::spawn(listener::serve(plugin_listener, db.clone(), status.clone(), Some(feed)));
 
     let status_addr = SocketAddr::new(ip, cfg.local.status_port);
     {
-        let (status, db, shutdown) = (status.clone(), db.clone(), hooks.shutdown.clone());
+        let (status, db, shutdown, jobs) = (status.clone(), db.clone(), hooks.shutdown.clone(), live_jobs.clone());
         tokio::spawn(async move {
-            if let Err(e) = status::serve(status_addr, status, db, shutdown).await {
+            if let Err(e) = status::serve(status_addr, status, db, shutdown, Some(jobs)).await {
                 log!("status page unavailable: {e}");
             }
         });
@@ -210,6 +224,26 @@ async fn run(args: Args, hooks: Hooks) -> Result<(), RunError> {
     }
     log!("shutting down");
     Ok(())
+}
+
+/// Shows each alert after its random delay (PLAN decision 10), as a desktop
+/// notification where there is a tray, and always in the log.
+async fn show_alerts(mut rx: tokio::sync::mpsc::UnboundedReceiver<Alert>, cfg: Config, notify: Arc<OnceLock<NotifyFn>>) {
+    while let Some(alert) = rx.recv().await {
+        if !cfg.notifications.enabled {
+            continue;
+        }
+        let delay = live::alert_delay(&cfg);
+        let (cfg, notify) = (cfg.clone(), notify.clone());
+        tokio::spawn(async move {
+            tokio::time::sleep(delay).await;
+            let (title, text) = alert.message(&cfg);
+            log!("{title}: {text}");
+            if let Some(show) = notify.get() {
+                show(&title, &text);
+            }
+        });
+    }
 }
 
 /// Tooltip and tray menu lines: game connection, then uploads.
@@ -275,6 +309,8 @@ fn run_windowless(args: Args) -> Result<(), String> {
         quit: Box::new(move || shutdown.notify_one()),
     };
     tray::run(cb, move |exit| {
+        let notifier = exit.notifier();
+        let _ = hooks.notify.set(Box::new(move |title: &str, text: &str| notifier.show(title, text)));
         std::thread::spawn(move || {
             match rt.block_on(run(args, hooks)) {
                 Ok(()) => {}

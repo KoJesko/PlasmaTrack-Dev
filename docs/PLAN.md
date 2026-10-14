@@ -454,11 +454,12 @@ The fingerprint has two parts:
 
 **Profiles are separate timelines.** Different profiles have different jobs, trucks and progress, so all timeline state (§5) is keyed by (player, game, **profile_key**).
 - A profile switch is never treated as a save load within one timeline. The job of the profile you left stays suspended in its own timeline.
-- **The SDK has no profile identifier** (§3), so `profile_key` must come from outside the SDK. The client will read candidate sources, and the captures (§9) decide which is reliable:
-  - the game's own log file;
-  - which profile folder under the game's documents directory is being written.
-  - Neither is confirmed yet. Under Proton these files live inside the Wine prefix, and the client will locate them.
-- Until confirmed, the key is `unknown`, and profile switches fall back to load handling.
+- **The SDK has no profile identifier** (§3), so `profile_key` comes from the game's own log (decided 2026-10-14, from the ATS and ETS2 captures):
+  - Every world load writes `Loading save. … path: …/(home|steam)/profiles/<HEX>/save/…` to `Documents/<game>/game.log.txt`. `<HEX>` is the profile name in hexadecimal.
+  - The key is 16 hex digits of SHA-256 over `"{home|steam}/{HEX}"`, so **the profile name never leaves the PC**, and a local and a Steam Cloud profile of the same name differ.
+  - The client follows both games' logs (under Proton: inside each library's `compatdata` prefix). At each `Loading save` it writes a `profile` note into the running session, placed after the newest plugin frame (`docs/UPLOAD_API.md`).
+  - The note reaches the timeline inside the load's bracket, before the first sample of the loaded world: loading takes seconds and the log is read every 250 ms.
+- Frames before the first note go to the `unknown` profile.
 
 **Multiplayer is tracked** in every form: TruckersMP, other multiplayer mods, and Convoy.
 - **Convoy** is detected from `multiplayer.time.offset ≠ 0` (common_channels.h:287-300) **while no TruckersMP module is loaded**. The Sioux Falls TruckersMP session reported an offset of about 24,136,737, while the first TruckersMP capture reported 0, so the offset alone does not mean Convoy.
@@ -473,7 +474,7 @@ The fingerprint has two parts:
 - **Singleplayer Division:** a user flag, set through the admin API. For these users, jobs detected as TruckersMP are **discarded**, with the reason shown. Convoy and other multiplayer remain allowed.
 - Each job stores its multiplayer kind.
 
-**Player notifications** (desktop notification from the client, via `notify-rust`, MIT/Apache):
+**Player notifications** (desktop notification from the client: a notification from its tray icon, which Windows 10/11 shows as a toast; no extra dependency. The console client and Linux only log them):
 - Sent when a delivery is marked **Invalid**.
 - Sent when the **0.85× speed penalty activates** during a job.
 - Each notification fires after a uniformly random delay between 5 and 30 s, drawn at microsecond resolution from the OS random source (`[notifications]`).
@@ -650,7 +651,7 @@ I cannot run the games in this session, so the following steps need a real game 
      - `pt-replay` provides the CLI plus `--trim-to` for fixtures.
      - 38 simulated fixtures in `crates/pt-replay/tests/scenarios.rs` cover every bullet below plus decisions 20–23.
      - 4 real-capture regressions in `tests/real_captures.rs` pass (Chicago 3.6 points, Sioux Falls 36.1, six-load TruckersMP session, the tampered 1000 km delivery → review).
-     - **Remaining:** client-side provisional results and notifications, and `profile_key` from `game.log.txt`.
+     - **Done (2026-10-14):** `profile_key` from `game.log.txt`, live provisional results with the two alerts, and the job list on the status page (`docs/CLIENT.md`).
 4. **Server APIs.** Ingest, scoring, rule 0, auth, the public read API, the admin API and webhooks for the Discord bot, audit log, recalculation, and OpenAPI contract tests.
 5. **Route projection and GeoJSON endpoint.** Rendering route images happens in the bot repo.
 

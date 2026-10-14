@@ -15,7 +15,9 @@
 
 pub mod cli;
 pub mod db;
+pub mod gamelog;
 pub mod listener;
+pub mod live;
 pub mod manifest;
 pub mod paths;
 pub mod setup;

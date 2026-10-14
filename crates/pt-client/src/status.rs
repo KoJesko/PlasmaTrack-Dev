@@ -13,6 +13,7 @@ use serde::Serialize;
 use tokio::sync::Notify;
 
 use crate::db::{Db, DbStats};
+use crate::live::{JobView, LiveJobs};
 
 #[derive(Debug, Clone, Default, Serialize)]
 pub struct Status {
@@ -38,6 +39,7 @@ struct AppState {
     status: SharedStatus,
     db: Arc<Mutex<Db>>,
     shutdown: Arc<Notify>,
+    jobs: Option<Arc<Mutex<LiveJobs>>>,
 }
 
 #[derive(Serialize)]
@@ -57,12 +59,69 @@ async fn status_json(State(state): State<AppState>) -> impl IntoResponse {
     Json(report(&state))
 }
 
+fn jobs(state: &AppState) -> Vec<JobView> {
+    state.jobs.as_ref().map(|j| j.lock().expect("live lock").jobs()).unwrap_or_default()
+}
+
+/// Provisional results (the server decides; PLAN §6b).
+async fn jobs_json(State(state): State<AppState>) -> impl IntoResponse {
+    Json(jobs(&state))
+}
+
+fn when(ms: i64) -> String {
+    let age_s = (crate::now_ms() - ms).max(0) / 1000;
+    match age_s {
+        s if s < 120 => format!("{s} s ago"),
+        s if s < 7200 => format!("{} min ago", s / 60),
+        s if s < 172_800 => format!("{} h ago", s / 3600),
+        s => format!("{} days ago", s / 86_400),
+    }
+}
+
+fn job_rows(list: &[JobView]) -> String {
+    if list.is_empty() {
+        return "<p>No jobs yet. Jobs appear here as you drive.</p>".into();
+    }
+    let mut rows = String::from(
+        "<table class=jobs><tr><th>Started</th><th>Game</th><th>Cargo</th><th>Route</th><th>State</th>
+         <th>Result</th><th>Points</th><th>1:1 km</th><th>Game km</th><th>Notes</th></tr>",
+    );
+    for j in list {
+        let game = match j.game {
+            pt_core::Game::Ets2 => "ETS2",
+            pt_core::Game::Ats => "ATS",
+        };
+        let enum_name = |v: serde_json::Value| v.as_str().unwrap_or_default().replace('_', " ");
+        let mut notes = j.reasons.join(", ");
+        if j.start == pt_core::timeline::StartKind::LateStart && !notes.contains("late_start") {
+            notes = if notes.is_empty() { "late start".into() } else { format!("late start, {notes}") };
+        }
+        rows.push_str(&format!(
+            "<tr><td>{}</td><td>{game}</td><td>{}</td><td>{} → {}</td><td>{}</td><td>{}</td><td>{:.1}</td>
+             <td>{:.1}</td><td>{:.0}</td><td>{}</td></tr>",
+            when(j.started_ms),
+            esc(&j.cargo),
+            esc(&j.source_city),
+            esc(&j.destination_city),
+            enum_name(serde_json::to_value(j.state).unwrap_or_default()),
+            enum_name(serde_json::to_value(j.outcome).unwrap_or_default()),
+            j.points,
+            j.world_km,
+            j.game_km,
+            esc(&notes.replace('_', " ")),
+        ));
+    }
+    rows.push_str("</table>");
+    rows
+}
+
 fn esc(s: &str) -> String {
     s.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;").replace('"', "&quot;")
 }
 
 async fn status_page(State(state): State<AppState>) -> impl IntoResponse {
     let r = report(&state);
+    let job_table = job_rows(&jobs(&state));
     let json = serde_json::to_value(&r).unwrap_or_default();
     let mut rows = String::new();
     if let Some(obj) = json.as_object() {
@@ -75,10 +134,13 @@ async fn status_page(State(state): State<AppState>) -> impl IntoResponse {
         }
     }
     Html(format!(
-        "<!doctype html><html><head><meta charset=utf-8><meta http-equiv=refresh content=2>\
+        "<!doctype html><html><head><meta charset=utf-8><meta http-equiv=refresh content=5>\
          <title>PlasmaTrack client</title><style>body{{font-family:system-ui,sans-serif;margin:16px}}\
-         th{{text-align:left;padding-right:16px}}td{{font-family:monospace}}</style></head>\
-         <body><h1>PlasmaTrack client</h1><table>{rows}</table></body></html>"
+         th{{text-align:left;padding-right:16px}}td{{font-family:monospace}}\
+         .jobs td,.jobs th{{padding:2px 12px 2px 0;font-family:system-ui,sans-serif}}</style></head>\
+         <body><h1>PlasmaTrack client</h1><h2>Jobs</h2>\
+         <p>Provisional: the server's result is the one that counts.</p>{job_table}\
+         <h2>Client</h2><table>{rows}</table></body></html>"
     ))
 }
 
@@ -97,17 +159,24 @@ async fn quit(State(state): State<AppState>, headers: HeaderMap) -> StatusCode {
     StatusCode::NO_CONTENT
 }
 
-pub fn router(status: SharedStatus, db: Arc<Mutex<Db>>, shutdown: Arc<Notify>) -> Router {
+pub fn router(status: SharedStatus, db: Arc<Mutex<Db>>, shutdown: Arc<Notify>, jobs: Option<Arc<Mutex<LiveJobs>>>) -> Router {
     Router::new()
         .route("/", get(status_page))
         .route("/status.json", get(status_json))
+        .route("/jobs.json", get(jobs_json))
         .route("/quit", post(quit))
-        .with_state(AppState { status, db, shutdown })
+        .with_state(AppState { status, db, shutdown, jobs })
 }
 
 /// Serves the status page until the task is dropped. Only loopback addresses
 /// are accepted by the config validation.
-pub async fn serve(addr: SocketAddr, status: SharedStatus, db: Arc<Mutex<Db>>, shutdown: Arc<Notify>) -> std::io::Result<()> {
+pub async fn serve(
+    addr: SocketAddr,
+    status: SharedStatus,
+    db: Arc<Mutex<Db>>,
+    shutdown: Arc<Notify>,
+    jobs: Option<Arc<Mutex<LiveJobs>>>,
+) -> std::io::Result<()> {
     let listener = tokio::net::TcpListener::bind(addr).await?;
-    axum::serve(listener, router(status, db, shutdown)).await
+    axum::serve(listener, router(status, db, shutdown, jobs)).await
 }

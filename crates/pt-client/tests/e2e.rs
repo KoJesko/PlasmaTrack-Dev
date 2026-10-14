@@ -98,7 +98,7 @@ async fn plugin_to_client_to_server() {
     // Real listener on an ephemeral loopback port.
     let plugin_listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let plugin_addr = plugin_listener.local_addr().unwrap();
-    tokio::spawn(pt_client::listener::serve(plugin_listener, db.clone(), status.clone()));
+    tokio::spawn(pt_client::listener::serve(plugin_listener, db.clone(), status.clone(), None));
 
     // Fake server.
     let srv = Arc::new(Mutex::new(FakeServer::default()));

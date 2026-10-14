@@ -89,6 +89,24 @@ pub enum ReviewReason {
     NoDeliveredDistance,
 }
 
+impl ReviewReason {
+    /// The stable code (docs/ADMIN_API.md §2), the same as the serde tag.
+    pub fn code(&self) -> &'static str {
+        match self {
+            ReviewReason::LongJob { .. } => "long_job",
+            ReviewReason::FastAverage { .. } => "fast_average",
+            ReviewReason::FastAverageGame { .. } => "fast_average_game",
+            ReviewReason::NegativeFuel { .. } => "negative_fuel",
+            ReviewReason::FuelJump { .. } => "fuel_jump",
+            ReviewReason::Gap { .. } => "gap",
+            ReviewReason::LateStart => "late_start",
+            ReviewReason::CargoSwitch => "cargo_switch",
+            ReviewReason::DistanceMismatch { .. } => "distance_mismatch",
+            ReviewReason::NoDeliveredDistance => "no_delivered_distance",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct SpeedStats {
     pub peak_mph: f64,
@@ -521,5 +539,24 @@ mod tests {
         assert!(glob("d*n*e", "dynamite"));
         assert!(!glob("dyna", "dynamite"));
         assert!(!glob("x*", "dynamite"));
+    }
+
+    #[test]
+    fn review_codes_match_the_serialised_tag() {
+        let all = [
+            ReviewReason::LongJob { world_km: 1.0 },
+            ReviewReason::FastAverage { world_km: 1.0, driving_min: 1.0, world_km_per_min: 1.0 },
+            ReviewReason::FastAverageGame { world_km: 1.0, game_clock_min: 1.0, world_km_per_min: 1.0 },
+            ReviewReason::NegativeFuel { run: 1, used_l: -1.0 },
+            ReviewReason::FuelJump { wall_ms: 1, litres: 1.0 },
+            ReviewReason::Gap { count: 1 },
+            ReviewReason::LateStart,
+            ReviewReason::CargoSwitch,
+            ReviewReason::DistanceMismatch { delivered_km: 1.0, tracked_km: 1.0, tolerance_km: 1.0 },
+            ReviewReason::NoDeliveredDistance,
+        ];
+        for r in all {
+            assert_eq!(serde_json::to_value(&r).unwrap()["reason"], r.code());
+        }
     }
 }

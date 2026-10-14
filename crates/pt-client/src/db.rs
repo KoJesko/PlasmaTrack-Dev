@@ -25,6 +25,8 @@ pub struct PendingChunk {
     pub seq_to: u64,
     pub frames: Vec<String>,
     pub hello: Option<String>,
+    /// Client notes placed among `frames`; marked uploaded with the chunk.
+    pub note_ids: Vec<i64>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize)]
@@ -63,6 +65,17 @@ CREATE TABLE IF NOT EXISTS snapshots (
     received_ms INTEGER NOT NULL,
     json        TEXT    NOT NULL
 );
+-- Client-inserted frames (profile changes, PLAN §6b). They carry no plugin seq;
+-- each belongs right after plugin frame `after_seq` of its session.
+CREATE TABLE IF NOT EXISTS notes (
+    id        INTEGER PRIMARY KEY,
+    sess      TEXT    NOT NULL,
+    after_seq INTEGER NOT NULL,
+    json      TEXT    NOT NULL,
+    uploaded  INTEGER NOT NULL DEFAULT 0,
+    added_ms  INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS notes_pending ON notes (uploaded, sess, after_seq);
 CREATE TABLE IF NOT EXISTS uploads (
     id       INTEGER PRIMARY KEY,
     at_ms    INTEGER NOT NULL,
@@ -94,7 +107,14 @@ impl Db {
     /// Persists a batch in one transaction and returns, per session, the highest
     /// seq now stored. The caller acknowledges exactly those to the plugin.
     pub fn store(&mut self, batch: &[Incoming], now_ms: i64) -> Result<BTreeMap<String, u64>> {
+        self.store_fresh(batch, now_ms).map(|(acks, _)| acks)
+    }
+
+    /// [`Db::store`], plus the indices of the frames that were new (a plugin
+    /// replays unacknowledged frames after a reconnect).
+    pub fn store_fresh(&mut self, batch: &[Incoming], now_ms: i64) -> Result<(BTreeMap<String, u64>, Vec<usize>)> {
         let mut acks: BTreeMap<String, u64> = BTreeMap::new();
+        let mut fresh = Vec::new();
         let tx = self.conn.transaction()?;
         {
             let mut touch = tx.prepare_cached(
@@ -104,7 +124,7 @@ impl Db {
             let mut frame = tx.prepare_cached(
                 "INSERT OR IGNORE INTO frames (sess, seq, kind, json, received_ms) VALUES (?1, ?2, ?3, ?4, ?5)",
             )?;
-            for m in batch {
+            for (i, m) in batch.iter().enumerate() {
                 let env = &m.env;
                 touch.execute(params![env.sess, now_ms])?;
                 match (env.kind.as_str(), env.seq) {
@@ -118,7 +138,9 @@ impl Db {
                         )?;
                     }
                     (kind, Some(seq)) => {
-                        frame.execute(params![env.sess, seq as i64, kind, m.raw, now_ms])?;
+                        if frame.execute(params![env.sess, seq as i64, kind, m.raw, now_ms])? == 1 {
+                            fresh.push(i);
+                        }
                         if kind == "init" {
                             if let Some(game) = serde_json::from_str::<serde_json::Value>(&m.raw)
                                 .ok()
@@ -135,7 +157,7 @@ impl Db {
             }
         }
         tx.commit()?;
-        Ok(acks)
+        Ok((acks, fresh))
     }
 
     /// Sessions that still have frames to upload, oldest first.
@@ -156,30 +178,103 @@ impl Db {
             "SELECT seq, json FROM frames WHERE sess = ?1 AND uploaded = 0 ORDER BY seq LIMIT ?2",
         )?;
         let mut rows = st.query(params![sess, max_frames as i64])?;
-        let mut frames = Vec::new();
-        let (mut from, mut to, mut bytes) = (0u64, 0u64, 0usize);
+        let mut plugin: Vec<(u64, String)> = Vec::new();
+        let mut bytes = 0usize;
         while let Some(r) = rows.next()? {
             let seq: i64 = r.get(0)?;
             let json: String = r.get(1)?;
-            if !frames.is_empty() && bytes + json.len() > max_bytes {
+            if !plugin.is_empty() && bytes + json.len() > max_bytes {
                 break;
             }
-            if frames.is_empty() {
-                from = seq as u64;
-            }
-            to = seq as u64;
             bytes += json.len();
-            frames.push(json);
+            plugin.push((seq as u64, json));
         }
-        if frames.is_empty() {
+        let (Some(&(from, _)), Some(&(to, _))) = (plugin.first(), plugin.last()) else {
             return Ok(None);
+        };
+        // Notes go right after the frame they followed (or, when that frame was
+        // dropped by the plugin or already uploaded, before the next one).
+        let mut st = self.conn.prepare_cached(
+            "SELECT id, after_seq, json FROM notes WHERE sess = ?1 AND uploaded = 0 AND after_seq <= ?2 ORDER BY after_seq, id",
+        )?;
+        let notes: Vec<(i64, u64, String)> = st
+            .query_map(params![sess, to as i64], |r| Ok((r.get(0)?, r.get::<_, i64>(1)? as u64, r.get(2)?)))?
+            .collect::<Result<_>>()?;
+        let mut frames = Vec::with_capacity(plugin.len() + notes.len());
+        let mut note_ids = Vec::with_capacity(notes.len());
+        let mut pending_notes = notes.into_iter().peekable();
+        for (seq, json) in plugin {
+            while let Some((id, _, note)) = pending_notes.next_if(|n| n.1 < seq) {
+                note_ids.push(id);
+                frames.push(note);
+            }
+            frames.push(json);
+            while let Some((id, _, note)) = pending_notes.next_if(|n| n.1 == seq) {
+                note_ids.push(id);
+                frames.push(note);
+            }
         }
         let hello: Option<String> = self
             .conn
             .query_row("SELECT hello FROM sessions WHERE sess = ?1", params![sess], |r| r.get(0))
             .optional()?
             .flatten();
-        Ok(Some(PendingChunk { sess: sess.to_owned(), seq_from: from, seq_to: to, frames, hello }))
+        Ok(Some(PendingChunk { sess: sess.to_owned(), seq_from: from, seq_to: to, frames, hello, note_ids }))
+    }
+
+    /// Records a client note (e.g. a profile change) at the current end of
+    /// `sess`: it follows the newest plugin frame stored so far. Returns its JSON.
+    pub fn add_note(&mut self, sess: &str, mut note: serde_json::Value, now_ms: i64) -> Result<String> {
+        let after: i64 =
+            self.conn.query_row("SELECT COALESCE(MAX(seq), 0) FROM frames WHERE sess = ?1", params![sess], |r| r.get(0))?;
+        note["sess"] = sess.into();
+        note["after_seq"] = after.into();
+        let json = note.to_string();
+        self.conn.execute("INSERT INTO notes (sess, after_seq, json, added_ms) VALUES (?1, ?2, ?3, ?4)", params![sess, after, json, now_ms])?;
+        Ok(json)
+    }
+
+    pub fn mark_notes_uploaded(&mut self, ids: &[i64]) -> Result<()> {
+        let tx = self.conn.transaction()?;
+        for id in ids {
+            tx.execute("UPDATE notes SET uploaded = 1 WHERE id = ?1", params![id])?;
+        }
+        tx.commit()
+    }
+
+    /// The newest session of a game (`game_id` as the plugin reports it) and when
+    /// a frame of it last arrived.
+    pub fn latest_session(&self, game_id: &str) -> Result<Option<(String, i64)>> {
+        self.conn
+            .query_row(
+                "SELECT sess, last_seen_ms FROM sessions WHERE game_id = ?1 ORDER BY first_seen_ms DESC, sess DESC LIMIT 1",
+                params![game_id],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .optional()
+    }
+
+    /// Sessions last seen at or after `since_ms`, oldest first, with their game.
+    pub fn sessions_since(&self, since_ms: i64) -> Result<Vec<(String, Option<String>)>> {
+        let mut st = self
+            .conn
+            .prepare("SELECT sess, game_id FROM sessions WHERE last_seen_ms >= ?1 ORDER BY first_seen_ms, sess")?;
+        let rows = st.query_map(params![since_ms], |r| Ok((r.get(0)?, r.get(1)?)))?;
+        rows.collect()
+    }
+
+    /// Every frame and note of `sess` stored before `before_ms`, in stream order
+    /// (for rebuilding the live timeline after a restart).
+    pub fn session_stream(&self, sess: &str, before_ms: i64) -> Result<Vec<String>> {
+        let mut st = self.conn.prepare(
+            "SELECT json FROM (
+                 SELECT seq AS k, 0 AS n, json FROM frames WHERE sess = ?1 AND received_ms < ?2
+                 UNION ALL
+                 SELECT after_seq AS k, id AS n, json FROM notes WHERE sess = ?1 AND added_ms < ?2
+             ) ORDER BY k, n",
+        )?;
+        let rows = st.query_map(params![sess, before_ms], |r| r.get(0))?;
+        rows.collect()
     }
 
     /// Marks every frame of `sess` up to `through_seq` as accepted by the server.
@@ -282,6 +377,41 @@ mod tests {
         assert!(db.next_chunk(S1, 100, usize::MAX).unwrap().is_none());
         assert_eq!(db.pending_sessions().unwrap(), vec![S2.to_string()]);
         assert!(db.next_chunk(S2, 100, usize::MAX).unwrap().unwrap().hello.is_none());
+    }
+
+    #[test]
+    fn notes_ride_in_stream_order() {
+        let mut db = Db::open_in_memory().unwrap();
+        let note = |db: &mut Db, k: &str| db.add_note(S1, serde_json::json!({"v": 1, "kind": "profile", "profile_key": k}), 1).unwrap();
+        let first = note(&mut db, "a"); // before any frame
+        db.store(&[msg(S1, "init", Some(1), ",\"game_id\":\"ats\""), msg(S1, "sample", Some(2), "")], 1).unwrap();
+        assert_eq!(db.latest_session("ats").unwrap(), Some((S1.to_string(), 1)));
+        let second = note(&mut db, "b"); // after seq 2
+        db.store(&[msg(S1, "sample", Some(4), ""), msg(S1, "sample", Some(5), "")], 2).unwrap();
+        assert!(first.contains("\"after_seq\":0") && second.contains("\"after_seq\":2"));
+
+        let c = db.next_chunk(S1, 100, usize::MAX).unwrap().unwrap();
+        let kinds: Vec<String> = c
+            .frames
+            .iter()
+            .map(|f| {
+                let v: serde_json::Value = serde_json::from_str(f).unwrap();
+                format!("{}{}", v["kind"].as_str().unwrap(), v["profile_key"].as_str().unwrap_or(""))
+            })
+            .collect();
+        assert_eq!(kinds, ["profilea", "init", "sample", "profileb", "sample", "sample"]);
+        assert_eq!(db.session_stream(S1, i64::MAX).unwrap(), c.frames, "a rebuild sees the same order");
+        assert_eq!(db.session_stream(S1, 2).unwrap().len(), 4, "only what was stored before");
+        assert_eq!(c.note_ids.len(), 2);
+
+        db.mark_uploaded(S1, c.seq_to).unwrap();
+        db.mark_notes_uploaded(&c.note_ids).unwrap();
+        let third = note(&mut db, "c"); // after seq 5, already uploaded
+        assert!(third.contains("\"after_seq\":5"));
+        db.store(&[msg(S1, "sample", Some(6), "")], 3).unwrap();
+        let c = db.next_chunk(S1, 100, usize::MAX).unwrap().unwrap();
+        assert_eq!(c.frames.len(), 2, "the late note leads the next chunk");
+        assert!(c.frames[0].contains("profile_key"));
     }
 
     #[test]

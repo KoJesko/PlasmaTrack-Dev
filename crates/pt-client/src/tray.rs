@@ -15,7 +15,8 @@ use std::ptr::null;
 use windows_sys::Win32::Foundation::{HWND, LPARAM, LRESULT, POINT, WPARAM};
 use windows_sys::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows_sys::Win32::UI::Shell::{
-    ShellExecuteW, Shell_NotifyIconW, NIF_ICON, NIF_MESSAGE, NIF_TIP, NIM_ADD, NIM_DELETE, NIM_MODIFY, NOTIFYICONDATAW,
+    ShellExecuteW, Shell_NotifyIconW, NIF_ICON, NIF_INFO, NIF_MESSAGE, NIF_TIP, NIIF_WARNING, NIM_ADD, NIM_DELETE, NIM_MODIFY,
+    NOTIFYICONDATAW,
 };
 use windows_sys::Win32::UI::WindowsAndMessaging::{
     AppendMenuW, CreateIcon, CreatePopupMenu, CreateWindowExW, DefWindowProcW, DestroyIcon, DestroyMenu, DestroyWindow,
@@ -70,6 +71,38 @@ pub struct Exit(usize);
 impl Exit {
     pub fn post(self) {
         unsafe { PostMessageW(self.0 as HWND, WM_EXIT, 0, 0) };
+    }
+}
+
+impl Exit {
+    /// A handle for desktop notifications from the same icon.
+    pub fn notifier(self) -> Notifier {
+        Notifier(self.0)
+    }
+}
+
+/// Shows notifications from the tray icon (any thread). Windows 10 and 11 show
+/// them as toasts; focus assist may hold them while a game runs fullscreen.
+#[derive(Clone, Copy)]
+pub struct Notifier(usize);
+
+impl Notifier {
+    pub fn show(self, title: &str, text: &str) {
+        let mut nid: NOTIFYICONDATAW = unsafe { std::mem::zeroed() };
+        nid.cbSize = std::mem::size_of::<NOTIFYICONDATAW>() as u32;
+        nid.hWnd = self.0 as HWND;
+        nid.uID = 1;
+        nid.uFlags = NIF_INFO;
+        nid.dwInfoFlags = NIIF_WARNING;
+        let copy = |dst: &mut [u16], src: &str| {
+            let max = dst.len() - 1;
+            for (d, s) in dst.iter_mut().zip(src.encode_utf16().take(max)) {
+                *d = s;
+            }
+        };
+        copy(&mut nid.szInfoTitle, title);
+        copy(&mut nid.szInfo, text);
+        unsafe { Shell_NotifyIconW(NIM_MODIFY, &nid) };
     }
 }
 

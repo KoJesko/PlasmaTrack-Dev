@@ -150,6 +150,9 @@ pub async fn run(cfg: UploaderConfig, db: Arc<Mutex<Db>>, status: SharedStatus, 
                 let _ = tokio::task::spawn_blocking(move || {
                     let mut db = db.lock().expect("db");
                     db.mark_uploaded(&p.sess, through)?;
+                    if through >= p.seq_to {
+                        db.mark_notes_uploaded(&p.note_ids)?;
+                    }
                     db.record_upload(&p.sess, p.seq_from, through, true, "ok", crate::now_ms())
                 })
                 .await;

@@ -48,8 +48,19 @@ server published. Otherwise the server discards the job (rule 0, PLAN §6a).
      are uploaded.
    - Each upload carries the config hash and the install manifest (SHA-256 of the client, the
      config and every installed plugin).
-5. **Serves the status page** at `http://127.0.0.1:<status_port>/`, with JSON at
-   `/status.json`.
+5. **Follows the game logs** (`Documents/<game>/game.log.txt`) to tell profiles apart. Each
+   time a save loads, it records which profile it belongs to: a hash of the profile folder,
+   never the profile name.
+6. **Runs the job rules live** on what it stores, the same code the server runs. Results are
+   provisional; the server's are the ones that count.
+   - **Alerts:** a desktop notification when a delivery is Invalid, or when the speed penalty
+     activates. Each comes 5–30 s late on purpose (`[notifications]`). Windows focus assist
+     can hold them while a game runs fullscreen.
+   - After a restart the client rebuilds this from the sessions of the last
+     `[timeline] reopen_window_wall_h` (48 h), without alerting again.
+7. **Serves the status page** at `http://127.0.0.1:<status_port>/`, with JSON at
+   `/status.json`. The page lists the jobs (provisional), with
+   JSON at `/jobs.json`.
 
 ## Other commands
 
