@@ -7,6 +7,7 @@
 pub mod config;
 pub mod game;
 pub mod job;
+pub mod projection;
 pub mod rules;
 pub mod timeline;
 pub mod trace;

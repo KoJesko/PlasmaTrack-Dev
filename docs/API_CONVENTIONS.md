@@ -99,8 +99,13 @@ Every non-2xx response has this body:
 | 429 | `rate_limited` | `Retry-After` header (seconds) and `details.retry_after_s` |
 | 500 / 503 | `internal` / `unavailable` | retry with backoff; `Retry-After` on 503 |
 
-**Rate limits:** 600 requests per minute per token, and 60 writes per minute per actor. Over that
-returns `429`. *Not enforced yet in the first deployment*; the bot should still handle `429`.
+**Rate limits:**
+
+- **Commands:** each Discord user may run at most **5 bot commands per 20 seconds** (project
+  owner, 2026-10-15). The bot enforces this, because it is the only side that sees commands; one
+  command may make several API calls.
+- **Server:** 600 requests per minute per token, and 60 writes per minute per actor. Over that
+  returns `429`. *Not enforced yet*; the bot should still handle `429`.
 
 **Latency:** every call answers within 10 s. Anything slower is an asynchronous operation
 (ADMIN_API §7).
@@ -193,3 +198,7 @@ These answer the bot's open questions "(Q)". **The project owner confirmed all o
   - the two route endpoints answer `501 not_implemented` until stage 5 (map projection);
   - rate limits (§4) are not enforced yet;
   - a second, separate **test** deployment runs the same code with its own data and tokens.
+- 2026-10-15: command rate limit of 5 per Discord user per 20 seconds, enforced by the bot (§4).
+- 2026-10-15: route maps are live (stage 5). Both route endpoints answer `200` with
+  `application/geo+json` (PUBLIC_API §4, ADMIN_API §5). New segment kind `ferry_or_train`, for
+  a crossing the game did not name.

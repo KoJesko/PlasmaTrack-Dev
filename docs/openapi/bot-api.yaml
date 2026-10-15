@@ -1144,30 +1144,84 @@
         "200":
           "content":
             "application/geo+json":
-              "schema":
-                "properties":
-                  "features":
-                    "type": "array"
-                  "type":
-                    "const": "FeatureCollection"
-                "type": "object"
-          "description": "GeoJSON FeatureCollection (PUBLIC_API §4). Answers 501 not_implemented until stage 5 ships."
-        "4XX":
-          "$ref": "#/components/responses/Error"
-        "501":
-          "content":
-            "application/json":
               "examples":
                 "admin_job_route":
                   "externalValue": "../examples/admin_job_route.json"
               "schema":
-                "$ref": "#/components/schemas/Error"
+                "properties":
+                  "bbox":
+                    "items":
+                      "type": "number"
+                    "type": "array"
+                  "features":
+                    "items":
+                      "properties":
+                        "geometry":
+                          "properties":
+                            "coordinates":
+                              "items":
+                                "items":
+                                  "type": "number"
+                                "type": "array"
+                              "type": "array"
+                            "type":
+                              "type": "string"
+                          "type": "object"
+                        "properties":
+                          "properties":
+                            "counted":
+                              "type": "boolean"
+                            "end_at":
+                              "format": "date-time"
+                              "type": "string"
+                            "game_km":
+                              "type": "number"
+                            "index":
+                              "type": "integer"
+                            "local_scale":
+                              "type": "number"
+                            "scale_class":
+                              "type": "string"
+                            "segment":
+                              "type": "string"
+                            "start_at":
+                              "format": "date-time"
+                              "type": "string"
+                            "status":
+                              "type": "string"
+                            "world_km":
+                              "type": "number"
+                          "type": "object"
+                        "type":
+                          "type": "string"
+                      "type": "object"
+                    "type": "array"
+                  "properties":
+                    "properties":
+                      "game":
+                        "type": "string"
+                      "includes_reverted":
+                        "type": "boolean"
+                      "job_id":
+                        "type": "string"
+                      "max_vertices":
+                        "type": "integer"
+                      "simplification_tolerance_world_m":
+                        "type": "number"
+                      "vertex_count":
+                        "type": "integer"
+                    "type": "object"
+                  "type":
+                    "type": "string"
+                "type": "object"
           "description": "See docs/examples/admin_job_route.json"
+        "4XX":
+          "$ref": "#/components/responses/Error"
         "5XX":
           "$ref": "#/components/responses/Error"
       "security":
       - "botToken": []
-      "summary": "Admin route GeoJSON (stage 5; 501 until then)"
+      "summary": "Admin route GeoJSON with reverted material"
       "tags":
       - "Jobs"
   "/api/v1/admin/jobs/{job_id}/series":
@@ -2652,31 +2706,83 @@
         "200":
           "content":
             "application/geo+json":
-              "schema":
-                "properties":
-                  "features":
-                    "type": "array"
-                  "type":
-                    "const": "FeatureCollection"
-                "type": "object"
-          "description": "GeoJSON FeatureCollection (PUBLIC_API §4). Answers 501 not_implemented until stage 5 ships."
-        "4XX":
-          "$ref": "#/components/responses/Error"
-        "501":
-          "content":
-            "application/json":
               "examples":
                 "public_job_route":
                   "externalValue": "../examples/public_job_route.json"
               "schema":
-                "$ref": "#/components/schemas/Error"
+                "properties":
+                  "bbox":
+                    "items":
+                      "type": "number"
+                    "type": "array"
+                  "features":
+                    "items":
+                      "properties":
+                        "geometry":
+                          "properties":
+                            "coordinates":
+                              "items":
+                                "items":
+                                  "type": "number"
+                                "type": "array"
+                              "type": "array"
+                            "type":
+                              "type": "string"
+                          "type": "object"
+                        "properties":
+                          "properties":
+                            "counted":
+                              "type": "boolean"
+                            "end_at":
+                              "format": "date-time"
+                              "type": "string"
+                            "game_km":
+                              "type": "number"
+                            "index":
+                              "type": "integer"
+                            "local_scale":
+                              "type": "number"
+                            "scale_class":
+                              "type": "string"
+                            "segment":
+                              "type": "string"
+                            "start_at":
+                              "format": "date-time"
+                              "type": "string"
+                            "world_km":
+                              "type": "number"
+                          "type": "object"
+                        "type":
+                          "type": "string"
+                      "type": "object"
+                    "type": "array"
+                  "properties":
+                    "properties":
+                      "game":
+                        "type": "string"
+                      "includes_reverted":
+                        "type": "boolean"
+                      "job_id":
+                        "type": "string"
+                      "max_vertices":
+                        "type": "integer"
+                      "simplification_tolerance_world_m":
+                        "type": "number"
+                      "vertex_count":
+                        "type": "integer"
+                    "type": "object"
+                  "type":
+                    "type": "string"
+                "type": "object"
           "description": "See docs/examples/public_job_route.json"
+        "4XX":
+          "$ref": "#/components/responses/Error"
         "5XX":
           "$ref": "#/components/responses/Error"
       "security":
       - "readToken": []
       - "botToken": []
-      "summary": "Route GeoJSON (stage 5; 501 until then)"
+      "summary": "Route GeoJSON"
       "tags":
       - "Public"
   "/api/v1/public/players/{discord_id}":

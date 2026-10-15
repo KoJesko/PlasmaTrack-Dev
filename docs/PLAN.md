@@ -655,6 +655,9 @@ I cannot run the games in this session, so the following steps need a real game 
 4. **Server APIs.** Ingest, scoring, rule 0, auth, the public read API, the admin API and webhooks for the Discord bot, audit log, recalculation, and OpenAPI contract tests.
    - **Status (2026-10-14): deployed** on Cloudflare, production and a separate test instance (docs/SERVER.md). `pt-server` has 11 end-to-end tests that upload a real capture through the API. The OpenAPI file and examples are generated from it (`tests/contract.rs`).
 5. **Route projection and GeoJSON endpoint.** Rendering route images happens in the bot repo.
+   - **Status (2026-10-15): done.** `pt-core::projection` matches truckermudgeon/maps' four
+     reference points (Las Vegas, London, Crete, Paris) to 1e-9°; the real Chicago capture lands
+     in Chicago. `pt-server::route` builds both GeoJSON endpoints.
 
 **Fixtures.** One fixture per bullet below.
 

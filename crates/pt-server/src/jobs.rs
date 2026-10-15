@@ -181,7 +181,7 @@ pub fn trace_checks(job: &Job, cfg: &Config, hellos: &Value) -> (bool, Vec<Value
 
 // ---- views --------------------------------------------------------------------------
 
-fn class_name(c: ScaleClass) -> &'static str {
+pub fn class_name(c: ScaleClass) -> &'static str {
     match c {
         ScaleClass::City => "city",
         ScaleClass::Road => "road",

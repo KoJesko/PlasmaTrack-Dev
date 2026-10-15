@@ -266,7 +266,39 @@ fn series_and_signed_trace_download() {
     assert_eq!(t.call(Request::new("GET", &url.replace("sig=", "sig=0"))).status, 403);
     t.advance(16 * 60_000);
     assert_eq!(t.call(Request::new("GET", &url)).status, 403, "expired");
-    assert_eq!(t.call(t.admin("GET", &format!("/api/v1/admin/jobs/{job_id}/route"))).status, 501);
+}
+
+#[test]
+fn routes_land_on_the_real_map() {
+    let t = TestHost::new();
+    let job_id = chicago(&t);
+    let r = t.call(t.bot("GET", &format!("/api/v1/public/jobs/{job_id}/route")));
+    assert_eq!(r.status, 200);
+    assert!(r.headers.iter().any(|(k, v)| k == "content-type" && v == "application/geo+json"));
+    let g = r.body_json();
+    assert_eq!(g["type"], "FeatureCollection");
+    assert_eq!(g["properties"]["includes_reverted"], false);
+    // The capture is a delivery inside Chicago.
+    let b: Vec<f64> = g["bbox"].as_array().unwrap().iter().map(|v| v.as_f64().unwrap()).collect();
+    assert!(b[0] > -88.5 && b[2] < -87.0 && b[1] > 41.0 && b[3] < 42.5, "{b:?}");
+    let features = g["features"].as_array().unwrap();
+    let vertices: usize = features.iter().map(|f| f["geometry"]["coordinates"].as_array().unwrap().len()).sum();
+    assert_eq!(g["properties"]["vertex_count"], vertices);
+    assert!(vertices > 10 && vertices <= 5000);
+    for (i, f) in features.iter().enumerate() {
+        assert_eq!(f["properties"]["index"], i);
+        assert!(f["properties"].get("status").is_none(), "statuses are admin-only");
+    }
+    // The counted features add up to the job's own game distance.
+    let counted: f64 = features.iter().filter(|f| f["properties"]["counted"] == true).map(|f| f["properties"]["game_km"].as_f64().unwrap()).sum();
+    let detail = t.call(t.admin("GET", &format!("/api/v1/admin/jobs/{job_id}"))).body_json();
+    let tracked = detail["distances"]["tracked_counted_game_km"].as_f64().unwrap();
+    assert!((counted - tracked).abs() < 0.05 * features.len() as f64, "{counted} vs {tracked}");
+    assert!(features.iter().any(|f| f["properties"]["scale_class"] == "city"));
+
+    let a = t.call(t.admin("GET", &format!("/api/v1/admin/jobs/{job_id}/route"))).body_json();
+    assert_eq!(a["properties"]["includes_reverted"], true);
+    assert!(a["features"].as_array().unwrap().iter().all(|f| f["properties"]["status"].is_string()));
 }
 
 #[test]

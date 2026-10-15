@@ -242,14 +242,14 @@ fn scenario(t: &TestHost) -> (Vec<(Call, Value)>, BTreeMap<String, Value>) {
     r.call("public_player_jobs", "Public", "A player's finished jobs, newest first", "GET", "/api/v1/public/{game}/players/{discord_id}/jobs", &format!("/api/v1/public/ets2/players/{p}/jobs?limit=2"), None, Read, 200);
     r.call("public_job", "Public", "Job detail", "GET", "/api/v1/public/jobs/{job_id}", &format!("/api/v1/public/jobs/{valid}"), None, Read, 200);
     r.call("public_job_pending", "Public", "", "GET", "/api/v1/public/jobs/{job_id}", &format!("/api/v1/public/jobs/{pending}"), None, Read, 200);
-    r.call("public_job_route", "Public", "Route GeoJSON (stage 5; 501 until then)", "GET", "/api/v1/public/jobs/{job_id}/route", &format!("/api/v1/public/jobs/{valid}/route"), None, Read, 501);
+    r.call("public_job_route", "Public", "Route GeoJSON", "GET", "/api/v1/public/jobs/{job_id}/route", &format!("/api/v1/public/jobs/{valid}/route"), None, Read, 200);
     r.call("public_leaderboard", "Public", "Leaderboard", "GET", "/api/v1/public/{game}/leaderboard", "/api/v1/public/ets2/leaderboard?period=month&at=2026-10", None, Read, 200);
 
     r.call("admin_review_queue", "Review", "Jobs waiting for a moderator", "GET", "/api/v1/admin/review-queue", "/api/v1/admin/review-queue", None, Admin, 200);
     r.call("admin_review_queue_count", "Review", "Review queue counts", "GET", "/api/v1/admin/review-queue/count", "/api/v1/admin/review-queue/count", None, Admin, 200);
     let d = r.call("admin_job", "Jobs", "Admin job detail", "GET", "/api/v1/admin/jobs/{job_id}", &format!("/api/v1/admin/jobs/{pending}"), None, Admin, 200);
     r.call("admin_job_series", "Jobs", "Speed and fuel series", "GET", "/api/v1/admin/jobs/{job_id}/series", &format!("/api/v1/admin/jobs/{valid}/series?max_points=50"), None, Admin, 200);
-    r.call("admin_job_route", "Jobs", "Admin route GeoJSON (stage 5; 501 until then)", "GET", "/api/v1/admin/jobs/{job_id}/route", &format!("/api/v1/admin/jobs/{valid}/route"), None, Admin, 501);
+    r.call("admin_job_route", "Jobs", "Admin route GeoJSON with reverted material", "GET", "/api/v1/admin/jobs/{job_id}/route", &format!("/api/v1/admin/jobs/{valid}/route"), None, Admin, 200);
     r.call("admin_job_trace", "Jobs", "A signed download link for the raw trace", "GET", "/api/v1/admin/jobs/{job_id}/trace", &format!("/api/v1/admin/jobs/{valid}/trace"), None, Admin, 200);
     r.call("admin_job_approve", "Decisions", "Approve, reject, void or restore a job", "POST", "/api/v1/admin/jobs/{job_id}/{action}", &format!("/api/v1/admin/jobs/{pending}/approve"), Some(json!({"reason": "Checked the route: fine.", "expected_etag": d["etag"]})), Admin, 200);
     r.call("error_invalid_transition", "Decisions", "", "POST", "/api/v1/admin/jobs/{job_id}/{action}", &format!("/api/v1/admin/jobs/{pending}/restore"), Some(json!({"reason": "Not voided."})), Admin, 409);
@@ -357,10 +357,6 @@ fn openapi(calls: &[(Call, Value)], hooks: &BTreeMap<String, Value>) -> Value {
         if let (Some(b), None) = (&c.body, op.get("requestBody")) {
             op["requestBody"] = json!({"required": true, "content": {"application/json": {"example": b}}});
         }
-        if c.status == 501 {
-            op["responses"]["200"] = json!({"description": "GeoJSON FeatureCollection (PUBLIC_API §4). Answers 501 not_implemented until stage 5 ships.",
-                "content": {"application/geo+json": {"schema": {"type": "object", "properties": {"type": {"const": "FeatureCollection"}, "features": {"type": "array"}}}}}});
-        }
         let status = c.status.to_string();
         if op["responses"].get(&status).is_none() {
             let schema = if c.status >= 400 {
@@ -368,8 +364,9 @@ fn openapi(calls: &[(Call, Value)], hooks: &BTreeMap<String, Value>) -> Value {
             } else {
                 schemas[&(c.template.to_string(), c.method.to_lowercase(), c.status)].clone()
             };
+            let media = if c.template.ends_with("/route") && c.status == 200 { "application/geo+json" } else { "application/json" };
             op["responses"][&status] = json!({"description": format!("See docs/examples/{}.json", c.name),
-                "content": {"application/json": {"schema": schema,
+                "content": {media: {"schema": schema,
                     "examples": {c.name: {"externalValue": format!("../examples/{}.json", c.name)}}}}});
         }
     }
