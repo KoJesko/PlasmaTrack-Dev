@@ -41,6 +41,7 @@ fn settings(env: &Env) -> Settings {
         webhook_secrets: list(env, "WEBHOOK_SECRETS", true),
         public_url: list(env, "PUBLIC_URL", false).into_iter().next().unwrap_or_default(),
         download_secret: list(env, "DOWNLOAD_SECRET", true).into_iter().next().unwrap_or_default(),
+        backup_prefix: list(env, "BACKUP_PREFIX", false).into_iter().next().unwrap_or_default(),
     }
 }
 
@@ -131,6 +132,35 @@ impl Host for CfHost {
 
     async fn blob_delete(&self, key: &str) -> HostResult<()> {
         let bucket = self.env.bucket("RAW").map_err(host_err)?;
+        bucket.delete(key).await.map_err(host_err)
+    }
+
+    async fn backup_put(&self, key: &str, bytes: Vec<u8>) -> HostResult<()> {
+        let bucket = self.env.bucket("BACKUPS").map_err(host_err)?;
+        bucket.put(key, bytes).execute().await.map_err(host_err)?;
+        Ok(())
+    }
+
+    async fn backup_list(&self, prefix: &str) -> HostResult<Vec<String>> {
+        let bucket = self.env.bucket("BACKUPS").map_err(host_err)?;
+        let mut keys = Vec::new();
+        let mut cursor: Option<String> = None;
+        loop {
+            let mut list = bucket.list().prefix(prefix);
+            if let Some(c) = cursor.take() {
+                list = list.cursor(c);
+            }
+            let page = list.execute().await.map_err(host_err)?;
+            keys.extend(page.objects().iter().map(|o| o.key()));
+            match page.cursor() {
+                Some(c) if page.truncated() => cursor = Some(c),
+                _ => return Ok(keys),
+            }
+        }
+    }
+
+    async fn backup_delete(&self, key: &str) -> HostResult<()> {
+        let bucket = self.env.bucket("BACKUPS").map_err(host_err)?;
         bucket.delete(key).await.map_err(host_err)
     }
 
@@ -261,9 +291,19 @@ async fn queue(batch: MessageBatch<Value>, env: Env, _ctx: Context) -> Result<()
     Ok(())
 }
 
+/// The weekly backup (docs/SERVER.md); every other schedule is the cron job.
+const BACKUP_CRON: &str = "47 3 * * 0";
+
 #[event(scheduled)]
-async fn scheduled(_event: ScheduledEvent, env: Env, _ctx: ScheduleContext) {
-    if let Err(e) = manage::cron(&CfHost::new(env, None)).await {
+async fn scheduled(event: ScheduledEvent, env: Env, _ctx: ScheduleContext) {
+    let host = CfHost::new(env, None);
+    if event.cron() == BACKUP_CRON {
+        // Sizes and row counts only, never row contents.
+        match pt_server::backup::run(&host).await {
+            Ok(r) => console_log!("backup written: {} ({} bytes, {} tables, deleted {:?})", r.key, r.bytes, r.tables.len(), r.deleted),
+            Err(e) => console_error!("backup failed: {}", e.message),
+        }
+    } else if let Err(e) = manage::cron(&host).await {
         console_error!("cron: {}", e.message);
     }
 }

@@ -99,6 +99,39 @@ From `crates/pt-worker`:
 **Stopping it:** stopping the terminal command does not always stop Wrangler's `workerd`
 processes, and two local instances share one queue. Check for leftover `workerd.exe` processes.
 
+## Backups (owner, 2026-10-15)
+
+Every Sunday at 03:47 UTC each server writes its whole D1 database to the private R2 bucket
+`plasmatrack-backups`:
+
+| Server | Prefix |
+|---|---|
+| Production | `d1/plasmatrack-server/` |
+| Test | `d1/plasmatrack-server-test/` |
+| (the bot, its own D1) | `d1/plasmatrack-bot/` |
+
+- **The file** is SQL, the same format as the bot's backups. For each table it has
+  `DELETE FROM t;` and then one `INSERT` per row, one statement per line, with line breaks in
+  text written as `char(10)`.
+  - It holds every table except the short-lived `idempotency`.
+  - It is named after the time it was made, for example `2026-10-18T03-47-00.123Z.sql`.
+- **Two are kept.** After a successful write, older files under the server's own prefix are
+  deleted; a failed run deletes nothing. The log says `backup written` or `backup failed`, with
+  the size and table count, never row contents.
+- **A backup now:** `POST /api/v1/admin/backups` with a `reason` (ADMIN_API §15), for example
+  before a risky change.
+- **Restore** (it replaces every table's rows):
+  1. `npx wrangler r2 object get plasmatrack-backups/d1/plasmatrack-server/<file>.sql --remote --file backup.sql`
+  2. Into a new database, first `wrangler d1 migrations apply <db> --remote`.
+  3. `npx wrangler d1 execute plasmatrack --remote --file backup.sql` (add `--env test` for
+     test).
+- **D1 Time Travel** comes on top of this. For the last 30 days it can restore the database to
+  any minute: `wrangler d1 time-travel restore plasmatrack --timestamp …`. The weekly files are
+  extra copies outside D1.
+- **Not in the backup:** the R2 data, meaning raw chunks, job points, snapshots and evidence
+  images. These are big, and a copy in the same account guards against the same failures as
+  D1's own copies. Re-scoring needs the raw chunks.
+
 ## Watching it
 
 - Live logs: `npx wrangler tail [--env test]`.

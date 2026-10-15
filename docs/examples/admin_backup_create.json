@@ -1,0 +1,21 @@
+{
+  "deleted": [],
+  "key": "d1/test-server/2026-10-14T09-00-55.000Z.sql",
+  "rows": {
+    "audit_log": 28,
+    "bonuses": 1,
+    "config_versions": 2,
+    "evidence": 3,
+    "jobs": 7,
+    "operations": 1,
+    "plugin_sessions": 4,
+    "raw_chunks": 13,
+    "releases": 2,
+    "revocations": 1,
+    "tokens": 4,
+    "truckersmp_accounts": 1,
+    "users": 6,
+    "webhook_outbox": 17
+  },
+  "size_bytes": 104845
+}

@@ -10,6 +10,8 @@
 #   WEBHOOK_SECRETS            HMAC secret(s), comma-separated during rotation
 #   DOWNLOAD_SECRET            signs trace download links
 #   BOOTSTRAP_ADMINS           Discord IDs that are admins from the start (comma-separated)
+# Backups: every Sunday 03:47 UTC the D1 data goes to the private bucket
+# plasmatrack-backups under BACKUP_PREFIX; the newest two are kept.
 # The database_id values are filled in by `wrangler d1 create` (docs/SERVER.md).
 
 name = "plasmatrack-server"
@@ -35,6 +37,13 @@ migrations_dir = "../pt-server/migrations"
 [[r2_buckets]]
 binding = "RAW"
 bucket_name = "plasmatrack-raw"
+
+[[r2_buckets]]
+binding = "BACKUPS"
+bucket_name = "plasmatrack-backups"
+
+[vars]
+BACKUP_PREFIX = "d1/plasmatrack-server/"
 
 [[queues.producers]]
 binding = "WEBHOOKS"
@@ -63,7 +72,7 @@ tag = "v1"
 new_sqlite_classes = ["ScorerObject"]
 
 [triggers]
-crons = ["*/5 * * * *"]
+crons = ["*/5 * * * *", "47 3 * * 0"]
 
 # ---------------------------------------------------------------------------
 # Test instance: the same code with its own everything.
@@ -84,6 +93,13 @@ migrations_dir = "../pt-server/migrations"
 [[env.test.r2_buckets]]
 binding = "RAW"
 bucket_name = "plasmatrack-raw-test"
+
+[[env.test.r2_buckets]]
+binding = "BACKUPS"
+bucket_name = "plasmatrack-backups"
+
+[env.test.vars]
+BACKUP_PREFIX = "d1/plasmatrack-server-test/"
 
 [[env.test.queues.producers]]
 binding = "WEBHOOKS"
@@ -108,4 +124,4 @@ name = "SCORER"
 class_name = "ScorerObject"
 
 [env.test.triggers]
-crons = ["*/5 * * * *"]
+crons = ["*/5 * * * *", "47 3 * * 0"]

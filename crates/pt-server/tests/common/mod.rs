@@ -23,6 +23,8 @@ type Post = (String, Vec<(String, String)>, Vec<u8>);
 pub struct TestHost {
     pub db: rusqlite::Connection,
     pub blobs: RefCell<BTreeMap<String, Vec<u8>>>,
+    /// The backup bucket.
+    pub backups: RefCell<BTreeMap<String, Vec<u8>>>,
     pub now: Cell<i64>,
     rng: Cell<u64>,
     pub settings: Settings,
@@ -54,6 +56,7 @@ impl TestHost {
         TestHost {
             db,
             blobs: RefCell::new(BTreeMap::new()),
+            backups: RefCell::new(BTreeMap::new()),
             now: Cell::new(util::parse_rfc3339("2026-10-14T09:00:00Z").unwrap()),
             rng: Cell::new(0x9E37_79B9_7F4A_7C15),
             settings: Settings {
@@ -64,6 +67,7 @@ impl TestHost {
                 webhook_secrets: vec![WEBHOOK_SECRET.into()],
                 public_url: "https://pt.example".into(),
                 download_secret: "dl-secret".into(),
+                backup_prefix: "d1/test-server/".into(),
             },
             pokes: RefCell::new(Vec::new()),
             webhooks_queued: RefCell::new(Vec::new()),
@@ -95,6 +99,11 @@ impl TestHost {
         } else {
             r.with_header("idempotency-key", &format!("k-{}-{}", path, self.now.get()))
         }
+    }
+
+/// Runs a whole SQL script (a backup restore).
+    pub fn exec(&self, sql: &str) {
+        self.db.execute_batch(sql).unwrap();
     }
 
     pub fn q(&self, sql: &str) -> Vec<Value> {
@@ -188,6 +197,20 @@ impl Host for TestHost {
     }
     async fn blob_delete(&self, key: &str) -> HostResult<()> {
         self.blobs.borrow_mut().remove(key);
+        Ok(())
+    }
+
+    async fn backup_put(&self, key: &str, bytes: Vec<u8>) -> HostResult<()> {
+        self.backups.borrow_mut().insert(key.to_string(), bytes);
+        Ok(())
+    }
+
+    async fn backup_list(&self, prefix: &str) -> HostResult<Vec<String>> {
+        Ok(self.backups.borrow().keys().filter(|k| k.starts_with(prefix)).cloned().collect())
+    }
+
+    async fn backup_delete(&self, key: &str) -> HostResult<()> {
+        self.backups.borrow_mut().remove(key);
         Ok(())
     }
 

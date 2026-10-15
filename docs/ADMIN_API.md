@@ -526,3 +526,19 @@ Corrects any field of **any** job, tracked or manual:
 
 - **Webhooks:** `job.scored` with `by: {"kind": "moderator", …}` when the points changed.
 - **Audit:** `job.edit`, with outcome, points and overrides before and after.
+
+## 15. Backups (owner, 2026-10-15)
+
+### `POST /api/v1/admin/backups`
+
+Writes a backup of the server's database now, besides the automatic weekly one
+(docs/SERVER.md). Body: `{"reason": "…"}`. Audited as `backup.create`.
+
+**`201`:**
+
+```json
+{"key": "d1/plasmatrack-server/2026-10-15T20-00-00.000Z.sql", "size_bytes": 104845,
+ "rows": {"jobs": 7, "users": 6, "…": 0}, "deleted": ["d1/plasmatrack-server/2026-10-04T03-47-00.000Z.sql"]}
+```
+
+Only the newest two backups are kept, so `deleted` lists what this one replaced.

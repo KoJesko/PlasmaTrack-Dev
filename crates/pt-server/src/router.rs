@@ -73,6 +73,7 @@ async fn dispatch<H: Host>(h: &H, req: &Request) -> ApiResult<Response> {
         ("POST", ["api", "v1", "admin", "admins"]) => manage::admin_add(h, req).await,
         ("DELETE", ["api", "v1", "admin", "admins", d]) => manage::admin_remove(h, req, d).await,
         ("GET", ["api", "v1", "admin", "audit"]) => admin::audit_log(h, req).await,
+        ("POST", ["api", "v1", "admin", "backups"]) => crate::backup::now(h, req).await,
 
         _ => Err(ApiError::not_found("endpoint")),
     }

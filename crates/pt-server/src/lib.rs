@@ -15,6 +15,7 @@ pub mod webhooks;
 pub mod scorer;
 pub mod admin;
 pub mod manage;
+pub mod backup;
 pub mod public;
 pub mod route;
 pub mod router;

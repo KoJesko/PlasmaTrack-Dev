@@ -320,6 +320,7 @@ fn scenario(t: &TestHost) -> (Vec<(Call, Value)>, BTreeMap<String, Value>) {
     r.call("admin_admin_add", "Admins", "Add an admin", "POST", "/api/v1/admin/admins", "/api/v1/admin/admins", Some(json!({"discord_user_id": "987654321098765432", "reason": "New moderator"})), Admin, 201);
     r.call("admin_admin_remove", "Admins", "Remove an admin", "DELETE", "/api/v1/admin/admins/{discord_id}", "/api/v1/admin/admins/987654321098765432", Some(json!({"reason": "Stepped down"})), Admin, 200);
     r.call("admin_truckersmp_flags", "Review", "TruckersMP account flags", "GET", "/api/v1/admin/truckersmp/flags", "/api/v1/admin/truckersmp/flags", None, Admin, 200);
+    r.call("admin_backup_create", "Admins", "Back up the database now (also weekly, automatically)", "POST", "/api/v1/admin/backups", "/api/v1/admin/backups", Some(json!({"reason": "Before a config change"})), Admin, 201);
     r.call("admin_audit", "Audit", "The audit log, newest first", "GET", "/api/v1/admin/audit", &format!("/api/v1/admin/audit?job_id={pending}"), None, Admin, 200);
     r.call("error_unauthorized", "Public", "", "GET", "/api/v1/public/{game}/leaderboard", "/api/v1/public/ets2/leaderboard?cursor=", None, Player, 401);
 

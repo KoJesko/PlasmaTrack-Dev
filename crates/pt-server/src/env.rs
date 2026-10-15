@@ -98,6 +98,9 @@ pub struct Settings {
     pub public_url: String,
     /// Key for signed download URLs.
     pub download_secret: String,
+    /// Where this server's backups go in the backup bucket, ending in `/`
+    /// (docs/SERVER.md).
+    pub backup_prefix: String,
 }
 
 #[allow(async_fn_in_trait)]
@@ -116,6 +119,12 @@ pub trait Host {
     async fn blob_get(&self, key: &str) -> HostResult<Option<Vec<u8>>>;
     async fn blob_put(&self, key: &str, bytes: Vec<u8>) -> HostResult<()>;
     async fn blob_delete(&self, key: &str) -> HostResult<()>;
+
+    /// The backup bucket (a separate R2 bucket): write, list keys under a
+    /// prefix, delete.
+    async fn backup_put(&self, key: &str, bytes: Vec<u8>) -> HostResult<()>;
+    async fn backup_list(&self, prefix: &str) -> HostResult<Vec<String>>;
+    async fn backup_delete(&self, key: &str) -> HostResult<()>;
 
     /// Asks the player's scorer to process new chunks. It must not wait for the
     /// scoring to finish (the Worker hands it to the Durable Object).

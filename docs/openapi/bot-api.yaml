@@ -264,6 +264,75 @@
       "summary": "The audit log, newest first"
       "tags":
       - "Audit"
+  "/api/v1/admin/backups":
+    "post":
+      "operationId": "admin_backup_create"
+      "parameters":
+      - "$ref": "#/components/parameters/Actor"
+      - "$ref": "#/components/parameters/IdempotencyKey"
+      "requestBody":
+        "content":
+          "application/json":
+            "example":
+              "reason": "Before a config change"
+        "required": true
+      "responses":
+        "201":
+          "content":
+            "application/json":
+              "examples":
+                "admin_backup_create":
+                  "externalValue": "../examples/admin_backup_create.json"
+              "schema":
+                "properties":
+                  "deleted":
+                    "type": "array"
+                  "key":
+                    "type": "string"
+                  "rows":
+                    "properties":
+                      "audit_log":
+                        "type": "integer"
+                      "bonuses":
+                        "type": "integer"
+                      "config_versions":
+                        "type": "integer"
+                      "evidence":
+                        "type": "integer"
+                      "jobs":
+                        "type": "integer"
+                      "operations":
+                        "type": "integer"
+                      "plugin_sessions":
+                        "type": "integer"
+                      "raw_chunks":
+                        "type": "integer"
+                      "releases":
+                        "type": "integer"
+                      "revocations":
+                        "type": "integer"
+                      "tokens":
+                        "type": "integer"
+                      "truckersmp_accounts":
+                        "type": "integer"
+                      "users":
+                        "type": "integer"
+                      "webhook_outbox":
+                        "type": "integer"
+                    "type": "object"
+                  "size_bytes":
+                    "type": "integer"
+                "type": "object"
+          "description": "See docs/examples/admin_backup_create.json"
+        "4XX":
+          "$ref": "#/components/responses/Error"
+        "5XX":
+          "$ref": "#/components/responses/Error"
+      "security":
+      - "botToken": []
+      "summary": "Back up the database now (also weekly, automatically)"
+      "tags":
+      - "Admins"
   "/api/v1/admin/bonuses":
     "get":
       "operationId": "admin_bonuses"

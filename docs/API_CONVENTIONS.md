@@ -218,3 +218,4 @@ These answer the bot's open questions "(Q)". **The project owner confirmed all o
   - **Stats:** they gain `outcomes` and `distance_by_scale_class` (PUBLIC_API §2).
 - 2026-10-15: evidence uploads accept AVIF (`image/avif`), the owner's preferred format, as well
   as WebP, PNG and JPEG (PUBLIC_API §6).
+- 2026-10-15: weekly database backups, plus `POST /api/v1/admin/backups` for one now (ADMIN_API §15).
