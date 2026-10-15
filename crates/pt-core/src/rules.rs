@@ -357,15 +357,21 @@ fn fuel(job: &Job, cfg: &Config, review: &mut Vec<ReviewReason>) -> Vec<Refuel> 
             }
             i = last + 1;
         }
+        // Fuel that changes across a teleport is ignored, like across a load:
+        // World of Trucks event portals (Brackenreach, owner 2026-10-15) fill
+        // the tank as they move the truck.
+        let mut teleported = 0.0;
         for k in 1..run.len() {
             if let (Some(a), Some(b)) = (run[k - 1].fuel_l, run[k].fuel_l) {
-                if !in_refuel[k] && b - a > f.mid_job_jump_tolerance_l {
+                if run[k].after_teleport {
+                    teleported += b - a;
+                } else if !in_refuel[k] && b - a > f.mid_job_jump_tolerance_l {
                     review.push(ReviewReason::FuelJump { wall_ms: run[k].wall_ms, litres: b - a });
                 }
             }
         }
         if let (Some(a), Some(b)) = (run.first().and_then(|p| p.fuel_l), run.last().and_then(|p| p.fuel_l)) {
-            let used = a - b + refuelled;
+            let used = a - b + refuelled + teleported;
             if used < -f.negative_fuel_tolerance_l {
                 review.push(ReviewReason::NegativeFuel { run: run[0].run, used_l: used });
             }

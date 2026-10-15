@@ -35,6 +35,9 @@ pub struct TestHost {
     pub ops_queued: RefCell<Vec<Value>>,
     pub posts: RefCell<Vec<Post>>,
     pub post_status: Cell<u16>,
+    /// The next this many writes of job data (`jobs/…`) fail, like a Worker
+    /// that ran out of memory or subrequests.
+    pub fail_job_puts: Cell<u32>,
 }
 
 fn bind(p: &P) -> rusqlite::types::Value {
@@ -80,6 +83,7 @@ impl TestHost {
             ops_queued: RefCell::new(Vec::new()),
             posts: RefCell::new(Vec::new()),
             post_status: Cell::new(202),
+            fail_job_puts: Cell::new(0),
         }
     }
 
@@ -198,12 +202,19 @@ impl Host for TestHost {
         Ok(self.blobs.borrow().get(key).cloned())
     }
     async fn blob_put(&self, key: &str, bytes: Vec<u8>) -> HostResult<()> {
+        if key.starts_with("jobs/") && self.fail_job_puts.get() > 0 {
+            self.fail_job_puts.set(self.fail_job_puts.get() - 1);
+            return Err(HostError("R2 write failed".into()));
+        }
         self.blobs.borrow_mut().insert(key.to_string(), bytes);
         Ok(())
     }
     async fn blob_delete(&self, key: &str) -> HostResult<()> {
         self.blobs.borrow_mut().remove(key);
         Ok(())
+    }
+    async fn blob_size(&self, key: &str) -> HostResult<Option<u64>> {
+        Ok(self.blobs.borrow().get(key).map(|b| b.len() as u64))
     }
 
     async fn backup_put(&self, key: &str, bytes: Vec<u8>) -> HostResult<()> {

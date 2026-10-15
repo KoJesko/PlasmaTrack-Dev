@@ -20,12 +20,29 @@ use crate::util;
 
 /// Save the snapshot at least this often while a player keeps uploading.
 pub const SNAPSHOT_EVERY_MS: i64 = 10 * 60_000;
+/// Part of the snapshot key: a snapshot of another format is not loaded, so
+/// every scorer rebuilds once from the raw data. 2 (2026-10-15): job memos
+/// know when a job was stored, and finished jobs wait in `unstored`.
+pub const SNAPSHOT_FORMAT: u32 = 2;
+/// At most this many chunks per pass. A catch-up after hours offline (or a
+/// capture-mode session: three times the frames, in small live chunks) is
+/// worked through in several passes, so one never runs out of memory or
+/// subrequests; the Durable Object starts the next one ([`Report::more`]).
+pub const MAX_CHUNKS_PER_PASS: usize = 400;
+/// A job still being driven is stored at most this often while only its
+/// points grow; any other change stores it at once.
+pub const LIVE_STORE_EVERY_MS: i64 = 60_000;
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 struct JobMemo {
-    /// Changes when the job changes (state, events, points).
+    /// What was last stored: changes when the job changes (state, events, points).
     fingerprint: String,
     delivered_at: Option<i64>,
+    /// The fingerprint without the point count, and when it was last stored.
+    #[serde(default)]
+    shape: String,
+    #[serde(default)]
+    stored_ms: i64,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -38,11 +55,21 @@ struct Snapshot {
     jobs: BTreeMap<String, JobMemo>,
     /// Latest TruckersMP (server, account) per session, while connected.
     truckersmp: BTreeMap<String, (u64, u64)>,
+    /// Finished jobs that left the timelines but could not be stored yet.
+    #[serde(default)]
+    unstored: Vec<(Job, Facts)>,
 }
 
 impl Snapshot {
     fn new(key: String, cfg: pt_core::Config) -> Snapshot {
-        Snapshot { key, profiles: Profiles::new(cfg), sessions: Vec::new(), jobs: BTreeMap::new(), truckersmp: BTreeMap::new() }
+        Snapshot {
+            key,
+            profiles: Profiles::new(cfg),
+            sessions: Vec::new(),
+            jobs: BTreeMap::new(),
+            truckersmp: BTreeMap::new(),
+            unstored: Vec::new(),
+        }
     }
 }
 
@@ -52,6 +79,8 @@ pub struct Report {
     pub frames: usize,
     pub jobs_stored: usize,
     pub rebuilt: bool,
+    /// Chunks are left for another pass ([`MAX_CHUNKS_PER_PASS`]).
+    pub more: bool,
 }
 
 pub struct Scorer {
@@ -67,17 +96,14 @@ fn snapshot_key(user_id: &str, game: Game) -> String {
 }
 
 fn fingerprint(j: &Job) -> String {
+    format!("{}|{}", shape(j), j.kept.len())
+}
+
+/// Everything in the fingerprint but the kept points, which grow with every
+/// upload while the job is driven.
+fn shape(j: &Job) -> String {
     let reverted: usize = j.reverted.iter().map(|b| b.points.len()).sum();
-    format!(
-        "{:?}|{}|{}|{}|{}|{}|{}",
-        j.state,
-        j.events.len(),
-        j.kept.len(),
-        reverted,
-        j.gaps.len(),
-        j.delivered.is_some(),
-        j.info.cargo_loaded
-    )
+    format!("{:?}|{}|{}|{}|{}|{}", j.state, j.events.len(), reverted, j.gaps.len(), j.delivered.is_some(), j.info.cargo_loaded)
 }
 
 fn memo_key(j: &Job) -> String {
@@ -96,8 +122,8 @@ impl Scorer {
     /// Writes the snapshot to R2 if anything changed since the last save.
     pub async fn save<H: Host>(&mut self, h: &H) -> ApiResult<()> {
         let (Some(snap), true) = (&self.snap, self.dirty) else { return Ok(()) };
-        let json = serde_json::to_vec(snap).map_err(|e| ApiError::internal(&e.to_string()))?;
-        h.blob_put(&snapshot_key(&self.user_id, self.game), util::gzip(&json)).await?;
+        let z = util::gzip_json(snap).map_err(|e| ApiError::internal(&e))?;
+        h.blob_put(&snapshot_key(&self.user_id, self.game), z).await?;
         self.saved_at = h.now_ms();
         self.dirty = false;
         Ok(())
@@ -108,7 +134,7 @@ impl Scorer {
             return Ok(());
         }
         let stored = match h.blob_get(&snapshot_key(&self.user_id, self.game)).await? {
-            Some(z) => util::gunzip(&z, usize::MAX).ok().and_then(|j| serde_json::from_slice::<Snapshot>(&j).ok()),
+            Some(z) => util::gunzip_json::<Snapshot>(&z).ok(),
             None => None,
         };
         self.snap = Some(match stored {
@@ -132,7 +158,7 @@ impl Scorer {
     pub async fn process<H: Host>(&mut self, h: &H) -> ApiResult<Report> {
         let user = store::user_by_id(h, &self.user_id).await?.ok_or_else(|| ApiError::not_found("user"))?;
         let scoring = config::scoring(h).await?;
-        let key = config::timeline_key(&scoring.cfg);
+        let key = format!("{SNAPSHOT_FORMAT}:{}", config::timeline_key(&scoring.cfg));
         self.load(h, &key, &scoring.cfg).await?;
         let sessions = h
             .all(
@@ -163,7 +189,7 @@ impl Scorer {
         let names = scoring.cfg.multiplayer.truckersmp_module_names.clone();
         let mut evicted: Vec<Job> = Vec::new();
         let mut penalties: Vec<(String, u32, i64)> = Vec::new();
-        for (i, (sess, count)) in sessions.iter().enumerate() {
+        'sessions: for (i, (sess, count)) in sessions.iter().enumerate() {
             let snap = self.snap.as_mut().expect("loaded");
             let done = snap.sessions.get(i).map_or(0, |(_, d)| *d);
             if done >= *count {
@@ -172,14 +198,25 @@ impl Scorer {
             if snap.sessions.len() <= i {
                 snap.sessions.push((sess.clone(), 0));
             }
-            for chunk_no in done..*count {
-                let row = store::one(
-                    h,
-                    "SELECT r2_key, received_at FROM raw_chunks WHERE user_id = ?1 AND sess = ?2 AND chunk_no = ?3",
-                    params![&self.user_id, sess, chunk_no],
+            if report.chunks >= MAX_CHUNKS_PER_PASS {
+                report.more = true;
+                break;
+            }
+            // One query for this pass's chunks of the session.
+            let budget = (MAX_CHUNKS_PER_PASS - report.chunks) as i64;
+            let rows = h
+                .all(
+                    "SELECT chunk_no, r2_key, received_at FROM raw_chunks WHERE user_id = ?1 AND sess = ?2 AND chunk_no >= ?3
+                     ORDER BY chunk_no LIMIT ?4",
+                    params![&self.user_id, sess, done, budget],
                 )
-                .await?
-                .ok_or_else(|| ApiError::internal("missing chunk"))?;
+                .await?;
+            for (k, chunk_no) in (done..*count).enumerate() {
+                if report.chunks >= MAX_CHUNKS_PER_PASS {
+                    report.more = true;
+                    break 'sessions;
+                }
+                let row = rows.get(k).filter(|r| r.i("chunk_no") == chunk_no).ok_or_else(|| ApiError::internal("missing chunk"))?;
                 let blob = h.blob_get(&row.s("r2_key")).await?.ok_or_else(|| ApiError::internal("missing chunk data"))?;
                 let text = util::gunzip(&blob, usize::MAX).map_err(|e| ApiError::internal(&e.to_string()))?;
                 let received_at = row.i("received_at");
@@ -218,6 +255,7 @@ impl Scorer {
 
         // Store what changed: evicted jobs (final), then the live ones.
         let snap = self.snap.as_mut().expect("loaded");
+        let mut finished: Vec<(Job, Facts)> = std::mem::take(&mut snap.unstored);
         let mut changed: Vec<(Job, Facts)> = Vec::new();
         let facts = |snap: &Snapshot, j: &Job| -> Facts {
             let sessions = snap.profiles.sessions_of(j);
@@ -233,21 +271,53 @@ impl Scorer {
         for j in evicted {
             let f = facts(snap, &j);
             snap.jobs.remove(&memo_key(&j));
-            changed.push((j, f));
+            finished.push((j, f));
         }
-        for j in snap.profiles.jobs() {
-            let fp = fingerprint(j);
-            let m = snap.jobs.entry(memo_key(j)).or_default();
-            if m.fingerprint != fp {
-                m.fingerprint = fp;
-                let f = facts(snap, j);
-                changed.push((j.clone(), f));
+        // Finished jobs exist only here now: one that cannot be stored is kept
+        // (in the snapshot) for the next pass.
+        let mut finished = finished.into_iter();
+        while let Some((job, f)) = finished.next() {
+            match jobs::persist(h, &scoring.cfg, scoring.version_id.as_deref(), &user, &job, &f, trigger, None).await {
+                Ok(stored) => report.jobs_stored += stored.is_some() as usize,
+                Err(e) => {
+                    snap.unstored.push((job, f));
+                    snap.unstored.extend(finished);
+                    self.dirty = true;
+                    return Err(e);
+                }
             }
         }
+        let now = h.now_ms();
+        for j in snap.profiles.jobs() {
+            let m = snap.jobs.get(&memo_key(j)).cloned().unwrap_or_default();
+            if m.fingerprint == fingerprint(j) {
+                continue;
+            }
+            // Only the points grew: a job being driven waits a little.
+            let growing = m.shape == shape(j) && j.delivered.is_none();
+            if growing && now - m.stored_ms < LIVE_STORE_EVERY_MS {
+                continue;
+            }
+            let f = facts(snap, j);
+            changed.push((j.clone(), f));
+        }
+        // The memo moves on only once a job is stored, so a failed store is
+        // tried again on the next pass.
         for (job, f) in &changed {
             if jobs::persist(h, &scoring.cfg, scoring.version_id.as_deref(), &user, job, f, trigger, None).await?.is_some() {
                 report.jobs_stored += 1;
             }
+            if let Some(m) = snap.jobs.get_mut(&memo_key(job)) {
+                m.fingerprint = fingerprint(job);
+                m.shape = shape(job);
+                m.stored_ms = now;
+            } else if snap.profiles.jobs().any(|j| memo_key(j) == memo_key(job)) {
+                let m = snap.jobs.entry(memo_key(job)).or_default();
+                m.fingerprint = fingerprint(job);
+                m.shape = shape(job);
+                m.stored_ms = now;
+            }
+            self.dirty = true;
         }
         if trigger == Trigger::Upload {
             for (profile, id, wall_ms) in penalties {
@@ -281,10 +351,7 @@ impl Scorer {
         }
         let user = store::user_by_id(h, &row.s("user_id")).await?.ok_or_else(|| ApiError::not_found("user"))?;
         let blob = h.blob_get(&jobs::blob_key(job_id)).await?.ok_or_else(|| ApiError::internal("missing job data"))?;
-        let v: serde_json::Value = serde_json::from_slice(&util::gunzip(&blob, usize::MAX).map_err(|e| ApiError::internal(&e.to_string()))?)
-            .map_err(|e| ApiError::internal(&e.to_string()))?;
-        let job: Job = serde_json::from_value(v["job"].clone()).map_err(|e| ApiError::internal(&e.to_string()))?;
-        let sess_ids: Vec<(u32, String)> = serde_json::from_value(v["sess_ids"].clone()).unwrap_or_default();
+        let (job, sess_ids) = jobs::decode_blob(&blob)?;
         let detail = row.json("detail");
         let sessions: Vec<String> = serde_json::from_value(detail["plugin_sessions"].clone()).unwrap_or_default();
         let truckersmp = match (row.opt_i("tmp_server_id"), row.opt_i("tmp_account_id")) {

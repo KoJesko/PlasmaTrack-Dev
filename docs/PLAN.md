@@ -422,6 +422,7 @@ The fingerprint has two parts:
 - **Overspeed:** eligible samples exclude paused time and ferry/train transfer windows. The record keeps peak mph and time over each threshold.
 - **Refuel (decided):** the SDK has no refuel event, so a refuel is a **heuristic** episode: the fuel rises while the truck is stationary, at a plausible rate (`[rules.refuel]`). Only litres are tracked. Fuel cost is never calculated.
 - **Fuel across save loads (decided):** a fuel change across a load is most likely a save edit, and it is **ignored**. There's no flag and no rule 4, because fuel is only summed within tracked runs.
+- **Fuel across teleports (2026-10-15, found by you):** ignored the same way. World of Trucks event portals (Brackenreach, likely Winterland too) fill the tank as they move the truck, which had raised `fuel_jump` and `negative_fuel`. The fuel used shown for a job leaves it out as well.
 - **Manual review everywhere (decided): every "flag" means manual review**, with the job pending and its points held until an admin approves or rejects it via the Discord bot. `review_policy` values are `review` or `off`. Gap, late-start and trace checks default to `review`.
 - **Other heuristics:** odometer jump and impossible delivery time exist only as manual-review triggers, **off by default**. Teleports are never a trigger (§5). Diagnostics (unexplained Δodometer, derived vs. reported speed, fuel against capacity) are always *stored* for admins but never trigger review.
 - **Record:** every rule result is stored, and a job can carry any number of flags.

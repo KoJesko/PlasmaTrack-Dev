@@ -212,6 +212,23 @@ pub fn gunzip(data: &[u8], limit: usize) -> std::io::Result<Vec<u8>> {
     Ok(out)
 }
 
+/// JSON straight into the compressor, without the text or a JSON tree in
+/// memory.
+pub fn gzip_json<T: serde::Serialize>(v: &T) -> Result<Vec<u8>, String> {
+    let mut enc = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
+    {
+        let mut w = std::io::BufWriter::with_capacity(64 << 10, &mut enc);
+        serde_json::to_writer(&mut w, v).map_err(|e| e.to_string())?;
+        w.flush().map_err(|e| e.to_string())?;
+    }
+    enc.finish().map_err(|e| e.to_string())
+}
+
+/// The reverse of [`gzip_json`], reading as it decompresses.
+pub fn gunzip_json<T: serde::de::DeserializeOwned>(z: &[u8]) -> Result<T, String> {
+    serde_json::from_reader(std::io::BufReader::with_capacity(64 << 10, flate2::read::GzDecoder::new(z))).map_err(|e| e.to_string())
+}
+
 pub fn gzip(data: &[u8]) -> Vec<u8> {
     let mut enc = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
     enc.write_all(data).expect("in-memory write");

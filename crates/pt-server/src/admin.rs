@@ -354,10 +354,7 @@ fn widen(r: &mut Option<(f64, f64)>, v: Option<f64>) {
 
 pub async fn load_job<H: Host>(h: &H, job_id: &str) -> ApiResult<(Job, Vec<(u32, String)>)> {
     let blob = h.blob_get(&jobs::blob_key(job_id)).await?.ok_or_else(|| ApiError::not_found("job data"))?;
-    let v: Value = serde_json::from_slice(&util::gunzip(&blob, usize::MAX).map_err(|e| ApiError::internal(&e.to_string()))?)
-        .map_err(|e| ApiError::internal(&e.to_string()))?;
-    let job = serde_json::from_value(v["job"].clone()).map_err(|e| ApiError::internal(&e.to_string()))?;
-    Ok((job, serde_json::from_value(v["sess_ids"].clone()).unwrap_or_default()))
+    jobs::decode_blob(&blob)
 }
 
 fn max_points(req: &Request) -> ApiResult<usize> {

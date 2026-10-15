@@ -24,6 +24,9 @@ use worker::*;
 const WEBHOOK_TIMEOUT: Duration = Duration::from_secs(10);
 /// The scorer saves its snapshot this long after the last upload.
 const SNAPSHOT_IDLE_MS: i64 = 60_000;
+/// When a pass left chunks (`Report::more`), the next starts this soon, as a
+/// new invocation with its own limits.
+const NEXT_PASS_MS: i64 = 1_000;
 
 /// A variable or secret (either works for every name), split at commas.
 fn list(env: &Env, name: &str, _secret: bool) -> Vec<String> {
@@ -134,6 +137,11 @@ impl Host for CfHost {
     async fn blob_delete(&self, key: &str) -> HostResult<()> {
         let bucket = self.env.bucket("RAW").map_err(host_err)?;
         bucket.delete(key).await.map_err(host_err)
+    }
+
+    async fn blob_size(&self, key: &str) -> HostResult<Option<u64>> {
+        let bucket = self.env.bucket("RAW").map_err(host_err)?;
+        Ok(bucket.head(key).await.map_err(host_err)?.map(|o| o.size()))
     }
 
     async fn backup_put(&self, key: &str, bytes: Vec<u8>) -> HostResult<()> {
@@ -347,15 +355,19 @@ pub struct ScorerObject {
     scorer: RefCell<Option<Scorer>>,
     busy: Cell<bool>,
     again: Cell<bool>,
+    /// The last pass left chunks for the next one.
+    more: Cell<bool>,
 }
 
 impl ScorerObject {
-    /// Processes until no poke arrived during the last run.
+    /// Processes until no poke arrived during the last run, or until a pass
+    /// leaves chunks for the next invocation.
     async fn drain(&self, host: &CfHost, scorer: &mut Scorer) -> pt_server::http::ApiResult<pt_server::scorer::Report> {
         loop {
             self.again.set(false);
             let r = scorer.process(host).await;
-            if r.is_err() || !self.again.get() {
+            self.more.set(r.as_ref().is_ok_and(|r| r.more));
+            if r.is_err() || self.more.get() || !self.again.get() {
                 return r;
             }
         }
@@ -364,7 +376,7 @@ impl ScorerObject {
 
 impl DurableObject for ScorerObject {
     fn new(state: State, env: Env) -> Self {
-        ScorerObject { state, env, scorer: RefCell::new(None), busy: Cell::new(false), again: Cell::new(false) }
+        ScorerObject { state, env, scorer: RefCell::new(None), busy: Cell::new(false), again: Cell::new(false), more: Cell::new(false) }
     }
 
     async fn fetch(&self, req: Request) -> Result<Response> {
@@ -385,7 +397,9 @@ impl DurableObject for ScorerObject {
         let dirty = scorer.needs_save();
         *self.scorer.borrow_mut() = Some(scorer);
         self.busy.set(false);
-        if dirty {
+        if self.more.get() {
+            self.state.storage().set_alarm(NEXT_PASS_MS).await?;
+        } else if dirty {
             self.state.storage().set_alarm(SNAPSHOT_IDLE_MS).await?;
         }
         match result {
@@ -409,11 +423,17 @@ impl DurableObject for ScorerObject {
         self.busy.set(true);
         let host = CfHost::new(self.env.clone(), None);
         let mut outcome = scorer.save(&host).await;
-        if outcome.is_ok() && self.again.get() {
+        if outcome.is_ok() && (self.again.get() || self.more.get()) {
             outcome = self.drain(&host, &mut scorer).await.map(|_| ());
             if outcome.is_ok() {
                 outcome = scorer.save(&host).await;
             }
+        }
+        if outcome.is_ok() && self.more.get() {
+            *self.scorer.borrow_mut() = Some(scorer);
+            self.busy.set(false);
+            self.state.storage().set_alarm(NEXT_PASS_MS).await?;
+            return Response::ok("more");
         }
         *self.scorer.borrow_mut() = Some(scorer);
         self.busy.set(false);

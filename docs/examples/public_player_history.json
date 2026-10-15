@@ -43,7 +43,7 @@
     {
       "damage_pct_avg": 0.0,
       "end": "2026-10-19T00:00:00.000Z",
-      "fuel_used_l": 0.71,
+      "fuel_used_l": 0.68,
       "game_km": 126.7,
       "game_mi": 78.73,
       "income": 6767,
@@ -51,7 +51,7 @@
       "points": 7.2,
       "running": {
         "damage_pct_avg": 0.0,
-        "fuel_used_l": 0.71,
+        "fuel_used_l": 0.68,
         "game_km": 126.7,
         "game_mi": 78.73,
         "income": 6767,

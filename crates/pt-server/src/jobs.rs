@@ -5,10 +5,11 @@ use pt_core::config::ScaleClass;
 use pt_core::rules::{evaluate, Bonus, BonusKind, Context, DiscardReason, JobResult, Outcome, ReviewReason};
 use pt_core::timeline::{Job, JobEvent};
 use pt_core::{Config, Game};
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
 
 use crate::env::{Host, Row, RowExt};
-use crate::http::ApiResult;
+use crate::http::{ApiError, ApiResult};
 use crate::params;
 use crate::store::{self, User};
 use crate::util::{self, mi, rfc3339, round2};
@@ -21,12 +22,37 @@ pub fn job_key(user_id: &str, game: Game, profile: &str, local_id: u32) -> Strin
     format!("jobs/{user_id}/{}/{profile}/{local_id}", game.as_str())
 }
 
+#[derive(Serialize)]
+struct BlobOut<'a> {
+    job: &'a Job,
+    sess_ids: &'a [(u32, String)],
+}
+
+#[derive(Deserialize)]
+struct BlobIn {
+    job: Job,
+    #[serde(default)]
+    sess_ids: Vec<(u32, String)>,
+}
+
+/// A job's stored data (`jobs/{id}.json.gz`): the job and its sessions,
+/// written straight into the compressor. A capture-mode job is tens of MB of
+/// JSON, more than fits in a Worker as a JSON tree.
+pub fn encode_blob(job: &Job, sess_ids: &[(u32, String)]) -> ApiResult<Vec<u8>> {
+    util::gzip_json(&BlobOut { job, sess_ids }).map_err(|e| ApiError::internal(&e))
+}
+
+pub fn decode_blob(z: &[u8]) -> ApiResult<(Job, Vec<(u32, String)>)> {
+    let b: BlobIn = util::gunzip_json(z).map_err(|e| ApiError::internal(&e))?;
+    Ok((b.job, b.sess_ids))
+}
+
 pub fn blob_key(job_id: &str) -> String {
     format!("jobs/{job_id}.json.gz")
 }
 
 /// What the scorer knows about a job beyond the job itself.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Facts {
     /// Server clock when the delivery reached the server.
     pub delivered_at: Option<i64>,
@@ -316,11 +342,12 @@ fn place(city_id: &str, city: &str, company_id: &str, company: &str) -> Value {
     json!({"city_id": city_id, "city_name": city, "company_id": company_id, "company_name": company})
 }
 
-/// Fuel used: every drop between neighbouring points of one run.
+/// Fuel used: every drop between neighbouring points of one run, except
+/// across a teleport (rules: fuel changes there are ignored).
 fn fuel_used(job: &Job) -> f64 {
     job.kept
         .windows(2)
-        .filter(|w| w[0].run == w[1].run)
+        .filter(|w| w[0].run == w[1].run && !w[1].after_teleport)
         .filter_map(|w| Some((w[0].fuel_l? - w[1].fuel_l?).max(0.0)))
         .sum()
 }
@@ -756,9 +783,17 @@ pub async fn persist<H: Host>(
                 || e.s("auto_outcome") != built.auto_outcome
         }
     };
+    let data_key = blob_key(&job_id);
     if !changed {
+        // The row is current; its data may still be missing (a write that
+        // failed after the row was stored, before 2026-10-15).
+        if h.blob_size(&data_key).await?.is_none() {
+            h.blob_put(&data_key, encode_blob(job, &facts.sess_ids)?).await?;
+        }
         return Ok(Some(job_id));
     }
+    // The data first: a row is never stored without it.
+    h.blob_put(&data_key, encode_blob(job, &facts.sess_ids)?).await?;
     let version = existing.as_ref().map_or(1, |e| e.i("version") + 1);
     let bonus_id = built.summary["bonus"]["bonus_id"].as_str().map(str::to_string).filter(|s| !s.is_empty());
     let p = params![
@@ -812,8 +847,6 @@ pub async fn persist<H: Host>(
         p,
     )
     .await?;
-    let blob = json!({"job": job, "sess_ids": facts.sess_ids});
-    h.blob_put(&blob_key(&job_id), util::gzip(blob.to_string().as_bytes())).await?;
 
     // Webhooks (WEBHOOKS §4).
     let points_changed = existing.as_ref().is_some_and(|e| e.opt_f("points") != points.as_f64() || e.opt_f("held_points") != held.as_f64());

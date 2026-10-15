@@ -657,6 +657,23 @@ fn teleports_add_no_distance_and_are_never_reviewed() {
 }
 
 #[test]
+fn a_portal_that_fills_the_tank_raises_no_fuel_flag() {
+    // World of Trucks event portals (Brackenreach, 2026-10-15): the truck is
+    // moved 258 km and the tank is full on arrival.
+    let mut s = Sim::new("ats");
+    s.accept(JobSpec::new("tyres"));
+    s.drive_km(10.0);
+    s.fuel = 277.0;
+    s.drive_km(1.0);
+    s.fuel = 800.0;
+    s.teleport(13_000.0);
+    s.drive_km(10.0);
+    s.deliver(21.0);
+    let (_, r) = s.job("tyres");
+    assert_eq!(r.outcome, Outcome::Valid, "{:?}", r.review);
+}
+
+#[test]
 fn bobtailing_does_not_count() {
     let mut s = Sim::new("ats");
     s.accept(JobSpec::new("tyres"));

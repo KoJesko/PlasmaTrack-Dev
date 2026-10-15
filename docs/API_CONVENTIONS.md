@@ -246,3 +246,8 @@ These answer the bot's open questions "(Q)". **The project owner confirmed all o
     `uninstaller` block.
   - **Clients** send their player token for updates (client 0.2.1).
   - **The revocation message** now points to `/download` in Discord.
+- 2026-10-15: fuel that changes across a teleport no longer raises `fuel_jump` or `negative_fuel`,
+  and is left out of `fuel_used_l`. World of Trucks event portals fill the tank.
+- 2026-10-15: the scorer works through large uploads in passes and never loses a job whose
+  data could not be written. It rebuilds once from raw data on deploy. Admin series of capture-mode
+  jobs no longer answer `404`.

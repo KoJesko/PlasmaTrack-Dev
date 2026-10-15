@@ -31,6 +31,11 @@ command = "worker-build --release"
 [limits]
 cpu_ms = 300000
 
+# Logs are kept and searchable in the dashboard (Workers Logs), so a scorer
+# that fails between uploads can be seen afterwards.
+[observability]
+enabled = true
+
 [[d1_databases]]
 binding = "DB"
 database_name = "plasmatrack"
@@ -90,6 +95,9 @@ workers_dev = true
 
 [env.test.limits]
 cpu_ms = 300000
+
+[env.test.observability]
+enabled = true
 
 [[env.test.d1_databases]]
 binding = "DB"

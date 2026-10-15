@@ -122,6 +122,8 @@ pub trait Host {
     async fn blob_get(&self, key: &str) -> HostResult<Option<Vec<u8>>>;
     async fn blob_put(&self, key: &str, bytes: Vec<u8>) -> HostResult<()>;
     async fn blob_delete(&self, key: &str) -> HostResult<()>;
+    /// An object's size, without reading it.
+    async fn blob_size(&self, key: &str) -> HostResult<Option<u64>>;
 
     /// The backup bucket (a separate R2 bucket): write, list keys under a
     /// prefix, delete.
