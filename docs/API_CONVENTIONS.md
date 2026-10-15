@@ -216,3 +216,5 @@ These answer the bot's open questions "(Q)". **The project owner confirmed all o
     `manual_submission`.
   - **History:** a player's job history across both games, `GET /public/players/{id}/jobs`.
   - **Stats:** they gain `outcomes` and `distance_by_scale_class` (PUBLIC_API §2).
+- 2026-10-15: evidence uploads accept AVIF (`image/avif`), the owner's preferred format, as well
+  as WebP, PNG and JPEG (PUBLIC_API §6).

@@ -24,8 +24,14 @@ pub const UNATTACHED_TTL_MS: i64 = 24 * 3_600_000;
 pub const MAX_UNATTACHED: usize = 30;
 pub const EVIDENCE_URL_TTL_MS: i64 = 60 * 60_000;
 
-/// WebP, PNG or JPEG, by their first bytes.
+/// AVIF (an ISO-BMFF `ftyp` box naming `avif` or `avis` as its major or a
+/// compatible brand), WebP, PNG or JPEG, by their first bytes.
 pub fn image_type(b: &[u8]) -> Option<&'static str> {
+    if b.len() >= 16 && &b[4..8] == b"ftyp" {
+        let size = (u32::from_be_bytes([b[0], b[1], b[2], b[3]]) as usize).clamp(16, b.len().min(256));
+        let mut brands = std::iter::once(&b[8..12]).chain(b[16..size].chunks_exact(4));
+        return brands.any(|x| x == b"avif" || x == b"avis").then_some("image/avif");
+    }
     if b.len() >= 12 && &b[..4] == b"RIFF" && &b[8..12] == b"WEBP" {
         Some("image/webp")
     } else if b.starts_with(b"\x89PNG\r\n\x1a\n") {
@@ -59,7 +65,7 @@ pub async fn upload<H: Host>(h: &H, req: &Request, discord_id: &str) -> ApiResul
         Ok(i) => i,
         Err(replay) => return Ok(replay),
     };
-    let content_type = image_type(&req.body).ok_or_else(|| ApiError::field("body", "a WebP, PNG or JPEG image"))?;
+    let content_type = image_type(&req.body).ok_or_else(|| ApiError::field("body", "an AVIF, WebP, PNG or JPEG image"))?;
     let user = player(h, discord_id).await?;
     let now = h.now_ms();
     let waiting = store::count(
@@ -450,3 +456,35 @@ pub async fn public_extras<H: Host>(h: &H, row: &Row, v: &mut Value) -> ApiResul
     Ok(())
 }
 
+
+#[cfg(test)]
+mod tests {
+    use super::image_type;
+
+    fn ftyp(major: &[u8; 4], compatible: &[&[u8; 4]]) -> Vec<u8> {
+        let size = 16 + 4 * compatible.len();
+        let mut b = (size as u32).to_be_bytes().to_vec();
+        b.extend_from_slice(b"ftyp");
+        b.extend_from_slice(major);
+        b.extend_from_slice(&[0, 0, 0, 0]);
+        for c in compatible {
+            b.extend_from_slice(*c);
+        }
+        b.extend_from_slice(b"\0\0\0\x0cmeta");
+        b
+    }
+
+    #[test]
+    fn image_types_by_their_first_bytes() {
+        assert_eq!(image_type(&ftyp(b"avif", &[b"mif1", b"miaf"])), Some("image/avif"));
+        assert_eq!(image_type(&ftyp(b"mif1", &[b"avif"])), Some("image/avif"));
+        assert_eq!(image_type(&ftyp(b"avis", &[])), Some("image/avif"));
+        assert_eq!(image_type(&ftyp(b"heic", &[b"mif1"])), None, "HEIC is not AVIF");
+        assert_eq!(image_type(&ftyp(b"isom", &[b"mp41"])), None, "a video");
+        assert_eq!(image_type(b"RIFF\0\0\0\0WEBPVP8 "), Some("image/webp"));
+        assert_eq!(image_type(b"\x89PNG\r\n\x1a\n...."), Some("image/png"));
+        assert_eq!(image_type(&[0xFF, 0xD8, 0xFF, 0xE0]), Some("image/jpeg"));
+        assert_eq!(image_type(b"GIF89a"), None);
+        assert_eq!(image_type(b"\0\0\0\x08ftyp"), None, "too short");
+    }
+}

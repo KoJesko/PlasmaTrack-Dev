@@ -388,7 +388,7 @@ fn openapi(calls: &[(Call, Value)], hooks: &BTreeMap<String, Value>) -> Value {
         if c.image && op.get("requestBody").is_none() {
             let bin = json!({"schema": {"type": "string", "format": "binary"}});
             op["requestBody"] = json!({"required": true, "description": "The image itself, at most 5 MB.",
-                "content": {"image/webp": bin, "image/png": bin, "image/jpeg": bin}});
+                "content": {"image/avif": bin, "image/webp": bin, "image/png": bin, "image/jpeg": bin}});
         }
         if let (Some(b), None) = (&c.body, op.get("requestBody")) {
             op["requestBody"] = json!({"required": true, "content": {"application/json": {"example": b}}});

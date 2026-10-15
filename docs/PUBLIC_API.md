@@ -325,8 +325,11 @@ one, as with `/link`. A disabled player gets `403`.
 
 ### `POST /api/v1/players/{discord_id}/evidence`: upload one image
 
-- **Body:** the image's raw bytes, not JSON. Send `Content-Type: image/webp` (PNG and JPEG are
-  accepted too). The server checks the file's first bytes, not the header.
+- **Body:** the image's raw bytes, not JSON, as **AVIF** (`image/avif`, preferred), WebP, PNG
+  or JPEG.
+  - The server checks the file's first bytes, not the `Content-Type` header. An AVIF is an
+    ISO-BMFF file whose `ftyp` box names `avif` (or `avis`) as its major or a compatible brand.
+  - Downloads (`/dl/evidence/…`) are served with the detected type.
 - **Size:** at most **5 MB** per image (`413`).
 - **Answer:** `201`:
 

@@ -27,7 +27,7 @@ fn manual_jobs_go_to_review_and_score_by_map_scale() {
     // Images: only real image types, at most 5 MB.
     let mut bad = t.bot("POST", &format!("/api/v1/players/{PLAYER}/evidence")).with_header("idempotency-key", "bad");
     bad.body = b"not an image".to_vec();
-    assert_eq!(t.call(bad).body_json()["error"]["details"]["fields"]["body"], "a WebP, PNG or JPEG image");
+    assert_eq!(t.call(bad).body_json()["error"]["details"]["fields"]["body"], "an AVIF, WebP, PNG or JPEG image");
     let mut big = t.bot("POST", &format!("/api/v1/players/{PLAYER}/evidence")).with_header("idempotency-key", "big");
     big.body = vec![0; 5 * 1024 * 1024 + 1];
     assert_eq!(t.call(big).status, 413);
@@ -199,4 +199,26 @@ fn unused_images_are_deleted_after_a_day() {
     block_on(pt_server::manage::cron(&t)).unwrap();
     assert_eq!(t.q("SELECT COUNT(*) AS n FROM evidence")[0]["n"], 0);
     assert!(!t.blobs.borrow().keys().any(|k| k.contains(&id)));
+}
+
+#[test]
+fn avif_images_are_accepted_and_served_as_avif() {
+    let t = TestHost::new();
+    publish(&t);
+    link(&t);
+    let mut avif = b"\0\0\0\x1cftypavif\0\0\0\0avifmif1miaf".to_vec();
+    avif.extend_from_slice(b"\0\0\0\x0cmeta....");
+    let mut req = t.bot("POST", &format!("/api/v1/players/{PLAYER}/evidence")).with_header("idempotency-key", "avif").with_header("content-type", "image/avif");
+    req.body = avif.clone();
+    let r = t.call(req);
+    assert_eq!(r.status, 201, "{}", r.body_json());
+    assert_eq!(r.body_json()["content_type"], "image/avif");
+    let map = r.body_json()["evidence_id"].as_str().unwrap().to_string();
+    let (e, u) = (image(&t, PLAYER, 1), image(&t, PLAYER, 3));
+    let r = t.call(t.bot("POST", &format!("/api/v1/players/{PLAYER}/manual-jobs")).with_header("idempotency-key", "m").with_json(&manual_body(&e, &map, &u)));
+    assert_eq!(r.status, 201, "{}", r.body_json());
+    let dl = get(&t, r.body_json()["custom_map"]["url"].as_str().unwrap());
+    assert_eq!(dl.status, 200);
+    assert_eq!(dl.body, avif);
+    assert!(dl.headers.iter().any(|(k, v)| k == "content-type" && v == "image/avif"), "{:?}", dl.headers);
 }

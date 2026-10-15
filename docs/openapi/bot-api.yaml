@@ -3127,6 +3127,10 @@
       - "$ref": "#/components/parameters/IdempotencyKey"
       "requestBody":
         "content":
+          "image/avif":
+            "schema":
+              "format": "binary"
+              "type": "string"
           "image/jpeg":
             "schema":
               "format": "binary"
