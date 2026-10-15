@@ -29,13 +29,26 @@ fn literal(v: &Value) -> String {
             // not contain, turned back by replace(). D1 allows expressions only
             // 100 deep, so a `|| char(10) ||` per line breaks on long texts
             // (the published config's TOML).
-            let marker = |c: &str| (0..).map(|k| format!("~{c}{k}~")).find(|m| !s.contains(m.as_str())).expect("some marker is free");
-            let mut out = format!("'{}'", s.replace('\'', "''"));
-            for (ch, name, code) in [('\n', "n", 10), ('\r', "r", 13)] {
-                if s.contains(ch) {
-                    let m = marker(name);
-                    out = format!("replace({}, '{m}', char({code}))", out.replace(ch, &m));
+            // A marker counts only if decoding gives the text back: "~n0" before
+            // a line break would otherwise become "~n0~n0~", which replace()
+            // matches at the wrong place. \r is encoded first, so it is decoded
+            // last (the outer replace).
+            let mut t = s.clone();
+            let mut steps = Vec::new();
+            for (ch, name, code) in [('\r', "r", 13), ('\n', "n", 10)] {
+                if t.contains(ch) {
+                    let back = ch.to_string();
+                    let m = (0..)
+                        .map(|k| format!("~{name}{k}~"))
+                        .find(|m| t.replace(ch, m).replace(m.as_str(), &back) == t)
+                        .expect("some marker round-trips");
+                    t = t.replace(ch, &m);
+                    steps.push((m, code));
                 }
+            }
+            let mut out = format!("'{}'", t.replace('\'', "''"));
+            for (m, code) in steps.iter().rev() {
+                out = format!("replace({out}, '{m}', char({code}))");
             }
             out
         }
@@ -140,6 +153,26 @@ pub async fn now<H: Host>(h: &H, req: &Request) -> ApiResult<Response> {
 mod tests {
     use super::*;
 
+    /// Evaluates a text literal as SQLite would: nested replace(…, 'm', char(c))
+    /// around one quoted string (left to right, non-overlapping, like
+    /// `str::replace`).
+    fn decode(lit: &str) -> String {
+        let mut l = lit;
+        let mut calls = Vec::new();
+        while let Some(inner) = l.strip_prefix("replace(") {
+            let close = inner.rfind(", '").unwrap();
+            let (rest, tail) = (&inner[..close], &inner[close + 3..]);
+            let (m, code) = tail.split_once("', char(").unwrap();
+            calls.push((m.to_string(), code.trim_end_matches(')').parse::<u8>().unwrap() as char));
+            l = rest;
+        }
+        let mut v = l.strip_prefix('\'').unwrap().strip_suffix('\'').unwrap().replace("''", "'");
+        for (m, c) in calls.iter().rev() {
+            v = v.replace(m.as_str(), &c.to_string());
+        }
+        v
+    }
+
     #[test]
     fn literals_keep_one_statement_per_line() {
         assert_eq!(literal(&json!(null)), "NULL");
@@ -147,8 +180,14 @@ mod tests {
         assert_eq!(literal(&json!(7.5)), "7.5");
         assert_eq!(literal(&json!("it's")), "'it''s'");
         assert_eq!(literal(&json!("a\nb\r\nc")), "replace(replace('a~n0~b~r0~~n0~c', '~n0~', char(10)), '~r0~', char(13))");
-        // A marker already in the text is skipped.
+        // A marker already in the text is skipped, and so is one a line break
+        // would complete (found by the bot's session).
         assert_eq!(literal(&json!("~n0~\n")), "replace('~n0~~n1~', '~n1~', char(10))");
+        assert_eq!(literal(&json!("~n0\n")), "replace('~n0~n1~', '~n1~', char(10))");
+        // Decoding the way SQLite's replace() does gives every text back.
+        for s in ["~n0\n", "\n~n0~", "~r0\r\n", "~n0~r0\r~n1\n", "~\n~", "~n\n0~", "a\r\r\n\n'b'~r0~~n0~", &"~n0\n".repeat(50)] {
+            assert_eq!(decode(&literal(&json!(s))), s, "{s:?}");
+        }
         // Depth stays constant however many lines (D1 allows 100).
         let long = literal(&json!("x\n".repeat(500)));
         assert_eq!((long.matches("replace(").count(), long.contains('\n')), (1, false));
