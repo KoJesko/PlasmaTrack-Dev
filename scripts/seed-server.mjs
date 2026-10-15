@@ -39,15 +39,19 @@ const name = opt("name", "Test Driver");
 let token = opt("token");
 const perChunk = Number(opt("chunk", "2000"));
 const publish = flag("publish");
+// --real-release: report the hashes of the build in installer/payload (already
+// published), so nothing fake is published; for temporary data on production.
+const realRelease = flag("real-release");
 const files = args;
-if (!botToken || !actor || files.length === 0) {
-  console.error("usage: seed-server.mjs --url U --bot-token T --actor DISCORD_ID [--publish] [--player ID] files...");
+if (!botToken || !actor || files.length === 0 || (publish && realRelease)) {
+  console.error("usage: seed-server.mjs --url U --bot-token T --actor DISCORD_ID [--publish | --real-release] [--player ID] files...");
   process.exit(2);
 }
 
 // The manifest the fake client reports, and the release that matches it.
-const PLUGIN_SHA = createHash("sha256").update("plasmatrack-test-plugin").digest("hex");
-const CLIENT_SHA = createHash("sha256").update("plasmatrack-test-client").digest("hex");
+const payload = realRelease ? JSON.parse(readFileSync(join(root, "installer", "payload", "manifest.json"), "utf8")) : null;
+const PLUGIN_SHA = payload ? payload["plasmatrack.dll"] : createHash("sha256").update("plasmatrack-test-plugin").digest("hex");
+const CLIENT_SHA = payload ? payload["plasmatrack-clientw.exe"] : createHash("sha256").update("plasmatrack-test-client").digest("hex");
 const manifest = [
   { role: "plugin", path: "C:\\Steam\\steamapps\\common\\Game\\bin\\win_x64\\plugins\\plasmatrack.dll", sha256: PLUGIN_SHA },
   { role: "client_binary", path: "C:\\PlasmaTrack\\bin\\plasmatrack-clientw.exe", sha256: CLIENT_SHA },
