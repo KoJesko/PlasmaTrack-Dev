@@ -9,6 +9,8 @@ pub mod ingest;
 pub mod store;
 pub mod config;
 pub mod jobs;
+pub mod sheet;
+pub mod manual;
 pub mod webhooks;
 pub mod scorer;
 pub mod admin;

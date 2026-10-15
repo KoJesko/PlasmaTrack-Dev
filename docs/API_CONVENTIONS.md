@@ -137,8 +137,9 @@ Every non-2xx response has this body:
   rounds or computes either.
 - **Points:** already floored to the server's `points_decimals` (currently 1): `7.0`, `36.1`.
   Show as-is. JSON numbers, never strings.
-- **Game:** `"ets2"` or `"ats"` on every job, leaderboard, bonus and stats object. No endpoint
-  mixes the two games.
+- **Game:** `"ets2"` or `"ats"` on every job, leaderboard, bonus and stats object. Only a
+  player's own job history (PUBLIC_API §3) lists both games, with `game` on each item. Nothing
+  else mixes them.
 - **IDs:**
   - **Jobs:** `job_id` is 8 Crockford base32 characters. **In JSON it is always uppercase
     without a hyphen** (`7K2M9QXA`); show it as `7K2M-9QXA`. On input it is case-insensitive,
@@ -202,3 +203,16 @@ These answer the bot's open questions "(Q)". **The project owner confirmed all o
 - 2026-10-15: route maps are live (stage 5). Both route endpoints answer `200` with
   `application/geo+json` (PUBLIC_API §4, ADMIN_API §5). New segment kind `ferry_or_train`, for
   a crossing the game did not name.
+- 2026-10-15: the bot's proposal, approved by the project owner:
+  - **Manual submissions:** evidence images and manual jobs (PUBLIC_API §6). Every job and
+    summary gains `origin` (`tracked` or `manual`); `job.needs_review` carries it too.
+  - **Manual job values:** `multiplayer.kind` can be `unknown`; `market`, `cargo.id`,
+    `city_id` and `company_id` can be `null`. The admin detail's `speed` and `integrity` can
+    be `null`.
+  - **Moderator edits** of any job (ADMIN_API §14). Approval takes `hide_map` and
+    `corrections` (ADMIN_API §7).
+  - **New fields:** the admin detail gains `sheet`, `overrides`, `submission`, `evidence`,
+    `hide_map` and `custom_map`; the public detail gains `custom_map`. New review reason
+    `manual_submission`.
+  - **History:** a player's job history across both games, `GET /public/players/{id}/jobs`.
+  - **Stats:** they gain `outcomes` and `distance_by_scale_class` (PUBLIC_API §2).

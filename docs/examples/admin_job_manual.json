@@ -1,0 +1,230 @@
+{
+  "audit": [
+    {
+      "action": "job.submit",
+      "actor": {
+        "discord_user_id": "self",
+        "display_name": null
+      },
+      "after": {
+        "evidence": 3,
+        "game": "ets2"
+      },
+      "at": "2026-10-14T09:00:23.000Z",
+      "audit_id": "aud_10",
+      "before": {},
+      "reason": null,
+      "target": {
+        "id": "1RQXYEB5",
+        "kind": "job"
+      }
+    }
+  ],
+  "bonus": null,
+  "bonus_set": [],
+  "cargo": {
+    "id": null,
+    "name": "Apples"
+  },
+  "config_version": {
+    "current": true,
+    "integrity_hash": "37b16360fb88293742498e06351590d31df333882ff0cfd72e5852a71e689872",
+    "version_id": "cfg_1"
+  },
+  "custom_map": {
+    "expires_at": "2026-10-14T10:00:26.000Z",
+    "url": "https://pt.example/dl/evidence/evd_arsm3am5s1?exp=1791972026&sig=169705a7cbe990365865582470b8f32dae1687210f1b23a933b3ca0b8e474f35"
+  },
+  "delivered_at": "2026-10-14T09:00:23.000Z",
+  "destination": {
+    "city_id": null,
+    "city_name": "London",
+    "company_id": null,
+    "company_name": "Posped"
+  },
+  "distance_by_scale_class": {
+    "city": {
+      "game_km": 0.0,
+      "game_mi": 0.0,
+      "world_km": 0.0,
+      "world_mi": 0.0
+    },
+    "nonstandard": {
+      "game_km": 0.0,
+      "game_mi": 0.0,
+      "world_km": 0.0,
+      "world_mi": 0.0
+    },
+    "one_to_one": {
+      "game_km": 0.0,
+      "game_mi": 0.0,
+      "world_km": 0.0,
+      "world_mi": 0.0
+    },
+    "road": {
+      "game_km": 380.0,
+      "game_mi": 236.12,
+      "world_km": 21.07,
+      "world_mi": 13.09
+    },
+    "unknown": {
+      "game_km": 0.0,
+      "game_mi": 0.0,
+      "world_km": 0.0,
+      "world_mi": 0.0
+    }
+  },
+  "distances": {
+    "accepted_world_mi": 13.09,
+    "counted_game_km": 380.0,
+    "delivered_game_km": 380.0,
+    "tracked_counted_game_km": null,
+    "tracked_uncounted_game_km": null,
+    "tracked_whole_game_km": null,
+    "world_km": 21.067,
+    "world_mi": 13.09
+  },
+  "etag": "\"j1RQXYEB5-v1\"",
+  "evidence": [
+    {
+      "content_type": "image/webp",
+      "evidence_id": "evd_arsm3am5s1",
+      "expires_at": "2026-10-14T10:00:26.000Z",
+      "role": "custom_map",
+      "size_bytes": 36,
+      "url": "https://pt.example/dl/evidence/evd_arsm3am5s1?exp=1791972026&sig=169705a7cbe990365865582470b8f32dae1687210f1b23a933b3ca0b8e474f35"
+    },
+    {
+      "content_type": "image/webp",
+      "evidence_id": "evd_3a051hzcz0",
+      "expires_at": "2026-10-14T10:00:26.000Z",
+      "role": "main",
+      "size_bytes": 36,
+      "url": "https://pt.example/dl/evidence/evd_3a051hzcz0?exp=1791972026&sig=f91fffc73320129c390a347b6cbe4f50c7dc5e3c8668d5b4f2fa8ef3f03c82b3"
+    },
+    {
+      "content_type": "image/webp",
+      "evidence_id": "evd_qa7j61zpen",
+      "expires_at": "2026-10-14T10:00:26.000Z",
+      "role": "uk_route",
+      "size_bytes": 36,
+      "url": "https://pt.example/dl/evidence/evd_qa7j61zpen?exp=1791972026&sig=fe8db2f023b9f08f47c38c0915bae0d6aa22863436927470e18099b689f4b8cf"
+    }
+  ],
+  "fuel": {
+    "refuels": [],
+    "used_l": 120.5
+  },
+  "game": "ets2",
+  "game_km": 380.0,
+  "game_mi": 236.12,
+  "held_points": 13.0,
+  "hide_map": false,
+  "integrity": null,
+  "job_id": "1RQXYEB5",
+  "market": null,
+  "multiplayer": {
+    "kind": "unknown",
+    "truckersmp": null
+  },
+  "origin": "manual",
+  "outcome": "pending_review",
+  "overrides": {},
+  "planned_distance_km": null,
+  "player": {
+    "discord_user_id": "123456789012345678",
+    "display_name": "Example Driver",
+    "user_id": "usr_cy3x405w4v"
+  },
+  "plugin_sessions": [],
+  "points": null,
+  "profile_key": "manual",
+  "public_notes": [
+    {
+      "code": "under_review",
+      "text": "A moderator will check this job."
+    }
+  ],
+  "reasons": [
+    {
+      "code": "manual_submission",
+      "details": {},
+      "text": "Submitted by hand: a moderator checks the evidence."
+    }
+  ],
+  "reported_delivered_at": "2026-10-14T08:20:00.000Z",
+  "rules": [],
+  "segments": [],
+  "sheet": {
+    "cargo_name": "Apples",
+    "damage_pct": 2.0,
+    "destination_city": "London",
+    "destination_company": "Posped",
+    "distance_km": 380.0,
+    "distance_mi": 236.12,
+    "ended_at": "2026-10-14T08:20:00.000Z",
+    "fuel_used_l": 120.5,
+    "map_scale": 19.0,
+    "mods": [
+      "Example Map Mod"
+    ],
+    "profit": 15000.0,
+    "source_city": "Calais",
+    "source_company": "Tradeaux",
+    "started_at": "2026-10-14T07:00:00.000Z",
+    "truck": "Scania",
+    "truck_model": "S 730",
+    "uk": {
+      "distance_km": 76.0,
+      "distance_mi": 47.22,
+      "end_city": "London",
+      "entry_city": "Folkestone",
+      "evidence_id": "evd_qa7j61zpen"
+    }
+  },
+  "source": {
+    "city_id": null,
+    "city_name": "Calais",
+    "company_id": null,
+    "company_name": "Tradeaux"
+  },
+  "speed": null,
+  "speed_penalty_applied": false,
+  "start_kind": "manual",
+  "state": "delivered",
+  "submission": {
+    "fuel_unit": "l",
+    "map_scale_defaulted": true,
+    "sheet": {
+      "cargo_name": "Apples",
+      "damage_pct": 2.0,
+      "destination_city": "London",
+      "destination_company": "Posped",
+      "distance_km": 380.0,
+      "distance_mi": 236.12,
+      "ended_at": "2026-10-14T08:20:00.000Z",
+      "fuel_used_l": 120.5,
+      "map_scale": 19.0,
+      "mods": [
+        "Example Map Mod"
+      ],
+      "profit": 15000.0,
+      "source_city": "Calais",
+      "source_company": "Tradeaux",
+      "started_at": "2026-10-14T07:00:00.000Z",
+      "truck": "Scania",
+      "truck_model": "S 730",
+      "uk": {
+        "distance_km": 76.0,
+        "distance_mi": 47.22,
+        "end_city": "London",
+        "entry_city": "Folkestone",
+        "evidence_id": "evd_qa7j61zpen"
+      }
+    },
+    "unit": "km"
+  },
+  "timeline": [],
+  "world_km": 21.07,
+  "world_mi": 13.09
+}

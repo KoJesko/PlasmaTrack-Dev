@@ -6,18 +6,100 @@
   "singleplayer_division": false,
   "stats": {
     "ats": {
+      "distance_by_scale_class": {
+        "city": {
+          "game_km": 8.45,
+          "game_mi": 5.25,
+          "world_km": 2.82,
+          "world_mi": 1.75
+        },
+        "nonstandard": {
+          "game_km": 0.0,
+          "game_mi": 0.0,
+          "world_km": 0.0,
+          "world_mi": 0.0
+        },
+        "one_to_one": {
+          "game_km": 0.0,
+          "game_mi": 0.0,
+          "world_km": 0.0,
+          "world_mi": 0.0
+        },
+        "road": {
+          "game_km": 62.27,
+          "game_mi": 38.69,
+          "world_km": 3.11,
+          "world_mi": 1.93
+        },
+        "unknown": {
+          "game_km": 0.0,
+          "game_mi": 0.0,
+          "world_km": 0.0,
+          "world_mi": 0.0
+        }
+      },
       "game_km": 70.25,
       "game_mi": 43.65,
       "job_count": 1,
+      "outcomes": {
+        "approved": 0,
+        "discarded": 0,
+        "invalid": 0,
+        "pending_review": 0,
+        "rejected": 0,
+        "valid": 1,
+        "voided": 0
+      },
       "pending_review_count": 0,
       "points": 3.6,
       "world_km": 5.89,
       "world_mi": 3.66
     },
     "ets2": {
+      "distance_by_scale_class": {
+        "city": {
+          "game_km": 16.45,
+          "game_mi": 10.22,
+          "world_km": 5.48,
+          "world_mi": 3.41
+        },
+        "nonstandard": {
+          "game_km": 0.0,
+          "game_mi": 0.0,
+          "world_km": 0.0,
+          "world_mi": 0.0
+        },
+        "one_to_one": {
+          "game_km": 0.0,
+          "game_mi": 0.0,
+          "world_km": 0.0,
+          "world_mi": 0.0
+        },
+        "road": {
+          "game_km": 110.93,
+          "game_mi": 68.93,
+          "world_km": 6.49,
+          "world_mi": 4.03
+        },
+        "unknown": {
+          "game_km": 0.0,
+          "game_mi": 0.0,
+          "world_km": 0.0,
+          "world_mi": 0.0
+        }
+      },
       "game_km": 126.7,
       "game_mi": 78.73,
       "job_count": 2,
+      "outcomes": {
+        "approved": 0,
+        "discarded": 0,
+        "invalid": 0,
+        "pending_review": 1,
+        "rejected": 0,
+        "valid": 2,
+        "voided": 0
+      },
       "pending_review_count": 1,
       "points": 7.2,
       "world_km": 11.71,

@@ -1,0 +1,11 @@
+{
+  "error": {
+    "code": "validation_failed",
+    "details": {
+      "fields": {
+        "damage": "a number from 0 to 100"
+      }
+    },
+    "message": "Some fields are invalid."
+  }
+}

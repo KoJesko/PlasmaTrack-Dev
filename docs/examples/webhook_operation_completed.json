@@ -1,20 +1,20 @@
 {
   "data": {
-    "finished_at": "2026-10-14T09:00:27.000Z",
+    "finished_at": "2026-10-14T09:00:36.000Z",
     "kind": "recalculation",
-    "operation_id": "op_arsm3am5s1",
+    "operation_id": "op_gyart1bk1s",
     "requested_by": {
       "discord_user_id": "900000000000000001"
     },
-    "started_at": "2026-10-14T09:00:26.000Z",
+    "started_at": "2026-10-14T09:00:35.000Z",
     "status": "succeeded",
     "summary": {
       "changed": {},
-      "jobs": 3
+      "jobs": 4
     }
   },
-  "event_id": "evt_q1be9hsw53",
-  "occurred_at": "2026-10-14T09:00:27.000Z",
+  "event_id": "evt_04qx5vqgw5",
+  "occurred_at": "2026-10-14T09:00:36.000Z",
   "payload_version": 1,
   "type": "operation.completed"
 }

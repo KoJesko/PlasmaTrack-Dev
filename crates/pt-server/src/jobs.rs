@@ -52,6 +52,25 @@ pub enum Trigger {
     Rebuild,
     /// A moderator's or bulk recalculation.
     Recalculation,
+    /// A moderator's edit (ADMIN_API §14).
+    Edit,
+}
+
+/// Who changed a job by hand, for `by` in `job.scored`; `quiet` when the
+/// caller sends its own webhook (an approval with corrections).
+#[derive(Debug, Clone, Copy)]
+pub struct Moderator<'a> {
+    pub discord_user_id: &'a str,
+    pub quiet: bool,
+}
+
+/// `by` of a `job.scored` (WEBHOOKS §4).
+pub fn by_json(trigger: Trigger, moderator: Option<Moderator>) -> Value {
+    match (moderator, trigger) {
+        (Some(m), _) => json!({"kind": "moderator", "discord_user_id": m.discord_user_id}),
+        (None, Trigger::Recalculation) => json!({"kind": "recalculation"}),
+        _ => json!({"kind": "rules"}),
+    }
 }
 
 // ---- rule 0 ------------------------------------------------------------------------
@@ -191,7 +210,7 @@ pub fn class_name(c: ScaleClass) -> &'static str {
     }
 }
 
-fn outcome_str(o: Outcome) -> &'static str {
+pub fn outcome_str(o: Outcome) -> &'static str {
     match o {
         Outcome::Valid => "valid",
         Outcome::PendingReview => "pending_review",
@@ -216,13 +235,14 @@ fn reason_text(code: &str) -> &'static str {
         "trace_check" => "The trace does not match the configured sample rate.",
         "overspeed_invalid" => "Sustained speed over the invalid limit.",
         "integrity" => "The tracker's files or settings were not recognised.",
+        "manual_submission" => "Submitted by hand: a moderator checks the evidence.",
         "negative_distance" => "The odometer ran backwards.",
         "singleplayer_division_truckersmp" => "A TruckersMP job by a Singleplayer Division player.",
         _ => "",
     }
 }
 
-fn reason(code: &str, details: Value) -> Value {
+pub fn reason(code: &str, details: Value) -> Value {
     json!({"code": code, "text": reason_text(code), "details": details})
 }
 
@@ -437,6 +457,132 @@ fn build(job: &Job, r: &JobResult, cfg: &Config, facts: &Facts, integrity: &Inte
     Built { summary, detail, reasons, auto_outcome, discard, computed_points, rule_points: r.points }
 }
 
+/// What the recording says, as a sheet (ADMIN_API §14): the base that a
+/// moderator's overrides apply to.
+fn tracked_sheet(job: &Job, r: &JobResult, started: i64) -> Map<String, Value> {
+    let n = &job.info.names;
+    let mut m = Map::new();
+    m.insert("distance_km".into(), json!(r.distances.counted_game_km));
+    m.insert("fuel_used_l".into(), json!(fuel_used(job)));
+    m.insert("started_at_ms".into(), json!(started));
+    m.insert("ended_at_ms".into(), json!(job.delivered_wall_ms));
+    m.insert("cargo_name".into(), job.first_info.cargo_name.clone().into());
+    for (k, v) in [("source_city", &n.source_city), ("source_company", &n.source_company), ("destination_city", &n.destination_city), ("destination_company", &n.destination_company)] {
+        m.insert(k.into(), v.clone().into());
+    }
+    for k in ["damage_pct", "profit", "truck", "truck_model", "map_scale", "uk", "adjusted_scale"] {
+        m.insert(k.into(), Value::Null);
+    }
+    m.insert("mods".into(), json!([]));
+    m
+}
+
+/// Lays a moderator's overrides over a built tracked job: names, fuel, times,
+/// and, when a distance field or the bonus is overridden, the distance and the
+/// points. Returns the (started, ended) times to store.
+#[allow(clippy::too_many_arguments)]
+fn apply_overrides(
+    built: &mut Built,
+    base: &Map<String, Value>,
+    overrides: &Map<String, Value>,
+    job: &Job,
+    r: &JobResult,
+    cfg: &Config,
+    bonus_rows: &[(Bonus, String)],
+) -> (i64, Option<i64>) {
+    let eff = crate::sheet::merged(base, overrides);
+    let s = &mut built.summary;
+    if let Some(v) = eff.get("cargo_name").and_then(Value::as_str) {
+        s["cargo"]["name"] = v.into();
+    }
+    for (k, side, field) in [
+        ("source_city", "source", "city_name"),
+        ("source_company", "source", "company_name"),
+        ("destination_city", "destination", "city_name"),
+        ("destination_company", "destination", "company_name"),
+    ] {
+        if let Some(v) = eff.get(k).and_then(Value::as_str) {
+            s[side][field] = v.into();
+        }
+    }
+    built.detail["fuel"]["used_l"] = eff.get("fuel_used_l").and_then(Value::as_f64).map(round2).into();
+    let started = eff.get("started_at_ms").and_then(Value::as_i64).unwrap_or(0);
+    let ended = eff.get("ended_at_ms").and_then(Value::as_i64);
+
+    let distance = ["distance_km", "map_scale", "uk", "adjusted_scale"].iter().any(|k| overrides.contains_key(*k));
+    let bonus_set = overrides.contains_key("bonus_id");
+    if !distance && !bonus_set {
+        return (started, ended);
+    }
+    let old_game = r.distances.counted_game_km;
+    let new_game = eff.get("distance_km").and_then(Value::as_f64).unwrap_or(old_game);
+    let only_distance = !["map_scale", "uk", "adjusted_scale"].iter().any(|k| overrides.contains_key(*k));
+    let world = if !distance {
+        r.distances.world_km
+    } else if only_distance && old_game > 0.0 {
+        // The job's own city/road mix, applied to the corrected distance.
+        let f = new_game / old_game;
+        if let Some(classes) = s["distance_by_scale_class"].as_object_mut() {
+            for c in classes.values_mut() {
+                let (w, g) = (c["world_km"].as_f64().unwrap_or(0.0) * f, c["game_km"].as_f64().unwrap_or(0.0) * f);
+                *c = json!({"world_km": round2(w), "world_mi": mi(w), "game_km": round2(g), "game_mi": mi(g)});
+            }
+        }
+        r.distances.world_km * f
+    } else {
+        let (w, classes) = crate::sheet::world_km(&eff, job.game, cfg);
+        s["distance_by_scale_class"] = by_class_json(&classes);
+        w
+    };
+    if distance {
+        s["world_km"] = round2(world).into();
+        s["world_mi"] = mi(world).into();
+        s["game_km"] = round2(new_game).into();
+        s["game_mi"] = mi(new_game).into();
+        let d = &mut built.detail["distances"];
+        d["counted_game_km"] = round2(new_game).into();
+        d["world_km"] = util::round3(world).into();
+        d["world_mi"] = util::round3(pt_core::units::km_to_mi(world)).into();
+        d["edited"] = true.into();
+    }
+    let world_mi = pt_core::units::km_to_mi(world);
+    let accepted = if r.speed.penalty { world_mi * cfg.rules.speed_penalty_factor } else { world_mi };
+    let base_points = accepted * cfg.rules.points_per_world_mi;
+    let bonus = if bonus_set {
+        overrides.get("bonus_id").and_then(Value::as_str).and_then(|id| bonus_rows.iter().find(|(b, _)| b.id == id)).cloned()
+    } else {
+        r.bonus.as_ref().and_then(|b| bonus_rows.iter().find(|(x, _)| x.id == b.id)).cloned()
+    };
+    s["bonus"] = bonus.as_ref().map_or(Value::Null, |(b, label)| bonus_json(b, label));
+    let raw = bonus.as_ref().map_or(base_points, |(b, _)| apply_bonus(b, base_points));
+    let points = if built.discard.is_some() { 0.0 } else { cfg.rules.floor_points(raw) };
+    built.computed_points = points;
+    built.rule_points = if built.auto_outcome == "invalid" { 0.0 } else { points };
+    built.detail["distances"]["accepted_world_mi"] = util::round3(accepted).into();
+    (started, ended)
+}
+
+pub fn apply_bonus(b: &Bonus, base: f64) -> f64 {
+    match b.kind {
+        BonusKind::Flat => base + b.amount,
+        BonusKind::Multiplier => base * b.amount,
+    }
+}
+
+pub fn bonus_json(b: &Bonus, label: &str) -> Value {
+    json!({"bonus_id": b.id, "label": label, "kind": if b.kind == BonusKind::Flat { "flat" } else { "multiplier" }, "amount": b.amount})
+}
+
+/// `distance_by_scale_class` with all five classes.
+pub fn by_class_json(classes: &[(ScaleClass, f64, f64)]) -> Value {
+    let mut out = Map::new();
+    for c in [ScaleClass::City, ScaleClass::Road, ScaleClass::OneToOne, ScaleClass::Nonstandard, ScaleClass::Unknown] {
+        let (g, w) = classes.iter().find(|x| x.0 == c).map_or((0.0, 0.0), |x| (x.1, x.2));
+        out.insert(class_name(c).into(), json!({"world_km": round2(w), "world_mi": mi(w), "game_km": round2(g), "game_mi": mi(g)}));
+    }
+    Value::Object(out)
+}
+
 fn segments(job: &Job, facts: &Facts) -> Vec<Value> {
     let mut out = Vec::new();
     let mut run: Option<(u32, u64, u64, i64, i64)> = None; // sess, seq_from, seq_to, from, to
@@ -522,6 +668,7 @@ pub fn division_at(user: &User, at_ms: i64) -> bool {
 }
 
 /// Scores and stores one job; emits the webhooks its change calls for.
+#[allow(clippy::too_many_arguments)]
 /// Returns the job id, or `None` for a job that was never delivered.
 pub async fn persist<H: Host>(
     h: &H,
@@ -531,6 +678,7 @@ pub async fn persist<H: Host>(
     job: &Job,
     facts: &Facts,
     trigger: Trigger,
+    moderator: Option<Moderator<'_>>,
 ) -> ApiResult<Option<String>> {
     let game = job.game;
     let existing = store::one(
@@ -556,7 +704,12 @@ pub async fn persist<H: Host>(
     let r = evaluate(job, cfg, &ctx);
     let label = r.bonus.as_ref().and_then(|b| bonus_rows.iter().find(|(x, _)| x.id == b.id)).map(|(b, l)| (b.id.as_str(), l.as_str()));
     let trace = trace_checks(job, cfg, &integrity.json["hellos"]);
-    let built = build(job, &r, cfg, facts, &integrity, trace, label);
+    let mut built = build(job, &r, cfg, facts, &integrity, trace, label);
+    let started = job.events.first().map(|e| event_json(e)["at"].as_str().and_then(util::parse_rfc3339).unwrap_or(0)).unwrap_or(0);
+    let base = tracked_sheet(job, &r, started);
+    let overrides: Map<String, Value> = existing.as_ref().and_then(|e| serde_json::from_value(e.json("overrides")).ok()).unwrap_or_default();
+    let (started, ended) = apply_overrides(&mut built, &base, &overrides, job, &r, cfg, &bonus_rows);
+    built.detail["sheet_base"] = Value::Object(base);
 
     let old_outcome = existing.as_ref().map(|e| e.s("outcome"));
     let outcome = match &old_outcome {
@@ -587,8 +740,7 @@ pub async fn persist<H: Host>(
         return Ok(Some(job_id));
     }
     let version = existing.as_ref().map_or(1, |e| e.i("version") + 1);
-    let bonus_id = r.bonus.as_ref().map(|b| b.id.clone()).filter(|s| !s.is_empty());
-    let started = job.events.first().map(|e| event_json(e)["at"].as_str().and_then(util::parse_rfc3339).unwrap_or(0)).unwrap_or(0);
+    let bonus_id = built.summary["bonus"]["bonus_id"].as_str().map(str::to_string).filter(|s| !s.is_empty());
     let p = params![
         &job_id,
         &user.user_id,
@@ -614,7 +766,7 @@ pub async fn persist<H: Host>(
         bonus_id,
         config_version,
         delivered_at,
-        job.delivered_wall_ms,
+        ended,
         started,
         built.summary.to_string(),
         built.detail.to_string(),
@@ -651,12 +803,15 @@ pub async fn persist<H: Host>(
     }
     let player = user.brief();
     let delivered = util::opt_rfc3339(delivered_at);
+    if moderator.is_some_and(|m| m.quiet) {
+        return Ok(Some(job_id));
+    }
     if outcome_changed && matches!(outcome.as_str(), "pending_review" | "invalid") {
         webhooks::emit(
             h,
             "job.needs_review",
             json!({"job_id": job_id, "game": game.as_str(), "job_version": version, "player": player,
-                   "outcome": outcome, "held_points": held, "reasons": reasons, "delivered_at": delivered}),
+                   "outcome": outcome, "held_points": held, "reasons": reasons, "delivered_at": delivered, "origin": "tracked"}),
             0,
         )
         .await?;
@@ -670,10 +825,7 @@ pub async fn persist<H: Host>(
         )
         .await?;
     } else if outcome_changed || points_changed {
-        let by = match trigger {
-            Trigger::Recalculation => json!({"kind": "recalculation"}),
-            _ => json!({"kind": "rules"}),
-        };
+        let by = by_json(trigger, moderator);
         webhooks::emit(
             h,
             "job.scored",
@@ -751,6 +903,7 @@ pub fn summary_json(row: &Row) -> Value {
     let mut out = Map::new();
     out.insert("job_id".into(), row.s("job_id").into());
     out.insert("game".into(), row.s("game").into());
+    out.insert("origin".into(), row.s("origin").into());
     out.insert("outcome".into(), outcome.clone().into());
     out.insert("points".into(), row.opt_f("points").map_or(Value::Null, Value::from));
     out.insert("held_points".into(), row.opt_f("held_points").map_or(Value::Null, Value::from));

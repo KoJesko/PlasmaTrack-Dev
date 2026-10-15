@@ -4,6 +4,7 @@
     "id": "househd_appl",
     "name": "Household Appliances"
   },
+  "custom_map": null,
   "delivered_at": "2026-10-14T09:00:01.000Z",
   "destination": {
     "city_id": "chicago",
@@ -53,6 +54,7 @@
     "kind": "singleplayer",
     "truckersmp": null
   },
+  "origin": "tracked",
   "outcome": "valid",
   "planned_distance_km": 70,
   "player": {

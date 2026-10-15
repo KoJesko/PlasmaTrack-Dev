@@ -170,3 +170,51 @@ pub fn synthetic_job(sess: &str, mph: f64, secs: f64) -> Vec<String> {
     emit("sample", sample(x, odo, 0.0), sim);
     out
 }
+
+/// A tiny WebP-shaped image (the server checks only the first bytes).
+pub fn webp(n: u8) -> Vec<u8> {
+    let mut b = b"RIFF\x20\x00\x00\x00WEBPVP8 ".to_vec();
+    b.extend(std::iter::repeat_n(n, 20));
+    b
+}
+
+/// Uploads an image for `discord_id`; returns its evidence id.
+pub fn image(t: &TestHost, discord_id: &str, n: u8) -> String {
+    let mut r = t.bot("POST", &format!("/api/v1/players/{discord_id}/evidence")).with_header("idempotency-key", &format!("img-{discord_id}-{n}"));
+    r.body = webp(n);
+    r = r.with_header("content-type", "image/webp");
+    let resp = t.call(r);
+    assert_eq!(resp.status, 201, "{}", resp.body_json());
+    resp.body_json()["evidence_id"].as_str().unwrap().to_string()
+}
+
+/// An ETS2 manual submission: 380 km of which 76 km in the UK, with a custom map.
+pub fn manual_body(evidence: &str, map: &str, uk_route: &str) -> Value {
+    json!({
+        "game": "ets2", "unit": "km", "fuel_unit": "l",
+        "start_city": "Calais", "start_company": "Tradeaux", "end_city": "London", "end_company": "Posped",
+        "cargo_name": "Apples", "distance": 380, "fuel_used": 120.5, "damage": 2, "profit": 15000,
+        "started_at": "2026-10-14T07:00:00Z", "ended_at": "2026-10-14T08:20:00Z",
+        "truck": "Scania", "truck_model": "S 730", "mod_names": ["Example Map Mod"],
+        "uk": {"distance": 76, "entry_city": "Folkestone", "end_city": "London", "route_evidence": uk_route},
+        "evidence": [evidence], "custom_map": map,
+    })
+}
+
+/// Submits [`manual_body`] for [`PLAYER`] with three fresh images; returns the job id.
+pub fn manual_job(t: &TestHost) -> String {
+    let (e, m, u) = (image(t, PLAYER, 1), image(t, PLAYER, 2), image(t, PLAYER, 3));
+    let r = t.call(
+        t.bot("POST", &format!("/api/v1/players/{PLAYER}/manual-jobs"))
+            .with_header("idempotency-key", "manual-1")
+            .with_json(&manual_body(&e, &m, &u)),
+    );
+    assert_eq!(r.status, 201, "{}", r.body_json());
+    r.body_json()["job_id"].as_str().unwrap().to_string()
+}
+
+/// Points for `world_km` under the sample config, the way the server floors them.
+pub fn points_for_world_km(world_km: f64) -> f64 {
+    let c = config::sample();
+    c.rules.floor_points(pt_core::units::km_to_mi(world_km) * c.rules.points_per_world_mi)
+}

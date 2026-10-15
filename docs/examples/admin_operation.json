@@ -1,12 +1,12 @@
 {
-  "finished_at": "2026-10-14T09:00:27.000Z",
+  "finished_at": "2026-10-14T09:00:36.000Z",
   "kind": "recalculation",
-  "operation_id": "op_arsm3am5s1",
+  "operation_id": "op_gyart1bk1s",
   "progress": {
-    "done": 3,
-    "total": 3
+    "done": 4,
+    "total": 4
   },
-  "started_at": "2026-10-14T09:00:26.000Z",
+  "started_at": "2026-10-14T09:00:35.000Z",
   "status": "succeeded",
   "summary": {}
 }

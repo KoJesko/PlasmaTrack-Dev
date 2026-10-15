@@ -2,7 +2,7 @@
 
 use crate::env::Host;
 use crate::http::{ApiError, ApiResult, Request, Response};
-use crate::{admin, ingest, manage, public, route};
+use crate::{admin, ingest, manage, manual, public, route};
 
 pub async fn handle<H: Host>(h: &H, req: Request) -> Response {
     match dispatch(h, &req).await {
@@ -19,15 +19,20 @@ async fn dispatch<H: Host>(h: &H, req: &Request) -> ApiResult<Response> {
         ("GET", [""]) => Ok(Response::ok(serde_json::json!({"service": "plasmatrack", "api": "v1"}))),
         ("POST", ["api", "v1", "chunks"]) => ingest::upload(h, req).await,
         ("GET", ["dl", "trace", id]) => admin::download_trace(h, req, id).await,
+        ("GET", ["dl", "evidence", id]) => manual::download(h, req, id).await,
 
         // Player self-service.
         ("POST", ["api", "v1", "players", d, "token"]) => public::issue_token(h, req, d).await,
         ("GET", ["api", "v1", "players", d, "token"]) => public::token_status(h, req, d).await,
         ("DELETE", ["api", "v1", "players", d, "token"]) => public::revoke_token(h, req, d).await,
         ("PATCH", ["api", "v1", "players", d]) => public::rename(h, req, d).await,
+        ("POST", ["api", "v1", "players", d, "evidence"]) => manual::upload(h, req, d).await,
+        ("POST", ["api", "v1", "players", d, "manual-jobs"]) => manual::submit(h, req, d).await,
+        ("GET", ["api", "v1", "players", d, "jobs", id, "evidence"]) => manual::player_evidence(h, req, d, id).await,
 
         // Public reads.
         ("GET", ["api", "v1", "public", "players", d]) => public::player(h, req, d).await,
+        ("GET", ["api", "v1", "public", "players", d, "jobs"]) => public::player_jobs_all(h, req, d).await,
         ("GET", ["api", "v1", "public", "jobs", id]) => public::job(h, req, id).await,
         ("GET", ["api", "v1", "public", "jobs", id, "route"]) => route::public(h, req, id).await,
         ("GET", ["api", "v1", "public", g, "players", d, "stats"]) => public::player_stats(h, req, g, d).await,
@@ -39,6 +44,7 @@ async fn dispatch<H: Host>(h: &H, req: &Request) -> ApiResult<Response> {
         ("GET", ["api", "v1", "admin", "review-queue", "count"]) => admin::review_queue_count(h, req).await,
         ("GET", ["api", "v1", "admin", "truckersmp", "flags"]) => admin::truckersmp_flags(h, req).await,
         ("GET", ["api", "v1", "admin", "jobs", id]) => admin::job_detail(h, req, id).await,
+        ("PATCH", ["api", "v1", "admin", "jobs", id]) => admin::edit(h, req, id).await,
         ("GET", ["api", "v1", "admin", "jobs", id, "series"]) => admin::series(h, req, id).await,
         ("GET", ["api", "v1", "admin", "jobs", id, "route"]) => route::admin(h, req, id).await,
         ("GET", ["api", "v1", "admin", "jobs", id, "trace"]) => admin::trace(h, req, id).await,

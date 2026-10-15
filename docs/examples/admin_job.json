@@ -11,6 +11,7 @@
     "integrity_hash": "37b16360fb88293742498e06351590d31df333882ff0cfd72e5852a71e689872",
     "version_id": "cfg_1"
   },
+  "custom_map": null,
   "delivered_at": "2026-10-14T09:00:01.000Z",
   "destination": {
     "city_id": "bergen",
@@ -61,6 +62,7 @@
     "world_mi": 90.303
   },
   "etag": "\"j2RG8X3RX-v1\"",
+  "evidence": [],
   "fuel": {
     "refuels": [],
     "used_l": 0.0
@@ -69,6 +71,7 @@
   "game_km": 2512.0,
   "game_mi": 1560.88,
   "held_points": 90.3,
+  "hide_map": false,
   "integrity": {
     "config_diff": [],
     "config_hash": "37b16360fb88293742498e06351590d31df333882ff0cfd72e5852a71e689872",
@@ -108,7 +111,9 @@
       "server_id": 30
     }
   },
+  "origin": "tracked",
   "outcome": "pending_review",
+  "overrides": {},
   "planned_distance_km": 2291,
   "player": {
     "discord_user_id": "123456789012345678",
@@ -189,6 +194,26 @@
       "to": "2026-10-14T01:03:41.672Z"
     }
   ],
+  "sheet": {
+    "adjusted_scale": null,
+    "cargo_name": "Medical Vaccines",
+    "damage_pct": null,
+    "destination_city": "Bergen",
+    "destination_company": "Polaris Lines",
+    "distance_km": 2512.0,
+    "distance_mi": 1560.88,
+    "ended_at": "2026-10-14T01:03:43.006Z",
+    "fuel_used_l": 0.0,
+    "map_scale": null,
+    "mods": [],
+    "profit": null,
+    "source_city": "Honningsvåg",
+    "source_company": "Renar Logistik",
+    "started_at": "2026-10-14T00:21:06.342Z",
+    "truck": null,
+    "truck_model": null,
+    "uk": null
+  },
   "source": {
     "city_id": "honningsvag",
     "city_name": "Honningsvåg",
@@ -205,6 +230,7 @@
   "speed_penalty_applied": false,
   "start_kind": "late_start",
   "state": "stopped",
+  "submission": null,
   "timeline": [
     {
       "at": "2026-10-14T00:21:06.342Z",

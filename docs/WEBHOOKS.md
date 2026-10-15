@@ -91,8 +91,11 @@ A job has entered the review queue: either `pending_review` or `invalid`.
  "player": {"user_id": "usr_8f3k2m", "discord_user_id": "123456789012345678", "display_name": "Example Driver"},
  "outcome": "pending_review", "held_points": 90.3,
  "reasons": [{"code": "late_start", "text": "Tracking started after the job was accepted.", "details": {}}],
- "delivered_at": "2026-10-13T21:03:46.120Z"}
+ "delivered_at": "2026-10-13T21:03:46.120Z", "origin": "tracked"}
 ```
+
+`origin` is `manual` for a job submitted through the bot (PUBLIC_API §6); its reason is
+`manual_submission`.
 
 ### `job.scored`
 

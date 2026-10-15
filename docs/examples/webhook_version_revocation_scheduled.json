@@ -1,7 +1,7 @@
 {
   "data": {
-    "announced_at": "2026-10-14T09:00:39.000Z",
-    "effective_at": "2026-11-04T09:00:39.000Z",
+    "announced_at": "2026-10-14T09:00:48.000Z",
+    "effective_at": "2026-11-04T09:00:48.000Z",
     "message": "PlasmaTrack 0.1.0 (Windows) stops counting jobs on 4 November 2026 at 09:00 UTC. Run PlasmaTrack Setup to update.",
     "part": 1,
     "parts": 1,
@@ -10,15 +10,15 @@
       "345678901234567890",
       "456789012345678901"
     ],
-    "revocation_id": "rev_zqpr6p4rja",
+    "revocation_id": "rev_vvjf113pjn",
     "target": {
       "id": "rel_0_1_0_windows",
       "kind": "release",
       "label": "PlasmaTrack 0.1.0 (Windows)"
     }
   },
-  "event_id": "evt_wr2f5paqf2",
-  "occurred_at": "2026-10-14T09:00:39.000Z",
+  "event_id": "evt_9jkqk89cch",
+  "occurred_at": "2026-10-14T09:00:48.000Z",
   "payload_version": 1,
   "type": "version.revocation_scheduled"
 }

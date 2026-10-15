@@ -132,7 +132,7 @@ async fn recalculation_step<H: Host>(h: &H, op: &str) -> ApiResult<Option<Value>
     for j in &rows {
         let id = j.s("job_id");
         let before = j.s("outcome");
-        if Scorer::rescore_job(h, &id, Trigger::Recalculation).await.is_err() {
+        if Scorer::rescore_job(h, &id, Trigger::Recalculation, None).await.is_err() {
             continue;
         }
         let after = store::one(h, "SELECT outcome FROM jobs WHERE job_id = ?1", params![&id]).await?.map(|x| x.s("outcome")).unwrap_or_default();
@@ -165,10 +165,11 @@ async fn recalculation_step<H: Host>(h: &H, op: &str) -> ApiResult<Option<Value>
     Ok(None)
 }
 
-/// Every five minutes: forget expired idempotency keys.
+/// Every five minutes: forget expired idempotency keys; delete images no
+/// submission used.
 pub async fn cron<H: Host>(h: &H) -> ApiResult<()> {
     h.run("DELETE FROM idempotency WHERE created_at < ?1", params![h.now_ms() - store::IDEMPOTENCY_TTL_MS]).await?;
-    Ok(())
+    crate::manual::sweep(h).await
 }
 
 // ---- bonuses (§9) ----------------------------------------------------------------

@@ -245,7 +245,7 @@ impl Scorer {
             }
         }
         for (job, f) in &changed {
-            if jobs::persist(h, &scoring.cfg, scoring.version_id.as_deref(), &user, job, f, trigger).await?.is_some() {
+            if jobs::persist(h, &scoring.cfg, scoring.version_id.as_deref(), &user, job, f, trigger, None).await?.is_some() {
                 report.jobs_stored += 1;
             }
         }
@@ -274,8 +274,11 @@ impl Scorer {
     /// Re-scores every stored job of this player from its own points, with the
     /// current config and bonuses (ADMIN_API §8). A change to the timeline's
     /// own settings needs the raw frames instead: [`Scorer::reset`] first.
-    pub async fn rescore_job<H: Host>(h: &H, job_id: &str, trigger: Trigger) -> ApiResult<()> {
+    pub async fn rescore_job<H: Host>(h: &H, job_id: &str, trigger: Trigger, moderator: Option<jobs::Moderator<'_>>) -> ApiResult<()> {
         let row = store::one(h, "SELECT * FROM jobs WHERE job_id = ?1", params![job_id]).await?.ok_or_else(|| ApiError::not_found("job"))?;
+        if row.s("origin") == "manual" {
+            return crate::manual::rescore(h, &row, trigger, moderator).await;
+        }
         let user = store::user_by_id(h, &row.s("user_id")).await?.ok_or_else(|| ApiError::not_found("user"))?;
         let blob = h.blob_get(&jobs::blob_key(job_id)).await?.ok_or_else(|| ApiError::internal("missing job data"))?;
         let v: serde_json::Value = serde_json::from_slice(&util::gunzip(&blob, usize::MAX).map_err(|e| ApiError::internal(&e.to_string()))?)
@@ -290,7 +293,7 @@ impl Scorer {
         };
         let facts = Facts { delivered_at: row.opt_i("delivered_at"), sessions, sess_ids, truckersmp };
         let scoring = config::scoring(h).await?;
-        jobs::persist(h, &scoring.cfg, scoring.version_id.as_deref(), &user, &job, &facts, trigger).await?;
+        jobs::persist(h, &scoring.cfg, scoring.version_id.as_deref(), &user, &job, &facts, trigger, moderator).await?;
         Ok(())
     }
 }

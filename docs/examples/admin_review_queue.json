@@ -15,6 +15,7 @@
       "game_km": 2512.0,
       "held_points": 90.3,
       "job_id": "2RG8X3RX",
+      "origin": "tracked",
       "outcome": "pending_review",
       "player": {
         "discord_user_id": "123456789012345678",
@@ -49,6 +50,7 @@
       "game_km": 171.0,
       "held_points": null,
       "job_id": "Y1SEMGH2",
+      "origin": "tracked",
       "outcome": "invalid",
       "player": {
         "discord_user_id": "456789012345678901",

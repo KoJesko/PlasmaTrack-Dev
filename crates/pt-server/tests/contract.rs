@@ -40,6 +40,8 @@ struct Call {
     body: Option<Value>,
     auth: Auth,
     status: u16,
+    /// An image upload (raw bytes) instead of a JSON body.
+    image: bool,
 }
 
 struct Recorder<'a> {
@@ -67,7 +69,21 @@ impl Recorder<'_> {
         let r = self.t.call(req);
         assert_eq!(r.status, status, "{name}: {}", r.body_json());
         let v = r.body_json();
-        let call = Call { name, tag, summary, method, template, path: path.to_string(), body, auth, status };
+        let call = Call { name, tag, summary, method, template, path: path.to_string(), body, auth, status, image: false };
+        self.calls.push((call, v.clone()));
+        self.t.advance(1000);
+        v
+    }
+
+    /// An image upload: the raw bytes of a (tiny) WebP.
+    fn upload_image(&mut self, name: &'static str, summary: &'static str, template: &'static str, path: &str, n: u8) -> Value {
+        self.n += 1;
+        let mut req = self.t.bot("POST", path).with_header("idempotency-key", &format!("example-{}", self.n)).with_header("content-type", "image/webp");
+        req.body = webp(n);
+        let r = self.t.call(req);
+        assert_eq!(r.status, 201, "{name}: {}", r.body_json());
+        let v = r.body_json();
+        let call = Call { name, tag: "Manual jobs", summary, method: "POST", template, path: path.to_string(), body: None, auth: Auth::Bot, status: 201, image: true };
         self.calls.push((call, v.clone()));
         self.t.advance(1000);
         v
@@ -256,6 +272,21 @@ fn scenario(t: &TestHost) -> (Vec<(Call, Value)>, BTreeMap<String, Value>) {
     r.call("error_validation", "Decisions", "", "POST", "/api/v1/admin/jobs/{job_id}/{action}", &format!("/api/v1/admin/jobs/{pending}/reject"), Some(json!({})), Admin, 422);
     r.call("admin_job_recalculate", "Recalculation", "Re-score one job now", "POST", "/api/v1/admin/jobs/{job_id}/recalculate", &format!("/api/v1/admin/jobs/{valid}/recalculate"), Some(json!({"reason": "Checking a rule change."})), Admin, 200);
 
+    // Manual submissions (PUBLIC_API §6) and moderator edits (ADMIN_API §14).
+    let ev = r.upload_image("player_evidence_upload", "Upload one evidence image", "/api/v1/players/{discord_id}/evidence", &format!("/api/v1/players/{p}/evidence"), 1);
+    let (map, uk) = (image(t, p, 2), image(t, p, 3));
+    let mut bad = manual_body(ev["evidence_id"].as_str().unwrap(), &map, &uk);
+    bad["damage"] = json!(140);
+    r.call("error_validation_manual", "Manual jobs", "", "POST", "/api/v1/players/{discord_id}/manual-jobs", &format!("/api/v1/players/{p}/manual-jobs"), Some(bad), Bot, 422);
+    let m = r.call("player_manual_job_submit", "Manual jobs", "Submit a job by hand (goes to review)", "POST", "/api/v1/players/{discord_id}/manual-jobs", &format!("/api/v1/players/{p}/manual-jobs"), Some(manual_body(ev["evidence_id"].as_str().unwrap(), &map, &uk)), Bot, 201);
+    let manual = m["job_id"].as_str().unwrap().to_string();
+    r.call("player_job_evidence", "Manual jobs", "The submitter's own evidence images", "GET", "/api/v1/players/{discord_id}/jobs/{job_id}/evidence", &format!("/api/v1/players/{p}/jobs/{manual}/evidence"), None, Bot, 200);
+    r.call("public_job_manual", "Public", "", "GET", "/api/v1/public/jobs/{job_id}", &format!("/api/v1/public/jobs/{manual}"), None, Read, 200);
+    let md = r.call("admin_job_manual", "Jobs", "", "GET", "/api/v1/admin/jobs/{job_id}", &format!("/api/v1/admin/jobs/{manual}"), None, Admin, 200);
+    r.call("admin_job_approve_manual", "Decisions", "", "POST", "/api/v1/admin/jobs/{job_id}/{action}", &format!("/api/v1/admin/jobs/{manual}/approve"), Some(json!({"reason": "Screenshots match.", "expected_etag": md["etag"], "hide_map": false, "corrections": {"unit": "km", "distance": 384, "uk": {"distance": 80}}})), Admin, 200);
+    r.call("admin_job_edit", "Jobs", "Correct any field of any job", "PATCH", "/api/v1/admin/jobs/{job_id}", &format!("/api/v1/admin/jobs/{valid}"), Some(json!({"reason": "The cargo was renamed by a mod.", "cargo_name": "Corrected cargo", "damage": 3})), Admin, 200);
+    r.call("public_player_jobs_all", "Public", "A player's jobs in both games, newest first", "GET", "/api/v1/public/players/{discord_id}/jobs", &format!("/api/v1/public/players/{p}/jobs?limit=3"), None, Read, 200);
+
     let b = r.call("admin_bonus_create", "Bonuses", "Create a bonus", "POST", "/api/v1/admin/bonuses", "/api/v1/admin/bonuses", Some(json!({"game": "ets2", "label": "Medical week", "match": "med_*", "match_kind": "glob", "kind": "multiplier", "amount": 1.5, "active_from": "2026-10-01T00:00:00.000Z", "active_to": "2026-11-01T00:00:00.000Z", "reason": "October event"})), Admin, 201);
     let bid = b["bonus_id"].as_str().unwrap().to_string();
     r.call("admin_bonuses", "Bonuses", "List bonuses", "GET", "/api/v1/admin/bonuses", "/api/v1/admin/bonuses?game=ets2", None, Admin, 200);
@@ -353,6 +384,11 @@ fn openapi(calls: &[(Call, Value)], hooks: &BTreeMap<String, Value>) -> Value {
                     params.push(json!({"name": k, "in": "query", "required": false, "schema": {"type": "string"}}));
                 }
             }
+        }
+        if c.image && op.get("requestBody").is_none() {
+            let bin = json!({"schema": {"type": "string", "format": "binary"}});
+            op["requestBody"] = json!({"required": true, "description": "The image itself, at most 5 MB.",
+                "content": {"image/webp": bin, "image/png": bin, "image/jpeg": bin}});
         }
         if let (Some(b), None) = (&c.body, op.get("requestBody")) {
             op["requestBody"] = json!({"required": true, "content": {"application/json": {"example": b}}});

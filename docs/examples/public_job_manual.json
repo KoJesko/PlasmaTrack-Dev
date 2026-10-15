@@ -1,0 +1,85 @@
+{
+  "bonus": null,
+  "cargo": {
+    "id": null,
+    "name": "Apples"
+  },
+  "custom_map": {
+    "expires_at": "2026-10-14T10:00:25.000Z",
+    "url": "https://pt.example/dl/evidence/evd_arsm3am5s1?exp=1791972025&sig=9991a577ce7a92ba73888154f4dd8ae944effc2fcc79d340fd89c9175c123a68"
+  },
+  "delivered_at": "2026-10-14T09:00:23.000Z",
+  "destination": {
+    "city_id": null,
+    "city_name": "London",
+    "company_id": null,
+    "company_name": "Posped"
+  },
+  "distance_by_scale_class": {
+    "city": {
+      "game_km": 0.0,
+      "game_mi": 0.0,
+      "world_km": 0.0,
+      "world_mi": 0.0
+    },
+    "nonstandard": {
+      "game_km": 0.0,
+      "game_mi": 0.0,
+      "world_km": 0.0,
+      "world_mi": 0.0
+    },
+    "one_to_one": {
+      "game_km": 0.0,
+      "game_mi": 0.0,
+      "world_km": 0.0,
+      "world_mi": 0.0
+    },
+    "road": {
+      "game_km": 380.0,
+      "game_mi": 236.12,
+      "world_km": 21.07,
+      "world_mi": 13.09
+    },
+    "unknown": {
+      "game_km": 0.0,
+      "game_mi": 0.0,
+      "world_km": 0.0,
+      "world_mi": 0.0
+    }
+  },
+  "game": "ets2",
+  "game_km": 380.0,
+  "game_mi": 236.12,
+  "held_points": 13.0,
+  "job_id": "1RQXYEB5",
+  "market": null,
+  "multiplayer": {
+    "kind": "unknown",
+    "truckersmp": null
+  },
+  "origin": "manual",
+  "outcome": "pending_review",
+  "planned_distance_km": null,
+  "player": {
+    "discord_user_id": "123456789012345678",
+    "display_name": "Example Driver",
+    "user_id": "usr_cy3x405w4v"
+  },
+  "points": null,
+  "public_notes": [
+    {
+      "code": "under_review",
+      "text": "A moderator will check this job."
+    }
+  ],
+  "reported_delivered_at": "2026-10-14T08:20:00.000Z",
+  "source": {
+    "city_id": null,
+    "city_name": "Calais",
+    "company_id": null,
+    "company_name": "Tradeaux"
+  },
+  "speed_penalty_applied": false,
+  "world_km": 21.07,
+  "world_mi": 13.09
+}

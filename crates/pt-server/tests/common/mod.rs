@@ -50,6 +50,7 @@ impl TestHost {
     pub fn new() -> TestHost {
         let db = rusqlite::Connection::open_in_memory().unwrap();
         db.execute_batch(include_str!("../../migrations/0001_init.sql")).unwrap();
+        db.execute_batch(include_str!("../../migrations/0002_manual_jobs.sql")).unwrap();
         TestHost {
             db,
             blobs: RefCell::new(BTreeMap::new()),

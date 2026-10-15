@@ -25,6 +25,7 @@
           "server_id": 30
         }
       },
+      "origin": "tracked",
       "outcome": "valid",
       "points": 0.2,
       "reported_delivered_at": "2026-10-14T01:29:53.859Z",
@@ -62,6 +63,7 @@
           "server_id": 30
         }
       },
+      "origin": "tracked",
       "outcome": "pending_review",
       "points": null,
       "reported_delivered_at": "2026-10-14T01:03:43.006Z",

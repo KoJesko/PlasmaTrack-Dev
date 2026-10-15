@@ -5,6 +5,7 @@
     "held_points": null,
     "job_id": "Y1SEMGH2",
     "job_version": 1,
+    "origin": "tracked",
     "outcome": "invalid",
     "player": {
       "discord_user_id": "456789012345678901",

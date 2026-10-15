@@ -4,6 +4,7 @@
     "id": "med_vaccine",
     "name": "Medical Vaccines"
   },
+  "custom_map": null,
   "delivered_at": "2026-10-14T09:00:01.000Z",
   "destination": {
     "city_id": "bergen",
@@ -56,6 +57,7 @@
       "server_id": 30
     }
   },
+  "origin": "tracked",
   "outcome": "pending_review",
   "planned_distance_km": 2291,
   "player": {

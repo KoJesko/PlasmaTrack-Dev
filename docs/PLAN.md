@@ -707,7 +707,7 @@ I cannot run the games in this session, so the following steps need a real game 
 3. **Captures:** you will run the capture protocol in both games (§9).
 4. **Cancelled job brought back by a load:** resume it, unless that job was already delivered (§5).
 5. **Review:** every "flag" means manual review, with points held until an admin approves. This applies to gap, late-start, trace checks and rule 4. All admin actions run through your Discord bot in a separate repo (§6, §8).
-6. **Minimum patch:** 1.36. Earlier versions are unsupported. Manual submissions go to a website you'll provide later.
+6. **Minimum patch:** 1.36. Earlier versions are unsupported. Manual submissions go through the Discord bot (decision 25).
 7. **Integrity:** rule 0 discards jobs whose config or install files match no published version. Trace checks send the job to manual review (§6a).
 8. **No website:** all user-facing info and admin actions go through the Discord bot (separate repo). This repo exposes the JSON API and projected route GeoJSON only (§8).
 9. **Delivered-but-Invalid job brought back by a load:** it is reopened, because falling through the map can cause it (§5).
@@ -743,6 +743,13 @@ I cannot run the games in this session, so the following steps need a real game 
       - Route maps colour each stretch by its scale class, overlaid on the vanilla map (§8).
 
 24. **TruckersMP account ID is uploaded (2026-09-28):** the plugin reads it with `TruckersMP_Accounts::GetAccountID`, and it travels in the `truckersmp` message like any other frame. The server stores the account IDs seen per player; the Discord bot uses them to link and show TruckersMP profiles (§8).
+
+25. **Manual jobs and moderator edits (2026-10-15, the bot's proposal, approved by you):**
+    - Players submit jobs by hand through the bot, with WebP evidence images. They always go to review.
+    - World distance = game distance ÷ map scale (ATS 20, ETS2 19 by default), with the UK stretch at 15 and one adjusted section at its own scale.
+    - Bonuses apply to manual jobs only when a moderator sets one.
+    - Moderators may edit **every** field of any job, tracked or manual. Edits are stored as overrides and survive re-scoring and replays.
+    - Contract: PUBLIC_API §6, ADMIN_API §14.
 
 ## 12. Open questions
 

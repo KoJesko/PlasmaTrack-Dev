@@ -104,7 +104,11 @@ not unique.
     "TruckersMP account(s) seen", never as proof of identity.
   - **ID 0** (unknown) is never listed.
 - **`stats`:** count `valid` and `approved` jobs only. `pending_review_count` is shown
-  separately. Both games are always present (zeros if unused).
+  separately. Both games are always present (zeros if unused). Each game's object also has:
+  - **`outcomes`:** the number of finished jobs per outcome, all seven always present:
+    `{"valid": 2, "approved": 1, "pending_review": 1, "invalid": 0, "rejected": 0, "discarded": 0, "voided": 0}`;
+  - **`distance_by_scale_class`:** the totals of the jobs' `distance_by_scale_class` (§3),
+    counting `valid` and `approved` jobs, in the same shape.
 
 ### `GET /api/v1/public/{game}/players/{discord_id}/stats`
 
@@ -124,6 +128,7 @@ comma-separated outcomes. Each item is a **job summary**:
 {
   "job_id": "7K2M9QXA",
   "game": "ets2",
+  "origin": "tracked",
   "outcome": "valid",
   "points": 7.0,
   "held_points": null,
@@ -156,7 +161,18 @@ comma-separated outcomes. Each item is a **job summary**:
   **`reported_delivered_at`** is the player's PC clock at the delivery, for display only. They
   differ by the upload delay, which can be hours if the client was offline.
 - **`market`** is the game's `job.market`, for example `cargo_market`, `freight_market`,
-  `quick_job` or `external_contracts` (World of Trucks).
+  `quick_job` or `external_contracts` (World of Trucks). `null` for a manual job.
+- **`origin`** is `tracked` (recorded by the tracker) or `manual` (submitted through the bot,
+  §6). A manual job has:
+  - `cargo.id`, `city_id` and `company_id` set to `null`, because only names were typed;
+  - `market` set to `null`;
+  - `multiplayer.kind` set to `unknown`.
+
+### `GET /api/v1/public/players/{discord_id}/jobs`
+
+The same list across **both games**, for a player's whole history: the same job summaries,
+newest first, paginated with `total`, with the `?outcome=` filter. Each item's `game` says which
+game it is from. This is the only endpoint that mixes the games.
 
 ### `GET /api/v1/public/jobs/{job_id}`: job detail
 
@@ -177,9 +193,15 @@ The job summary plus:
   },
   "public_notes": [
     {"code": "speed_penalty", "text": "Speed penalty applied: 0.85× distance."}
-  ]
+  ],
+  "custom_map": null
 }
 ```
+
+- **`custom_map`** is the manual job's custom map image (§6), as
+  `{"url": "…", "expires_at": "…"}`: a signed link valid for an hour, so fetch it when showing
+  the job. It is `null` for tracked jobs, when no map was submitted, and when a moderator
+  approved the job with `hide_map` (ADMIN_API §7).
 
 - **`bonus`** is `null` when no bonus applied. `kind` is `flat` (points added) or `multiplier`.
   Only the greatest matching bonus ever applies.
@@ -293,3 +315,102 @@ The job summary plus:
   are ranked like everyone else.
 - **Excluded:** disabled users.
 - **Freshness:** the board can lag new results by up to 60 s.
+
+## 6. Manual job submissions (owner, 2026-10-15)
+
+A player can submit a job by hand. The bot collects it, shows a preview, and submits when the
+player confirms. These calls use the **bot token**, on behalf of the player who ran the
+command, and are writes (`Idempotency-Key`). A Discord user with no PlasmaTrack account yet gets
+one, as with `/link`. A disabled player gets `403`.
+
+### `POST /api/v1/players/{discord_id}/evidence`: upload one image
+
+- **Body:** the image's raw bytes, not JSON. Send `Content-Type: image/webp` (PNG and JPEG are
+  accepted too). The server checks the file's first bytes, not the header.
+- **Size:** at most **5 MB** per image (`413`).
+- **Answer:** `201`:
+
+  ```json
+  {"evidence_id": "evd_0a1b2c3d4e", "content_type": "image/webp", "size_bytes": 182340,
+   "sha256": "…", "expires_at": "2026-10-16T09:00:00.000Z"}
+  ```
+
+  An image that no submission uses by `expires_at` (24 hours) is deleted.
+- **Limit:** at most 30 unused images per player at a time (`429`).
+
+### `POST /api/v1/players/{discord_id}/manual-jobs`: submit
+
+```json
+{
+  "game": "ets2", "unit": "km", "fuel_unit": "l",
+  "start_city": "Calais", "start_company": "Tradeaux", "end_city": "London", "end_company": "Posped",
+  "cargo_name": "Apples", "distance": 380, "fuel_used": 120.5, "damage": 2, "profit": 15000,
+  "started_at": "2026-10-14T07:00:00Z", "ended_at": "2026-10-14T08:20:00Z",
+  "truck": "Scania", "truck_model": "S 730", "mod_names": ["Example Map Mod"],
+  "map_scale": 19,
+  "uk": {"distance": 76, "entry_city": "Folkestone", "end_city": "London", "route_evidence": "evd_…"},
+  "adjusted_scale": {"entry_city": "…", "exit_city": "…", "distance": 40, "scale": 1, "evidence": "evd_…"},
+  "evidence": ["evd_…"],
+  "custom_map": "evd_…"
+}
+```
+
+- **Required:** `game`, `unit` (`mi` or `km`), `fuel_unit` (`l`, `us_gal` or `uk_gal`), the
+  four places, `cargo_name`, `distance`, `fuel_used`, `damage`, `profit`, `started_at`,
+  `ended_at`, `truck` and `evidence`.
+- **Units:**
+  - `unit` applies to every distance in the body, `fuel_unit` to `fuel_used`;
+  - `distance` is what the game logged, in game distance;
+  - `damage` is a percentage from 0 to 100;
+  - `profit` is in the game's currency.
+- **Optional fields:**
+  - **`truck_model`, `mod_names`** (at most 100 names).
+  - **`map_scale`:** when left out, ATS 20 and ETS2 19.
+  - **`uk`** (ETS2 only): the stretch driven in the UK, counted at scale 15. All four fields or
+    none. Its `distance` is part of `distance`.
+  - **`adjusted_scale`:** one section at another scale, all five fields. Its `distance` is part
+    of `distance`.
+  - **`custom_map`:** one image.
+- **Images:**
+  - `evidence` holds 1 to 5 images, plus at most one each for `custom_map`,
+    `uk.route_evidence` and `adjusted_scale.evidence`, so at most 8 per job;
+  - every image must have been uploaded for this player and not used by another job.
+- **Validation:** `422 validation_failed` names every bad field, for example
+  `{"damage": "a number from 0 to 100", "uk.distance": "…", "evidence[0]": "…"}`.
+- **A player never picks a bonus.** `bonus_id` is refused here; a moderator can set it.
+- **Answer:** `201` with the job detail (§3).
+  - The job's `origin` is `manual`. It is always `pending_review`, with reason
+    `manual_submission`, and its points held.
+  - `job.needs_review` is sent, with `"origin": "manual"`.
+
+**How a manual job is scored** (the server's rule, not the bot's):
+
+- **World distance:** (distance − UK − adjusted) ÷ `map_scale`, plus UK ÷ 15, plus adjusted ÷
+  its `scale`. The bot never computes this.
+  - Tracked jobs also count their city streets at scale 3. So the same game distance scores
+    somewhat less when submitted by hand.
+- **Points:** world miles × the usual points per mile, floored. No speed penalty, and no bonus
+  unless a moderator sets one.
+- **`distance_by_scale_class`:** each part's class comes from its scale (19, 20 and 15 are
+  `road`, 1 is `one_to_one`, others `nonstandard`).
+- **`delivered_at`** is the submission time, so a job cannot be dated into a closed period.
+  `reported_delivered_at` is the submitted `ended_at`.
+- **Route, series and trace** do not exist for a manual job (`404`).
+
+### `GET /api/v1/players/{discord_id}/jobs/{job_id}/evidence`: the submitter's images
+
+Only for the player who submitted the job (`404` otherwise):
+
+```json
+{"job_id": "1RQXYEB5", "items": [
+  {"evidence_id": "evd_…", "role": "main", "content_type": "image/webp", "size_bytes": 182340,
+   "url": "https://…/dl/evidence/evd_…?exp=…&sig=…", "expires_at": "…"}
+]}
+```
+
+- **`role`:** `main`, `custom_map`, `uk_route` or `adjusted_scale`.
+- **`url`:** a signed link valid for **one hour**; fetching it needs no token.
+- **Who sees images:**
+  - moderators, in the admin job detail (ADMIN_API §4);
+  - the submitter, through this call;
+  - everyone else, only the `custom_map` (§3), and only unless it was hidden.

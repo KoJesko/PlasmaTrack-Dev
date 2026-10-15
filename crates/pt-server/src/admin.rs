@@ -11,7 +11,7 @@ use crate::public::{self, job_row};
 use crate::scorer::Scorer;
 use crate::store::{self, Audit, User};
 use crate::util::{self, rfc3339};
-use crate::{auth, config, params, webhooks};
+use crate::{auth, config, manual, params, sheet, webhooks};
 
 // ---- review queue (§1) -----------------------------------------------------------
 
@@ -64,7 +64,7 @@ pub async fn review_queue<H: Host>(h: &H, req: &Request) -> ApiResult<Response> 
         let s = r.json("summary");
         let brief = |p: &Value| json!({"city_id": p["city_id"], "city_name": p["city_name"]});
         items.push(json!({
-            "job_id": r.s("job_id"), "game": r.s("game"), "outcome": r.s("outcome"), "player": user.brief(),
+            "job_id": r.s("job_id"), "game": r.s("game"), "origin": r.s("origin"), "outcome": r.s("outcome"), "player": user.brief(),
             "held_points": r.opt_f("held_points"), "world_km": s["world_km"], "game_km": s["game_km"],
             "cargo": s["cargo"], "source": brief(&s["source"]), "destination": brief(&s["destination"]),
             "delivered_at": util::opt_rfc3339(r.opt_i("delivered_at")),
@@ -150,7 +150,75 @@ pub async fn job_detail<H: Host>(h: &H, req: &Request, raw_id: &str) -> ApiResul
     let audit_rows =
         h.all("SELECT * FROM audit_log WHERE target_kind = 'job' AND target_id = ?1 ORDER BY audit_no DESC", params![&job_id]).await?;
     v["audit"] = audit_items(h, &audit_rows).await?.into();
+    manual::admin_extras(h, &row, &mut v).await?;
+    v["custom_map"] = manual::custom_map(h, &row, true).await?;
     Ok(Response::ok(v))
+}
+
+// ---- edits (§14) -----------------------------------------------------------------
+
+fn check_etag(body: &Value, job_id: &str, version: i64) -> ApiResult<()> {
+    if let Some(expected) = body.get("expected_etag").and_then(Value::as_str) {
+        if expected != jobs::etag(job_id, version) {
+            return Err(ApiError::conflict("The job changed; reload it.", json!({"current_etag": jobs::etag(job_id, version)})));
+        }
+    }
+    Ok(())
+}
+
+fn snapshot(r: &Row) -> Value {
+    json!({"outcome": r.s("outcome"), "points": r.opt_f("points"), "held_points": r.opt_f("held_points")})
+}
+
+/// Applies a moderator's field changes to a job and re-scores it. Returns the
+/// reloaded row.
+async fn apply_edit<H: Host>(h: &H, admin: &User, row: Row, fields: &Value, reason: &str, quiet: bool) -> ApiResult<Row> {
+    let job_id = row.s("job_id");
+    if !fields.as_object().is_some_and(|o| o.keys().any(|k| sheet::EDIT_KEYS.contains(&k.as_str()))) {
+        return Err(ApiError::field("fields", "nothing to change"));
+    }
+    let mut row = row;
+    if row.s("origin") == "tracked" && row.json("detail")["sheet_base"].is_null() {
+        // Scored before edits existed: score it once so the recording's sheet is stored.
+        Scorer::rescore_job(h, &job_id, Trigger::Recalculation, None).await?;
+        row = job_row(h, &job_id).await?;
+    }
+    let before = snapshot(&row);
+    let (o_before, o_after) = manual::write_overrides(h, &row, fields).await?;
+    let m = jobs::Moderator { discord_user_id: &admin.discord_user_id, quiet };
+    Scorer::rescore_job(h, &job_id, Trigger::Edit, Some(m)).await?;
+    let now = job_row(h, &job_id).await?;
+    let (mut b, mut a) = (before, snapshot(&now));
+    b["overrides"] = sheet::to_json(&serde_json::from_value(o_before).unwrap_or_default());
+    a["overrides"] = sheet::to_json(&serde_json::from_value(o_after).unwrap_or_default());
+    let user = store::user_by_id(h, &now.s("user_id")).await?;
+    store::audit(h, Audit {
+        actor: &admin.discord_user_id, action: "job.edit", target_kind: "job", target_id: &job_id,
+        target_user: user.as_ref().map(|u| u.discord_user_id.as_str()), reason: Some(reason), before: b, after: a,
+    })
+    .await?;
+    Ok(now)
+}
+
+/// `PATCH /api/v1/admin/jobs/{job_id}`: correct any field of any job.
+pub async fn edit<H: Host>(h: &H, req: &Request, raw_id: &str) -> ApiResult<Response> {
+    let admin = auth::admin(h, req).await?;
+    let idem = match store::idem_begin(h, req, "bot").await? {
+        Ok(i) => i,
+        Err(replay) => return Ok(replay),
+    };
+    let body = req.json_body()?;
+    let reason = store::reason(&body)?;
+    sheet::check_keys(&body, &["reason", "expected_etag"])?;
+    let row = job_row(h, raw_id).await?;
+    let job_id = row.s("job_id");
+    check_etag(&body, &job_id, row.i("version"))?;
+    let now = apply_edit(h, &admin, row, &body, &reason, false).await?;
+    let overrides: serde_json::Map<String, Value> = serde_json::from_value(now.json("overrides")).unwrap_or_default();
+    let resp = json!({"job_id": job_id, "outcome": now.s("outcome"), "points": now.opt_f("points"), "held_points": now.opt_f("held_points"),
+                      "overrides": sheet::to_json(&overrides), "etag": jobs::etag(&job_id, now.i("version"))});
+    store::idem_store(h, idem, 200, &resp).await?;
+    Ok(Response::ok(resp))
 }
 
 // ---- decisions (§7) --------------------------------------------------------------
@@ -163,13 +231,17 @@ pub async fn decide<H: Host>(h: &H, req: &Request, raw_id: &str, action: &str) -
     };
     let body = req.json_body()?;
     let reason = store::reason(&body)?;
-    let row = job_row(h, raw_id).await?;
+    let mut row = job_row(h, raw_id).await?;
     let job_id = row.s("job_id");
-    let version = row.i("version");
-    if let Some(expected) = body.get("expected_etag").and_then(Value::as_str) {
-        if expected != jobs::etag(&job_id, version) {
-            return Err(ApiError::conflict("The job changed; reload it.", json!({"current_etag": jobs::etag(&job_id, version)})));
-        }
+    check_etag(&body, &job_id, row.i("version"))?;
+    let corrections = body.get("corrections").filter(|c| !c.is_null());
+    let hide_map = match body.get("hide_map") {
+        None | Some(Value::Null) => None,
+        Some(Value::Bool(b)) => Some(*b),
+        Some(_) => return Err(ApiError::field("hide_map", "true or false")),
+    };
+    if action != "approve" && (corrections.is_some() || hide_map.is_some()) {
+        return Err(ApiError::field(if corrections.is_some() { "corrections" } else { "hide_map" }, "only with approve"));
     }
     let from = row.s("outcome");
     let to = match (action, from.as_str()) {
@@ -181,13 +253,32 @@ pub async fn decide<H: Host>(h: &H, req: &Request, raw_id: &str, action: &str) -
             return Err(ApiError::invalid_transition(&from, action, &format!("A {from} job cannot be {action}d.")));
         }
     };
+    // Approval may correct stats in the same step (§7, §14); the edit sends no
+    // webhook of its own, the approval's job.scored carries the result.
+    let mut extra = json!({});
+    if let Some(c) = corrections {
+        if !c.is_object() {
+            return Err(ApiError::field("corrections", "an object"));
+        }
+        sheet::check_keys(c, &[])?;
+        row = apply_edit(h, &admin, row, c, &reason, true).await?;
+        extra["corrections"] = row.json("overrides");
+    }
+    if let Some(hm) = hide_map {
+        h.run("UPDATE jobs SET hide_map = ?2 WHERE job_id = ?1", params![&job_id, hm]).await?;
+        extra["hide_map"] = hm.into();
+    }
+    let version = row.i("version");
     let computed = row.f("computed_points");
     let (points, held) = jobs::points_for(&to, computed, computed);
     let pre_void = if to == "voided" { Some(from.clone()) } else { None };
     let user = store::user_by_id(h, &row.s("user_id")).await?.ok_or_else(|| ApiError::internal("job without user"))?;
     let new_version = version + 1;
     let before = json!({"outcome": from, "points": row.opt_f("points"), "held_points": row.opt_f("held_points")});
-    let after = json!({"outcome": to, "points": points, "held_points": held});
+    let mut after = json!({"outcome": to, "points": points, "held_points": held});
+    for (k, v) in extra.as_object().into_iter().flatten() {
+        after[k.as_str()] = v.clone();
+    }
     h.batch(vec![
         (
             "UPDATE jobs SET outcome = ?2, points = ?3, held_points = ?4, version = ?5, updated_at = ?6,
@@ -228,7 +319,7 @@ pub async fn recalculate_job<H: Host>(h: &H, req: &Request, raw_id: &str) -> Api
     let job_id = row.s("job_id");
     let snap = |r: &Row| json!({"outcome": r.s("outcome"), "points": r.opt_f("points"), "held_points": r.opt_f("held_points")});
     let before = snap(&row);
-    Scorer::rescore_job(h, &job_id, Trigger::Recalculation).await?;
+    Scorer::rescore_job(h, &job_id, Trigger::Recalculation, None).await?;
     let now_row = store::one(h, "SELECT * FROM jobs WHERE job_id = ?1", params![&job_id]).await?.ok_or_else(|| ApiError::not_found("job"))?;
     let after = snap(&now_row);
     store::audit(h, Audit {

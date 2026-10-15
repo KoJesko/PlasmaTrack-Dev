@@ -1,0 +1,11 @@
+{
+  "etag": "\"jA2NDM8HC-v2\"",
+  "held_points": null,
+  "job_id": "A2NDM8HC",
+  "outcome": "valid",
+  "overrides": {
+    "cargo_name": "Corrected cargo",
+    "damage_pct": 3.0
+  },
+  "points": 3.6
+}

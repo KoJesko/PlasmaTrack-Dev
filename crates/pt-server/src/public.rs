@@ -123,10 +123,45 @@ pub async fn stats<H: Host>(h: &H, user_id: &str, g: Game) -> ApiResult<Value> {
     .await?;
     let (w, gk) = (r.f("world_km"), r.f("game_km"));
     let cfg = config::scoring(h).await?.cfg;
+
+    // Every outcome, and the counted distance per scale class (PUBLIC_API §2).
+    let mut outcomes = serde_json::Map::new();
+    for o in OUTCOMES {
+        outcomes.insert(o.into(), json!(0));
+    }
+    for row in h
+        .all("SELECT outcome, COUNT(*) AS n FROM jobs WHERE user_id = ?1 AND game = ?2 GROUP BY outcome", params![user_id, g.as_str()])
+        .await?
+    {
+        if OUTCOMES.contains(&row.s("outcome").as_str()) {
+            outcomes.insert(row.s("outcome"), json!(row.i("n")));
+        }
+    }
+    const CLASSES: [&str; 5] = ["city", "road", "one_to_one", "nonstandard", "unknown"];
+    let sums: Vec<String> = CLASSES
+        .iter()
+        .flat_map(|c| {
+            ["world_km", "game_km"].map(|k| format!("COALESCE(SUM(json_extract(summary, '$.distance_by_scale_class.{c}.{k}')), 0) AS {c}_{k}"))
+        })
+        .collect();
+    let by = store::one(
+        h,
+        &format!("SELECT {} FROM jobs WHERE user_id = ?1 AND game = ?2 AND outcome IN ('valid', 'approved')", sums.join(", ")),
+        params![user_id, g.as_str()],
+    )
+    .await?
+    .unwrap_or_default();
+    let mut by_class = serde_json::Map::new();
+    for c in CLASSES {
+        let (cw, cg) = (by.f(&format!("{c}_world_km")), by.f(&format!("{c}_game_km")));
+        by_class.insert(c.into(), json!({"world_km": round2(cw), "world_mi": mi(cw), "game_km": round2(cg), "game_mi": mi(cg)}));
+    }
     Ok(json!({
         "points": cfg.rules.floor_points(r.f("points")), "job_count": r.i("n"),
         "world_km": round2(w), "world_mi": mi(w), "game_km": round2(gk), "game_mi": mi(gk),
         "pending_review_count": pending,
+        "outcomes": outcomes,
+        "distance_by_scale_class": by_class,
     }))
 }
 
@@ -188,6 +223,16 @@ pub const OUTCOMES: [&str; 7] = ["valid", "approved", "pending_review", "invalid
 pub async fn player_jobs<H: Host>(h: &H, req: &Request, g: &str, discord_id: &str) -> ApiResult<Response> {
     auth::service(h, req)?;
     let g = game(g)?;
+    jobs_page(h, req, discord_id, Some(g)).await
+}
+
+/// `GET /api/v1/public/players/{discord_id}/jobs`: both games, newest first.
+pub async fn player_jobs_all<H: Host>(h: &H, req: &Request, discord_id: &str) -> ApiResult<Response> {
+    auth::service(h, req)?;
+    jobs_page(h, req, discord_id, None).await
+}
+
+async fn jobs_page<H: Host>(h: &H, req: &Request, discord_id: &str, g: Option<Game>) -> ApiResult<Response> {
     let user = linked(h, discord_id).await?;
     let (limit, offset) = http::page(req, h.now_ms())?;
     let outcomes: Vec<String> = match req.q("outcome") {
@@ -198,12 +243,13 @@ pub async fn player_jobs<H: Host>(h: &H, req: &Request, g: &str, discord_id: &st
         return Err(ApiError::bad_request("unknown outcome").details(json!({"outcome": bad})));
     }
     let list = outcomes.iter().map(|o| format!("'{o}'")).collect::<Vec<_>>().join(",");
-    let filter = format!("user_id = ?1 AND game = ?2 AND outcome IN ({list})");
-    let total = store::count(h, &format!("SELECT COUNT(*) AS n FROM jobs WHERE {filter}"), params![&user.user_id, g.as_str()]).await?;
+    let filter = format!("user_id = ?1 AND (?2 IS NULL OR game = ?2) AND outcome IN ({list})");
+    let game = g.map(|g| g.as_str());
+    let total = store::count(h, &format!("SELECT COUNT(*) AS n FROM jobs WHERE {filter}"), params![&user.user_id, game]).await?;
     let rows = h
         .all(
             &format!("SELECT * FROM jobs WHERE {filter} ORDER BY delivered_at DESC, job_id LIMIT ?3 OFFSET ?4"),
-            params![&user.user_id, g.as_str(), limit as i64, offset as i64],
+            params![&user.user_id, game, limit as i64, offset as i64],
         )
         .await?;
     let items = rows.iter().map(jobs::summary_json).collect();
@@ -223,7 +269,9 @@ pub async fn job<H: Host>(h: &H, req: &Request, raw_id: &str) -> ApiResult<Respo
     let row = job_row(h, raw_id).await?;
     let user = store::user_by_id(h, &row.s("user_id")).await?.ok_or_else(|| ApiError::not_found("job"))?;
     let cfg = config::scoring(h).await?.cfg;
-    Ok(Response::ok(jobs::detail_json(&row, &user, &cfg)))
+    let mut v = jobs::detail_json(&row, &user, &cfg);
+    crate::manual::public_extras(h, &row, &mut v).await?;
+    Ok(Response::ok(v))
 }
 
 // ---- leaderboards (§5) -----------------------------------------------------------

@@ -61,6 +61,7 @@ Oldest first, with `total`. Each item:
 | `no_delivered_distance` | The delivery carried no distance | |
 | `trace_check` | Sample rate, sequence or `hello` inconsistency (PLAN §6a) | `checks[]` |
 | `odometer_jump`, `impossible_delivery_time` | Optional heuristics, off by default | rule specific |
+| `manual_submission` | Submitted by hand through the bot (PUBLIC_API §6): every manual job has it | |
 
 **Discard reasons.** These give `outcome = discarded`, and no moderator action can approve it.
 
@@ -147,6 +148,39 @@ This is the public job detail (PUBLIC_API §3), with `reasons` as in §1, plus:
 - **`etag`** changes on every change to the job. Send it as `expected_etag` on a decision to fail
   with `409 conflict` if another moderator acted first.
 
+**Stats sheet, edits and manual jobs.** Every job's detail also has these fields:
+
+```json
+{
+  "origin": "manual",
+  "sheet": {"distance_km": 380.0, "distance_mi": 236.12, "map_scale": 19, "fuel_used_l": 120.5, "damage_pct": 2,
+            "profit": 15000, "started_at": "…", "ended_at": "…", "truck": "Scania", "truck_model": "S 730",
+            "mods": ["Example Map Mod"], "cargo_name": "Apples", "source_city": "Calais", "source_company": "Tradeaux",
+            "destination_city": "London", "destination_company": "Posped",
+            "uk": {"distance_km": 76.0, "distance_mi": 47.22, "entry_city": "Folkestone", "end_city": "London", "evidence_id": "evd_…"}},
+  "overrides": {"distance_km": 384.0, "distance_mi": 238.6},
+  "submission": {"unit": "km", "fuel_unit": "l", "map_scale_defaulted": true, "sheet": {"…": "as submitted"}},
+  "evidence": [{"evidence_id": "evd_…", "role": "main", "content_type": "image/webp", "size_bytes": 182340, "url": "…", "expires_at": "…"}],
+  "hide_map": false,
+  "custom_map": {"url": "…", "expires_at": "…"}
+}
+```
+
+- **`sheet`:** the job's effective values (canonical units: km with miles beside, litres, RFC 3339).
+  - **Tracked job:** what the recording says, with any edits laid over it. Fields the recording
+    cannot know are `null`: damage, profit, truck, map scale, UK and adjusted sections.
+  - **Manual job:** what was submitted, with edits.
+- **`overrides`:** only the fields a moderator changed (§14); `{}` when none.
+- **`submission`:** for a manual job, the submitted values and the units the player used;
+  `null` for tracked jobs.
+- **`evidence`:** the images, each with a signed link valid for one hour. `[]` for tracked jobs.
+- **`custom_map`:** as in the public detail, except moderators always see it, even with
+  `hide_map` on.
+- **Manual jobs:**
+  - `speed` and `integrity` are `null`;
+  - `rules`, `segments` and `timeline` are empty;
+  - series, route and trace answer `404`.
+
 ## 5. Speed and fuel series; admin route (§4.24, §4.26)
 
 ### `GET /api/v1/admin/jobs/{job_id}/series?max_points=1000`
@@ -226,6 +260,23 @@ Returns a time-limited signed URL. The Worker streams the file from storage.
 - **Discarded jobs are never approvable.** Only a recalculation (§8) can change them, for example
   after a missing config version is published.
 - **Any other combination** returns `409 invalid_transition`.
+- **`reject` always needs its reason.** The bot sends a standard one when the moderator types
+  none.
+- **`approve` takes two optional fields, applied in the same step:**
+
+  ```json
+  {"reason": "Screenshots match.", "expected_etag": "…", "hide_map": true,
+   "corrections": {"unit": "km", "distance": 384, "uk": {"distance": 80}}}
+  ```
+
+  - `hide_map`: keep a manual job's custom map out of the public detail.
+  - `corrections`: any fields of §14, with `unit` and `fuel_unit` as given.
+    - They are stored as overrides, the job is re-scored, and then it is approved. The answer's
+      `points` are the corrected points.
+    - The correction is audited as `job.edit`, the approval as `job.approve`.
+    - Only the approval's `job.scored` is sent.
+
+  Either field on any other action is `422`.
 
 **`200`:**
 ```json
@@ -425,3 +476,53 @@ Filters: `?job_id=`, `?actor=<discord id>`, `?target_user=<discord id>`, `?actio
   trace downloads.
 - **`action`** values are `<resource>.<verb>`, for example `job.approve`, `bonus.create`,
   `token.issue`, `player.update`, `config.publish`, `revocation.schedule`, `trace.download`.
+
+## 14. Editing a job (owner, 2026-10-15)
+
+### `PATCH /api/v1/admin/jobs/{job_id}`
+
+Corrects any field of **any** job, tracked or manual:
+
+```json
+{"reason": "The delivery distance was cut off.", "expected_etag": "\"j7K2M9QXA-v5\"",
+ "unit": "km", "fuel_unit": "l",
+ "distance": 412, "cargo_name": "Corrected cargo", "damage": 4, "truck": "Peterbilt", "bonus_id": "bon_2kd8"}
+```
+
+- **Required:** `reason`. `expected_etag` is optional, as in §7.
+- **Fields:** the same names as a manual submission (PUBLIC_API §6):
+  - places, `cargo_name`, `truck`, `truck_model`, `mod_names`;
+  - `distance`, `fuel_used`, `damage`, `profit`, `started_at`, `ended_at`;
+  - `map_scale`, `uk`, `adjusted_scale`, plus `bonus_id`.
+- **Units and rules for fields:**
+  - **Units:** `unit` is needed with any distance, `fuel_unit` with `fuel_used`.
+  - **`uk` and `adjusted_scale`** may be partial (`{"uk": {"entry_city": "Dover"}}`), and
+    `null` removes the section. Their images cannot be changed.
+  - **Clearing:** `null` clears `damage`, `profit`, `fuel_used`, `truck`, `truck_model`,
+    `mod_names` and `map_scale` (back to the game's default); `null` on `bonus_id` means no
+    bonus. Other fields cannot be cleared.
+  - **Restoring:** setting a field back to the recording's or the submission's value removes
+    its override.
+  - **Errors:** an unknown field is `422 validation_failed` with
+    `details.fields.<name> = "unknown field"`. A body with nothing to change is `422` too.
+- **Edits survive re-scoring.** They are stored as overrides and applied again by every
+  recalculation, bonus change and replay.
+- **What changes the points:**
+  - **Names, fuel, damage, profit, times, truck and mods:** shown values only.
+  - **`distance` alone** on a tracked job: the job's own city/road mix is kept, so world
+    distance scales with it.
+  - **`map_scale`, `uk` or `adjusted_scale`** on a tracked job: its world distance is worked
+    out the manual way (PUBLIC_API §6).
+  - **`bonus_id`:** replaces the automatic bonus choice. It must be a bonus of the job's game,
+    in any state.
+  - **The speed penalty** of a tracked job still applies.
+- **The outcome does not change.** A moderator decided outcome stays.
+- **Answer `200`:**
+
+  ```json
+  {"job_id": "7K2M9QXA", "outcome": "valid", "points": 7.3, "held_points": null,
+   "overrides": {"cargo_name": "Corrected cargo", "damage_pct": 4.0}, "etag": "\"j7K2M9QXA-v6\""}
+  ```
+
+- **Webhooks:** `job.scored` with `by: {"kind": "moderator", …}` when the points changed.
+- **Audit:** `job.edit`, with outcome, points and overrides before and after.

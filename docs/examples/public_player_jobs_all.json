@@ -1,0 +1,117 @@
+{
+  "items": [
+    {
+      "cargo": {
+        "id": null,
+        "name": "Apples"
+      },
+      "delivered_at": "2026-10-14T09:00:23.000Z",
+      "destination": {
+        "city_id": null,
+        "city_name": "London",
+        "company_id": null,
+        "company_name": "Posped"
+      },
+      "game": "ets2",
+      "game_km": 384.0,
+      "game_mi": 238.61,
+      "held_points": null,
+      "job_id": "1RQXYEB5",
+      "market": null,
+      "multiplayer": {
+        "kind": "unknown",
+        "truckersmp": null
+      },
+      "origin": "manual",
+      "outcome": "approved",
+      "points": 13.2,
+      "reported_delivered_at": "2026-10-14T08:20:00.000Z",
+      "source": {
+        "city_id": null,
+        "city_name": "Calais",
+        "company_id": null,
+        "company_name": "Tradeaux"
+      },
+      "world_km": 21.33,
+      "world_mi": 13.26
+    },
+    {
+      "cargo": {
+        "id": "med_equip",
+        "name": "Medical Equipment"
+      },
+      "delivered_at": "2026-10-14T09:00:01.000Z",
+      "destination": {
+        "city_id": "napoli",
+        "city_name": "Napoli",
+        "company_id": "eolo_lines",
+        "company_name": "Eolo Lines"
+      },
+      "game": "ets2",
+      "game_km": 1.0,
+      "game_mi": 0.62,
+      "held_points": null,
+      "job_id": "1XW08CFJ",
+      "market": "quick_job",
+      "multiplayer": {
+        "kind": "truckersmp",
+        "truckersmp": {
+          "account_id": 1234567,
+          "server_id": 30
+        }
+      },
+      "origin": "tracked",
+      "outcome": "valid",
+      "points": 0.2,
+      "reported_delivered_at": "2026-10-14T01:29:53.859Z",
+      "source": {
+        "city_id": "cagliari",
+        "city_name": "Cagliari",
+        "company_id": "eolo_lines",
+        "company_name": "Eolo Lines"
+      },
+      "world_km": 0.33,
+      "world_mi": 0.21
+    },
+    {
+      "cargo": {
+        "id": "med_vaccine",
+        "name": "Medical Vaccines"
+      },
+      "delivered_at": "2026-10-14T09:00:01.000Z",
+      "destination": {
+        "city_id": "bergen",
+        "city_name": "Bergen",
+        "company_id": "polarislines",
+        "company_name": "Polaris Lines"
+      },
+      "game": "ets2",
+      "game_km": 2512.0,
+      "game_mi": 1560.88,
+      "held_points": null,
+      "job_id": "2RG8X3RX",
+      "market": "cargo_market",
+      "multiplayer": {
+        "kind": "truckersmp",
+        "truckersmp": {
+          "account_id": 1234567,
+          "server_id": 30
+        }
+      },
+      "origin": "tracked",
+      "outcome": "approved",
+      "points": 90.3,
+      "reported_delivered_at": "2026-10-14T01:03:43.006Z",
+      "source": {
+        "city_id": "honningsvag",
+        "city_name": "Honningsvåg",
+        "company_id": "renar",
+        "company_name": "Renar Logistik"
+      },
+      "world_km": 145.33,
+      "world_mi": 90.3
+    }
+  ],
+  "next_cursor": "bzMudDE3OTE5Njg0Mjk",
+  "total": 5
+}

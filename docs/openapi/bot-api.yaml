@@ -736,6 +736,42 @@
               "schema":
                 "properties":
                   "audit":
+                    "items":
+                      "properties":
+                        "action":
+                          "type": "string"
+                        "actor":
+                          "properties":
+                            "discord_user_id":
+                              "type": "string"
+                            "display_name":
+                              "type": "null"
+                          "type": "object"
+                        "after":
+                          "properties":
+                            "evidence":
+                              "type": "integer"
+                            "game":
+                              "type": "string"
+                          "type": "object"
+                        "at":
+                          "format": "date-time"
+                          "type": "string"
+                        "audit_id":
+                          "type": "string"
+                        "before":
+                          "properties": {}
+                          "type": "object"
+                        "reason":
+                          "type": "null"
+                        "target":
+                          "properties":
+                            "id":
+                              "type": "string"
+                            "kind":
+                              "type": "string"
+                          "type": "object"
+                      "type": "object"
                     "type": "array"
                   "bonus":
                     "type": "null"
@@ -744,7 +780,9 @@
                   "cargo":
                     "properties":
                       "id":
-                        "type": "string"
+                        "type":
+                        - "string"
+                        - "null"
                       "name":
                         "type": "string"
                     "type": "object"
@@ -757,17 +795,31 @@
                       "version_id":
                         "type": "string"
                     "type": "object"
+                  "custom_map":
+                    "properties":
+                      "expires_at":
+                        "format": "date-time"
+                        "type": "string"
+                      "url":
+                        "type": "string"
+                    "type":
+                    - "null"
+                    - "object"
                   "delivered_at":
                     "format": "date-time"
                     "type": "string"
                   "destination":
                     "properties":
                       "city_id":
-                        "type": "string"
+                        "type":
+                        - "string"
+                        - "null"
                       "city_name":
                         "type": "string"
                       "company_id":
-                        "type": "string"
+                        "type":
+                        - "string"
+                        - "null"
                       "company_name":
                         "type": "string"
                     "type": "object"
@@ -838,11 +890,17 @@
                       "delivered_game_km":
                         "type": "number"
                       "tracked_counted_game_km":
-                        "type": "number"
+                        "type":
+                        - "number"
+                        - "null"
                       "tracked_uncounted_game_km":
-                        "type": "number"
+                        "type":
+                        - "number"
+                        - "null"
                       "tracked_whole_game_km":
-                        "type": "number"
+                        "type":
+                        - "number"
+                        - "null"
                       "world_km":
                         "type": "number"
                       "world_mi":
@@ -850,6 +908,24 @@
                     "type": "object"
                   "etag":
                     "type": "string"
+                  "evidence":
+                    "items":
+                      "properties":
+                        "content_type":
+                          "type": "string"
+                        "evidence_id":
+                          "type": "string"
+                        "expires_at":
+                          "format": "date-time"
+                          "type": "string"
+                        "role":
+                          "type": "string"
+                        "size_bytes":
+                          "type": "integer"
+                        "url":
+                          "type": "string"
+                      "type": "object"
+                    "type": "array"
                   "fuel":
                     "properties":
                       "refuels":
@@ -865,6 +941,8 @@
                     "type": "number"
                   "held_points":
                     "type": "number"
+                  "hide_map":
+                    "type": "boolean"
                   "integrity":
                     "properties":
                       "config_diff":
@@ -904,11 +982,15 @@
                               "type": "boolean"
                           "type": "object"
                         "type": "array"
-                    "type": "object"
+                    "type":
+                    - "object"
+                    - "null"
                   "job_id":
                     "type": "string"
                   "market":
-                    "type": "string"
+                    "type":
+                    - "string"
+                    - "null"
                   "multiplayer":
                     "properties":
                       "kind":
@@ -919,12 +1001,21 @@
                             "type": "integer"
                           "server_id":
                             "type": "integer"
-                        "type": "object"
+                        "type":
+                        - "object"
+                        - "null"
                     "type": "object"
+                  "origin":
+                    "type": "string"
                   "outcome":
                     "type": "string"
+                  "overrides":
+                    "properties": {}
+                    "type": "object"
                   "planned_distance_km":
-                    "type": "integer"
+                    "type":
+                    - "integer"
+                    - "null"
                   "player":
                     "properties":
                       "discord_user_id":
@@ -1005,14 +1096,84 @@
                           "type": "string"
                       "type": "object"
                     "type": "array"
+                  "sheet":
+                    "properties":
+                      "adjusted_scale":
+                        "type": "null"
+                      "cargo_name":
+                        "type": "string"
+                      "damage_pct":
+                        "type":
+                        - "null"
+                        - "number"
+                      "destination_city":
+                        "type": "string"
+                      "destination_company":
+                        "type": "string"
+                      "distance_km":
+                        "type": "number"
+                      "distance_mi":
+                        "type": "number"
+                      "ended_at":
+                        "format": "date-time"
+                        "type": "string"
+                      "fuel_used_l":
+                        "type": "number"
+                      "map_scale":
+                        "type":
+                        - "null"
+                        - "number"
+                      "mods":
+                        "items":
+                          "type": "string"
+                        "type": "array"
+                      "profit":
+                        "type":
+                        - "null"
+                        - "number"
+                      "source_city":
+                        "type": "string"
+                      "source_company":
+                        "type": "string"
+                      "started_at":
+                        "format": "date-time"
+                        "type": "string"
+                      "truck":
+                        "type":
+                        - "null"
+                        - "string"
+                      "truck_model":
+                        "type":
+                        - "null"
+                        - "string"
+                      "uk":
+                        "properties":
+                          "distance_km":
+                            "type": "number"
+                          "distance_mi":
+                            "type": "number"
+                          "end_city":
+                            "type": "string"
+                          "entry_city":
+                            "type": "string"
+                          "evidence_id":
+                            "type": "string"
+                        "type":
+                        - "null"
+                        - "object"
+                    "type": "object"
                   "source":
                     "properties":
                       "city_id":
-                        "type": "string"
+                        "type":
+                        - "string"
+                        - "null"
                       "city_name":
                         "type": "string"
                       "company_id":
-                        "type": "string"
+                        "type":
+                        - "string"
+                        - "null"
                       "company_name":
                         "type": "string"
                     "type": "object"
@@ -1028,13 +1189,78 @@
                         "type": "number"
                       "penalty_over_mph":
                         "type": "number"
-                    "type": "object"
+                    "type":
+                    - "object"
+                    - "null"
                   "speed_penalty_applied":
                     "type": "boolean"
                   "start_kind":
                     "type": "string"
                   "state":
                     "type": "string"
+                  "submission":
+                    "properties":
+                      "fuel_unit":
+                        "type": "string"
+                      "map_scale_defaulted":
+                        "type": "boolean"
+                      "sheet":
+                        "properties":
+                          "cargo_name":
+                            "type": "string"
+                          "damage_pct":
+                            "type": "number"
+                          "destination_city":
+                            "type": "string"
+                          "destination_company":
+                            "type": "string"
+                          "distance_km":
+                            "type": "number"
+                          "distance_mi":
+                            "type": "number"
+                          "ended_at":
+                            "format": "date-time"
+                            "type": "string"
+                          "fuel_used_l":
+                            "type": "number"
+                          "map_scale":
+                            "type": "number"
+                          "mods":
+                            "items":
+                              "type": "string"
+                            "type": "array"
+                          "profit":
+                            "type": "number"
+                          "source_city":
+                            "type": "string"
+                          "source_company":
+                            "type": "string"
+                          "started_at":
+                            "format": "date-time"
+                            "type": "string"
+                          "truck":
+                            "type": "string"
+                          "truck_model":
+                            "type": "string"
+                          "uk":
+                            "properties":
+                              "distance_km":
+                                "type": "number"
+                              "distance_mi":
+                                "type": "number"
+                              "end_city":
+                                "type": "string"
+                              "entry_city":
+                                "type": "string"
+                              "evidence_id":
+                                "type": "string"
+                            "type": "object"
+                        "type": "object"
+                      "unit":
+                        "type": "string"
+                    "type":
+                    - "null"
+                    - "object"
                   "timeline":
                     "items":
                       "properties":
@@ -1069,6 +1295,61 @@
       "security":
       - "botToken": []
       "summary": "Admin job detail"
+      "tags":
+      - "Jobs"
+    "patch":
+      "operationId": "admin_job_edit"
+      "parameters":
+      - "in": "path"
+        "name": "job_id"
+        "required": true
+        "schema":
+          "type": "string"
+      - "$ref": "#/components/parameters/Actor"
+      - "$ref": "#/components/parameters/IdempotencyKey"
+      "requestBody":
+        "content":
+          "application/json":
+            "example":
+              "cargo_name": "Corrected cargo"
+              "damage": 3
+              "reason": "The cargo was renamed by a mod."
+        "required": true
+      "responses":
+        "200":
+          "content":
+            "application/json":
+              "examples":
+                "admin_job_edit":
+                  "externalValue": "../examples/admin_job_edit.json"
+              "schema":
+                "properties":
+                  "etag":
+                    "type": "string"
+                  "held_points":
+                    "type": "null"
+                  "job_id":
+                    "type": "string"
+                  "outcome":
+                    "type": "string"
+                  "overrides":
+                    "properties":
+                      "cargo_name":
+                        "type": "string"
+                      "damage_pct":
+                        "type": "number"
+                    "type": "object"
+                  "points":
+                    "type": "number"
+                "type": "object"
+          "description": "See docs/examples/admin_job_edit.json"
+        "4XX":
+          "$ref": "#/components/responses/Error"
+        "5XX":
+          "$ref": "#/components/responses/Error"
+      "security":
+      - "botToken": []
+      "summary": "Correct any field of any job"
       "tags":
       - "Jobs"
   "/api/v1/admin/jobs/{job_id}/recalculate":
@@ -1509,12 +1790,87 @@
                     "properties":
                       "ats":
                         "properties":
+                          "distance_by_scale_class":
+                            "properties":
+                              "city":
+                                "properties":
+                                  "game_km":
+                                    "type": "number"
+                                  "game_mi":
+                                    "type": "number"
+                                  "world_km":
+                                    "type": "number"
+                                  "world_mi":
+                                    "type": "number"
+                                "type": "object"
+                              "nonstandard":
+                                "properties":
+                                  "game_km":
+                                    "type": "number"
+                                  "game_mi":
+                                    "type": "number"
+                                  "world_km":
+                                    "type": "number"
+                                  "world_mi":
+                                    "type": "number"
+                                "type": "object"
+                              "one_to_one":
+                                "properties":
+                                  "game_km":
+                                    "type": "number"
+                                  "game_mi":
+                                    "type": "number"
+                                  "world_km":
+                                    "type": "number"
+                                  "world_mi":
+                                    "type": "number"
+                                "type": "object"
+                              "road":
+                                "properties":
+                                  "game_km":
+                                    "type": "number"
+                                  "game_mi":
+                                    "type": "number"
+                                  "world_km":
+                                    "type": "number"
+                                  "world_mi":
+                                    "type": "number"
+                                "type": "object"
+                              "unknown":
+                                "properties":
+                                  "game_km":
+                                    "type": "number"
+                                  "game_mi":
+                                    "type": "number"
+                                  "world_km":
+                                    "type": "number"
+                                  "world_mi":
+                                    "type": "number"
+                                "type": "object"
+                            "type": "object"
                           "game_km":
                             "type": "number"
                           "game_mi":
                             "type": "number"
                           "job_count":
                             "type": "integer"
+                          "outcomes":
+                            "properties":
+                              "approved":
+                                "type": "integer"
+                              "discarded":
+                                "type": "integer"
+                              "invalid":
+                                "type": "integer"
+                              "pending_review":
+                                "type": "integer"
+                              "rejected":
+                                "type": "integer"
+                              "valid":
+                                "type": "integer"
+                              "voided":
+                                "type": "integer"
+                            "type": "object"
                           "pending_review_count":
                             "type": "integer"
                           "points":
@@ -1526,12 +1882,87 @@
                         "type": "object"
                       "ets2":
                         "properties":
+                          "distance_by_scale_class":
+                            "properties":
+                              "city":
+                                "properties":
+                                  "game_km":
+                                    "type": "number"
+                                  "game_mi":
+                                    "type": "number"
+                                  "world_km":
+                                    "type": "number"
+                                  "world_mi":
+                                    "type": "number"
+                                "type": "object"
+                              "nonstandard":
+                                "properties":
+                                  "game_km":
+                                    "type": "number"
+                                  "game_mi":
+                                    "type": "number"
+                                  "world_km":
+                                    "type": "number"
+                                  "world_mi":
+                                    "type": "number"
+                                "type": "object"
+                              "one_to_one":
+                                "properties":
+                                  "game_km":
+                                    "type": "number"
+                                  "game_mi":
+                                    "type": "number"
+                                  "world_km":
+                                    "type": "number"
+                                  "world_mi":
+                                    "type": "number"
+                                "type": "object"
+                              "road":
+                                "properties":
+                                  "game_km":
+                                    "type": "number"
+                                  "game_mi":
+                                    "type": "number"
+                                  "world_km":
+                                    "type": "number"
+                                  "world_mi":
+                                    "type": "number"
+                                "type": "object"
+                              "unknown":
+                                "properties":
+                                  "game_km":
+                                    "type": "number"
+                                  "game_mi":
+                                    "type": "number"
+                                  "world_km":
+                                    "type": "number"
+                                  "world_mi":
+                                    "type": "number"
+                                "type": "object"
+                            "type": "object"
                           "game_km":
                             "type": "number"
                           "game_mi":
                             "type": "number"
                           "job_count":
                             "type": "integer"
+                          "outcomes":
+                            "properties":
+                              "approved":
+                                "type": "integer"
+                              "discarded":
+                                "type": "integer"
+                              "invalid":
+                                "type": "integer"
+                              "pending_review":
+                                "type": "integer"
+                              "rejected":
+                                "type": "integer"
+                              "valid":
+                                "type": "integer"
+                              "voided":
+                                "type": "integer"
+                            "type": "object"
                           "pending_review_count":
                             "type": "integer"
                           "points":
@@ -1627,12 +2058,87 @@
                     "properties":
                       "ats":
                         "properties":
+                          "distance_by_scale_class":
+                            "properties":
+                              "city":
+                                "properties":
+                                  "game_km":
+                                    "type": "number"
+                                  "game_mi":
+                                    "type": "number"
+                                  "world_km":
+                                    "type": "number"
+                                  "world_mi":
+                                    "type": "number"
+                                "type": "object"
+                              "nonstandard":
+                                "properties":
+                                  "game_km":
+                                    "type": "number"
+                                  "game_mi":
+                                    "type": "number"
+                                  "world_km":
+                                    "type": "number"
+                                  "world_mi":
+                                    "type": "number"
+                                "type": "object"
+                              "one_to_one":
+                                "properties":
+                                  "game_km":
+                                    "type": "number"
+                                  "game_mi":
+                                    "type": "number"
+                                  "world_km":
+                                    "type": "number"
+                                  "world_mi":
+                                    "type": "number"
+                                "type": "object"
+                              "road":
+                                "properties":
+                                  "game_km":
+                                    "type": "number"
+                                  "game_mi":
+                                    "type": "number"
+                                  "world_km":
+                                    "type": "number"
+                                  "world_mi":
+                                    "type": "number"
+                                "type": "object"
+                              "unknown":
+                                "properties":
+                                  "game_km":
+                                    "type": "number"
+                                  "game_mi":
+                                    "type": "number"
+                                  "world_km":
+                                    "type": "number"
+                                  "world_mi":
+                                    "type": "number"
+                                "type": "object"
+                            "type": "object"
                           "game_km":
                             "type": "number"
                           "game_mi":
                             "type": "number"
                           "job_count":
                             "type": "integer"
+                          "outcomes":
+                            "properties":
+                              "approved":
+                                "type": "integer"
+                              "discarded":
+                                "type": "integer"
+                              "invalid":
+                                "type": "integer"
+                              "pending_review":
+                                "type": "integer"
+                              "rejected":
+                                "type": "integer"
+                              "valid":
+                                "type": "integer"
+                              "voided":
+                                "type": "integer"
+                            "type": "object"
                           "pending_review_count":
                             "type": "integer"
                           "points":
@@ -1644,12 +2150,87 @@
                         "type": "object"
                       "ets2":
                         "properties":
+                          "distance_by_scale_class":
+                            "properties":
+                              "city":
+                                "properties":
+                                  "game_km":
+                                    "type": "number"
+                                  "game_mi":
+                                    "type": "number"
+                                  "world_km":
+                                    "type": "number"
+                                  "world_mi":
+                                    "type": "number"
+                                "type": "object"
+                              "nonstandard":
+                                "properties":
+                                  "game_km":
+                                    "type": "number"
+                                  "game_mi":
+                                    "type": "number"
+                                  "world_km":
+                                    "type": "number"
+                                  "world_mi":
+                                    "type": "number"
+                                "type": "object"
+                              "one_to_one":
+                                "properties":
+                                  "game_km":
+                                    "type": "number"
+                                  "game_mi":
+                                    "type": "number"
+                                  "world_km":
+                                    "type": "number"
+                                  "world_mi":
+                                    "type": "number"
+                                "type": "object"
+                              "road":
+                                "properties":
+                                  "game_km":
+                                    "type": "number"
+                                  "game_mi":
+                                    "type": "number"
+                                  "world_km":
+                                    "type": "number"
+                                  "world_mi":
+                                    "type": "number"
+                                "type": "object"
+                              "unknown":
+                                "properties":
+                                  "game_km":
+                                    "type": "number"
+                                  "game_mi":
+                                    "type": "number"
+                                  "world_km":
+                                    "type": "number"
+                                  "world_mi":
+                                    "type": "number"
+                                "type": "object"
+                            "type": "object"
                           "game_km":
                             "type": "number"
                           "game_mi":
                             "type": "number"
                           "job_count":
                             "type": "integer"
+                          "outcomes":
+                            "properties":
+                              "approved":
+                                "type": "integer"
+                              "discarded":
+                                "type": "integer"
+                              "invalid":
+                                "type": "integer"
+                              "pending_review":
+                                "type": "integer"
+                              "rejected":
+                                "type": "integer"
+                              "valid":
+                                "type": "integer"
+                              "voided":
+                                "type": "integer"
+                            "type": "object"
                           "pending_review_count":
                             "type": "integer"
                           "points":
@@ -1998,6 +2579,8 @@
                           - "null"
                         "job_id":
                           "type": "string"
+                        "origin":
+                          "type": "string"
                         "outcome":
                           "type": "string"
                         "player":
@@ -2319,12 +2902,87 @@
                     "properties":
                       "ats":
                         "properties":
+                          "distance_by_scale_class":
+                            "properties":
+                              "city":
+                                "properties":
+                                  "game_km":
+                                    "type": "number"
+                                  "game_mi":
+                                    "type": "number"
+                                  "world_km":
+                                    "type": "number"
+                                  "world_mi":
+                                    "type": "number"
+                                "type": "object"
+                              "nonstandard":
+                                "properties":
+                                  "game_km":
+                                    "type": "number"
+                                  "game_mi":
+                                    "type": "number"
+                                  "world_km":
+                                    "type": "number"
+                                  "world_mi":
+                                    "type": "number"
+                                "type": "object"
+                              "one_to_one":
+                                "properties":
+                                  "game_km":
+                                    "type": "number"
+                                  "game_mi":
+                                    "type": "number"
+                                  "world_km":
+                                    "type": "number"
+                                  "world_mi":
+                                    "type": "number"
+                                "type": "object"
+                              "road":
+                                "properties":
+                                  "game_km":
+                                    "type": "number"
+                                  "game_mi":
+                                    "type": "number"
+                                  "world_km":
+                                    "type": "number"
+                                  "world_mi":
+                                    "type": "number"
+                                "type": "object"
+                              "unknown":
+                                "properties":
+                                  "game_km":
+                                    "type": "number"
+                                  "game_mi":
+                                    "type": "number"
+                                  "world_km":
+                                    "type": "number"
+                                  "world_mi":
+                                    "type": "number"
+                                "type": "object"
+                            "type": "object"
                           "game_km":
                             "type": "number"
                           "game_mi":
                             "type": "number"
                           "job_count":
                             "type": "integer"
+                          "outcomes":
+                            "properties":
+                              "approved":
+                                "type": "integer"
+                              "discarded":
+                                "type": "integer"
+                              "invalid":
+                                "type": "integer"
+                              "pending_review":
+                                "type": "integer"
+                              "rejected":
+                                "type": "integer"
+                              "valid":
+                                "type": "integer"
+                              "voided":
+                                "type": "integer"
+                            "type": "object"
                           "pending_review_count":
                             "type": "integer"
                           "points":
@@ -2336,12 +2994,87 @@
                         "type": "object"
                       "ets2":
                         "properties":
+                          "distance_by_scale_class":
+                            "properties":
+                              "city":
+                                "properties":
+                                  "game_km":
+                                    "type": "number"
+                                  "game_mi":
+                                    "type": "number"
+                                  "world_km":
+                                    "type": "number"
+                                  "world_mi":
+                                    "type": "number"
+                                "type": "object"
+                              "nonstandard":
+                                "properties":
+                                  "game_km":
+                                    "type": "number"
+                                  "game_mi":
+                                    "type": "number"
+                                  "world_km":
+                                    "type": "number"
+                                  "world_mi":
+                                    "type": "number"
+                                "type": "object"
+                              "one_to_one":
+                                "properties":
+                                  "game_km":
+                                    "type": "number"
+                                  "game_mi":
+                                    "type": "number"
+                                  "world_km":
+                                    "type": "number"
+                                  "world_mi":
+                                    "type": "number"
+                                "type": "object"
+                              "road":
+                                "properties":
+                                  "game_km":
+                                    "type": "number"
+                                  "game_mi":
+                                    "type": "number"
+                                  "world_km":
+                                    "type": "number"
+                                  "world_mi":
+                                    "type": "number"
+                                "type": "object"
+                              "unknown":
+                                "properties":
+                                  "game_km":
+                                    "type": "number"
+                                  "game_mi":
+                                    "type": "number"
+                                  "world_km":
+                                    "type": "number"
+                                  "world_mi":
+                                    "type": "number"
+                                "type": "object"
+                            "type": "object"
                           "game_km":
                             "type": "number"
                           "game_mi":
                             "type": "number"
                           "job_count":
                             "type": "integer"
+                          "outcomes":
+                            "properties":
+                              "approved":
+                                "type": "integer"
+                              "discarded":
+                                "type": "integer"
+                              "invalid":
+                                "type": "integer"
+                              "pending_review":
+                                "type": "integer"
+                              "rejected":
+                                "type": "integer"
+                              "valid":
+                                "type": "integer"
+                              "voided":
+                                "type": "integer"
+                            "type": "object"
                           "pending_review_count":
                             "type": "integer"
                           "points":
@@ -2382,6 +3115,341 @@
       "summary": "Change the display name"
       "tags":
       - "Players"
+  "/api/v1/players/{discord_id}/evidence":
+    "post":
+      "operationId": "player_evidence_upload"
+      "parameters":
+      - "in": "path"
+        "name": "discord_id"
+        "required": true
+        "schema":
+          "type": "string"
+      - "$ref": "#/components/parameters/IdempotencyKey"
+      "requestBody":
+        "content":
+          "image/jpeg":
+            "schema":
+              "format": "binary"
+              "type": "string"
+          "image/png":
+            "schema":
+              "format": "binary"
+              "type": "string"
+          "image/webp":
+            "schema":
+              "format": "binary"
+              "type": "string"
+        "description": "The image itself, at most 5 MB."
+        "required": true
+      "responses":
+        "201":
+          "content":
+            "application/json":
+              "examples":
+                "player_evidence_upload":
+                  "externalValue": "../examples/player_evidence_upload.json"
+              "schema":
+                "properties":
+                  "content_type":
+                    "type": "string"
+                  "evidence_id":
+                    "type": "string"
+                  "expires_at":
+                    "format": "date-time"
+                    "type": "string"
+                  "sha256":
+                    "type": "string"
+                  "size_bytes":
+                    "type": "integer"
+                "type": "object"
+          "description": "See docs/examples/player_evidence_upload.json"
+        "4XX":
+          "$ref": "#/components/responses/Error"
+        "5XX":
+          "$ref": "#/components/responses/Error"
+      "security":
+      - "botToken": []
+      "summary": "Upload one evidence image"
+      "tags":
+      - "Manual jobs"
+  "/api/v1/players/{discord_id}/jobs/{job_id}/evidence":
+    "get":
+      "operationId": "player_job_evidence"
+      "parameters":
+      - "in": "path"
+        "name": "discord_id"
+        "required": true
+        "schema":
+          "type": "string"
+      - "in": "path"
+        "name": "job_id"
+        "required": true
+        "schema":
+          "type": "string"
+      "responses":
+        "200":
+          "content":
+            "application/json":
+              "examples":
+                "player_job_evidence":
+                  "externalValue": "../examples/player_job_evidence.json"
+              "schema":
+                "properties":
+                  "items":
+                    "items":
+                      "properties":
+                        "content_type":
+                          "type": "string"
+                        "evidence_id":
+                          "type": "string"
+                        "expires_at":
+                          "format": "date-time"
+                          "type": "string"
+                        "role":
+                          "type": "string"
+                        "size_bytes":
+                          "type": "integer"
+                        "url":
+                          "type": "string"
+                      "type": "object"
+                    "type": "array"
+                  "job_id":
+                    "type": "string"
+                "type": "object"
+          "description": "See docs/examples/player_job_evidence.json"
+        "4XX":
+          "$ref": "#/components/responses/Error"
+        "5XX":
+          "$ref": "#/components/responses/Error"
+      "security":
+      - "botToken": []
+      "summary": "The submitter's own evidence images"
+      "tags":
+      - "Manual jobs"
+  "/api/v1/players/{discord_id}/manual-jobs":
+    "post":
+      "operationId": "error_validation_manual"
+      "parameters":
+      - "in": "path"
+        "name": "discord_id"
+        "required": true
+        "schema":
+          "type": "string"
+      - "$ref": "#/components/parameters/IdempotencyKey"
+      "requestBody":
+        "content":
+          "application/json":
+            "example":
+              "cargo_name": "Apples"
+              "custom_map": "evd_arsm3am5s1"
+              "damage": 140
+              "distance": 380
+              "end_city": "London"
+              "end_company": "Posped"
+              "ended_at": "2026-10-14T08:20:00Z"
+              "evidence":
+              - "evd_3a051hzcz0"
+              "fuel_unit": "l"
+              "fuel_used": 120.5
+              "game": "ets2"
+              "mod_names":
+              - "Example Map Mod"
+              "profit": 15000
+              "start_city": "Calais"
+              "start_company": "Tradeaux"
+              "started_at": "2026-10-14T07:00:00Z"
+              "truck": "Scania"
+              "truck_model": "S 730"
+              "uk":
+                "distance": 76
+                "end_city": "London"
+                "entry_city": "Folkestone"
+                "route_evidence": "evd_qa7j61zpen"
+              "unit": "km"
+        "required": true
+      "responses":
+        "201":
+          "content":
+            "application/json":
+              "examples":
+                "player_manual_job_submit":
+                  "externalValue": "../examples/player_manual_job_submit.json"
+              "schema":
+                "properties":
+                  "bonus":
+                    "type": "null"
+                  "cargo":
+                    "properties":
+                      "id":
+                        "type": "null"
+                      "name":
+                        "type": "string"
+                    "type": "object"
+                  "custom_map":
+                    "properties":
+                      "expires_at":
+                        "format": "date-time"
+                        "type": "string"
+                      "url":
+                        "type": "string"
+                    "type": "object"
+                  "delivered_at":
+                    "format": "date-time"
+                    "type": "string"
+                  "destination":
+                    "properties":
+                      "city_id":
+                        "type": "null"
+                      "city_name":
+                        "type": "string"
+                      "company_id":
+                        "type": "null"
+                      "company_name":
+                        "type": "string"
+                    "type": "object"
+                  "distance_by_scale_class":
+                    "properties":
+                      "city":
+                        "properties":
+                          "game_km":
+                            "type": "number"
+                          "game_mi":
+                            "type": "number"
+                          "world_km":
+                            "type": "number"
+                          "world_mi":
+                            "type": "number"
+                        "type": "object"
+                      "nonstandard":
+                        "properties":
+                          "game_km":
+                            "type": "number"
+                          "game_mi":
+                            "type": "number"
+                          "world_km":
+                            "type": "number"
+                          "world_mi":
+                            "type": "number"
+                        "type": "object"
+                      "one_to_one":
+                        "properties":
+                          "game_km":
+                            "type": "number"
+                          "game_mi":
+                            "type": "number"
+                          "world_km":
+                            "type": "number"
+                          "world_mi":
+                            "type": "number"
+                        "type": "object"
+                      "road":
+                        "properties":
+                          "game_km":
+                            "type": "number"
+                          "game_mi":
+                            "type": "number"
+                          "world_km":
+                            "type": "number"
+                          "world_mi":
+                            "type": "number"
+                        "type": "object"
+                      "unknown":
+                        "properties":
+                          "game_km":
+                            "type": "number"
+                          "game_mi":
+                            "type": "number"
+                          "world_km":
+                            "type": "number"
+                          "world_mi":
+                            "type": "number"
+                        "type": "object"
+                    "type": "object"
+                  "game":
+                    "type": "string"
+                  "game_km":
+                    "type": "number"
+                  "game_mi":
+                    "type": "number"
+                  "held_points":
+                    "type": "number"
+                  "job_id":
+                    "type": "string"
+                  "market":
+                    "type": "null"
+                  "multiplayer":
+                    "properties":
+                      "kind":
+                        "type": "string"
+                      "truckersmp":
+                        "type": "null"
+                    "type": "object"
+                  "origin":
+                    "type": "string"
+                  "outcome":
+                    "type": "string"
+                  "planned_distance_km":
+                    "type": "null"
+                  "player":
+                    "properties":
+                      "discord_user_id":
+                        "type": "string"
+                      "display_name":
+                        "type": "string"
+                      "user_id":
+                        "type": "string"
+                    "type": "object"
+                  "points":
+                    "type": "null"
+                  "public_notes":
+                    "items":
+                      "properties":
+                        "code":
+                          "type": "string"
+                        "text":
+                          "type": "string"
+                      "type": "object"
+                    "type": "array"
+                  "reported_delivered_at":
+                    "format": "date-time"
+                    "type": "string"
+                  "source":
+                    "properties":
+                      "city_id":
+                        "type": "null"
+                      "city_name":
+                        "type": "string"
+                      "company_id":
+                        "type": "null"
+                      "company_name":
+                        "type": "string"
+                    "type": "object"
+                  "speed_penalty_applied":
+                    "type": "boolean"
+                  "world_km":
+                    "type": "number"
+                  "world_mi":
+                    "type": "number"
+                "type": "object"
+          "description": "See docs/examples/player_manual_job_submit.json"
+        "422":
+          "content":
+            "application/json":
+              "examples":
+                "error_validation_manual":
+                  "externalValue": "../examples/error_validation_manual.json"
+              "schema":
+                "$ref": "#/components/schemas/Error"
+          "description": "See docs/examples/error_validation_manual.json"
+        "4XX":
+          "$ref": "#/components/responses/Error"
+        "5XX":
+          "$ref": "#/components/responses/Error"
+      "security":
+      - "botToken": []
+      "summary": "Submit a job by hand (goes to review)"
+      "tags":
+      - "Manual jobs"
   "/api/v1/players/{discord_id}/token":
     "delete":
       "operationId": "player_token_revoke"
@@ -2531,21 +3599,37 @@
                   "cargo":
                     "properties":
                       "id":
-                        "type": "string"
+                        "type":
+                        - "string"
+                        - "null"
                       "name":
                         "type": "string"
                     "type": "object"
+                  "custom_map":
+                    "properties":
+                      "expires_at":
+                        "format": "date-time"
+                        "type": "string"
+                      "url":
+                        "type": "string"
+                    "type":
+                    - "null"
+                    - "object"
                   "delivered_at":
                     "format": "date-time"
                     "type": "string"
                   "destination":
                     "properties":
                       "city_id":
-                        "type": "string"
+                        "type":
+                        - "string"
+                        - "null"
                       "city_name":
                         "type": "string"
                       "company_id":
-                        "type": "string"
+                        "type":
+                        - "string"
+                        - "null"
                       "company_name":
                         "type": "string"
                     "type": "object"
@@ -2620,7 +3704,9 @@
                   "job_id":
                     "type": "string"
                   "market":
-                    "type": "string"
+                    "type":
+                    - "string"
+                    - "null"
                   "multiplayer":
                     "properties":
                       "kind":
@@ -2635,10 +3721,14 @@
                         - "null"
                         - "object"
                     "type": "object"
+                  "origin":
+                    "type": "string"
                   "outcome":
                     "type": "string"
                   "planned_distance_km":
-                    "type": "integer"
+                    "type":
+                    - "integer"
+                    - "null"
                   "player":
                     "properties":
                       "discord_user_id":
@@ -2667,11 +3757,15 @@
                   "source":
                     "properties":
                       "city_id":
-                        "type": "string"
+                        "type":
+                        - "string"
+                        - "null"
                       "city_name":
                         "type": "string"
                       "company_id":
-                        "type": "string"
+                        "type":
+                        - "string"
+                        - "null"
                       "company_name":
                         "type": "string"
                     "type": "object"
@@ -2817,12 +3911,87 @@
                     "properties":
                       "ats":
                         "properties":
+                          "distance_by_scale_class":
+                            "properties":
+                              "city":
+                                "properties":
+                                  "game_km":
+                                    "type": "number"
+                                  "game_mi":
+                                    "type": "number"
+                                  "world_km":
+                                    "type": "number"
+                                  "world_mi":
+                                    "type": "number"
+                                "type": "object"
+                              "nonstandard":
+                                "properties":
+                                  "game_km":
+                                    "type": "number"
+                                  "game_mi":
+                                    "type": "number"
+                                  "world_km":
+                                    "type": "number"
+                                  "world_mi":
+                                    "type": "number"
+                                "type": "object"
+                              "one_to_one":
+                                "properties":
+                                  "game_km":
+                                    "type": "number"
+                                  "game_mi":
+                                    "type": "number"
+                                  "world_km":
+                                    "type": "number"
+                                  "world_mi":
+                                    "type": "number"
+                                "type": "object"
+                              "road":
+                                "properties":
+                                  "game_km":
+                                    "type": "number"
+                                  "game_mi":
+                                    "type": "number"
+                                  "world_km":
+                                    "type": "number"
+                                  "world_mi":
+                                    "type": "number"
+                                "type": "object"
+                              "unknown":
+                                "properties":
+                                  "game_km":
+                                    "type": "number"
+                                  "game_mi":
+                                    "type": "number"
+                                  "world_km":
+                                    "type": "number"
+                                  "world_mi":
+                                    "type": "number"
+                                "type": "object"
+                            "type": "object"
                           "game_km":
                             "type": "number"
                           "game_mi":
                             "type": "number"
                           "job_count":
                             "type": "integer"
+                          "outcomes":
+                            "properties":
+                              "approved":
+                                "type": "integer"
+                              "discarded":
+                                "type": "integer"
+                              "invalid":
+                                "type": "integer"
+                              "pending_review":
+                                "type": "integer"
+                              "rejected":
+                                "type": "integer"
+                              "valid":
+                                "type": "integer"
+                              "voided":
+                                "type": "integer"
+                            "type": "object"
                           "pending_review_count":
                             "type": "integer"
                           "points":
@@ -2834,12 +4003,87 @@
                         "type": "object"
                       "ets2":
                         "properties":
+                          "distance_by_scale_class":
+                            "properties":
+                              "city":
+                                "properties":
+                                  "game_km":
+                                    "type": "number"
+                                  "game_mi":
+                                    "type": "number"
+                                  "world_km":
+                                    "type": "number"
+                                  "world_mi":
+                                    "type": "number"
+                                "type": "object"
+                              "nonstandard":
+                                "properties":
+                                  "game_km":
+                                    "type": "number"
+                                  "game_mi":
+                                    "type": "number"
+                                  "world_km":
+                                    "type": "number"
+                                  "world_mi":
+                                    "type": "number"
+                                "type": "object"
+                              "one_to_one":
+                                "properties":
+                                  "game_km":
+                                    "type": "number"
+                                  "game_mi":
+                                    "type": "number"
+                                  "world_km":
+                                    "type": "number"
+                                  "world_mi":
+                                    "type": "number"
+                                "type": "object"
+                              "road":
+                                "properties":
+                                  "game_km":
+                                    "type": "number"
+                                  "game_mi":
+                                    "type": "number"
+                                  "world_km":
+                                    "type": "number"
+                                  "world_mi":
+                                    "type": "number"
+                                "type": "object"
+                              "unknown":
+                                "properties":
+                                  "game_km":
+                                    "type": "number"
+                                  "game_mi":
+                                    "type": "number"
+                                  "world_km":
+                                    "type": "number"
+                                  "world_mi":
+                                    "type": "number"
+                                "type": "object"
+                            "type": "object"
                           "game_km":
                             "type": "number"
                           "game_mi":
                             "type": "number"
                           "job_count":
                             "type": "integer"
+                          "outcomes":
+                            "properties":
+                              "approved":
+                                "type": "integer"
+                              "discarded":
+                                "type": "integer"
+                              "invalid":
+                                "type": "integer"
+                              "pending_review":
+                                "type": "integer"
+                              "rejected":
+                                "type": "integer"
+                              "valid":
+                                "type": "integer"
+                              "voided":
+                                "type": "integer"
+                            "type": "object"
                           "pending_review_count":
                             "type": "integer"
                           "points":
@@ -2879,6 +4123,133 @@
       - "readToken": []
       - "botToken": []
       "summary": "A player's profile, TruckersMP accounts and stats"
+      "tags":
+      - "Public"
+  "/api/v1/public/players/{discord_id}/jobs":
+    "get":
+      "operationId": "public_player_jobs_all"
+      "parameters":
+      - "in": "path"
+        "name": "discord_id"
+        "required": true
+        "schema":
+          "type": "string"
+      - "in": "query"
+        "name": "limit"
+        "required": false
+        "schema":
+          "type": "string"
+      "responses":
+        "200":
+          "content":
+            "application/json":
+              "examples":
+                "public_player_jobs_all":
+                  "externalValue": "../examples/public_player_jobs_all.json"
+              "schema":
+                "properties":
+                  "items":
+                    "items":
+                      "properties":
+                        "cargo":
+                          "properties":
+                            "id":
+                              "type":
+                              - "null"
+                              - "string"
+                            "name":
+                              "type": "string"
+                          "type": "object"
+                        "delivered_at":
+                          "format": "date-time"
+                          "type": "string"
+                        "destination":
+                          "properties":
+                            "city_id":
+                              "type":
+                              - "null"
+                              - "string"
+                            "city_name":
+                              "type": "string"
+                            "company_id":
+                              "type":
+                              - "null"
+                              - "string"
+                            "company_name":
+                              "type": "string"
+                          "type": "object"
+                        "game":
+                          "type": "string"
+                        "game_km":
+                          "type": "number"
+                        "game_mi":
+                          "type": "number"
+                        "held_points":
+                          "type": "null"
+                        "job_id":
+                          "type": "string"
+                        "market":
+                          "type":
+                          - "null"
+                          - "string"
+                        "multiplayer":
+                          "properties":
+                            "kind":
+                              "type": "string"
+                            "truckersmp":
+                              "properties":
+                                "account_id":
+                                  "type": "integer"
+                                "server_id":
+                                  "type": "integer"
+                              "type":
+                              - "null"
+                              - "object"
+                          "type": "object"
+                        "origin":
+                          "type": "string"
+                        "outcome":
+                          "type": "string"
+                        "points":
+                          "type": "number"
+                        "reported_delivered_at":
+                          "format": "date-time"
+                          "type": "string"
+                        "source":
+                          "properties":
+                            "city_id":
+                              "type":
+                              - "null"
+                              - "string"
+                            "city_name":
+                              "type": "string"
+                            "company_id":
+                              "type":
+                              - "null"
+                              - "string"
+                            "company_name":
+                              "type": "string"
+                          "type": "object"
+                        "world_km":
+                          "type": "number"
+                        "world_mi":
+                          "type": "number"
+                      "type": "object"
+                    "type": "array"
+                  "next_cursor":
+                    "type": "string"
+                  "total":
+                    "type": "integer"
+                "type": "object"
+          "description": "See docs/examples/public_player_jobs_all.json"
+        "4XX":
+          "$ref": "#/components/responses/Error"
+        "5XX":
+          "$ref": "#/components/responses/Error"
+      "security":
+      - "readToken": []
+      - "botToken": []
+      "summary": "A player's jobs in both games, newest first"
       "tags":
       - "Public"
   "/api/v1/public/{game}/leaderboard":
@@ -3065,6 +4436,8 @@
                                   "type": "integer"
                               "type": "object"
                           "type": "object"
+                        "origin":
+                          "type": "string"
                         "outcome":
                           "type": "string"
                         "points":
@@ -3133,6 +4506,64 @@
                   "externalValue": "../examples/public_player_stats.json"
               "schema":
                 "properties":
+                  "distance_by_scale_class":
+                    "properties":
+                      "city":
+                        "properties":
+                          "game_km":
+                            "type": "number"
+                          "game_mi":
+                            "type": "number"
+                          "world_km":
+                            "type": "number"
+                          "world_mi":
+                            "type": "number"
+                        "type": "object"
+                      "nonstandard":
+                        "properties":
+                          "game_km":
+                            "type": "number"
+                          "game_mi":
+                            "type": "number"
+                          "world_km":
+                            "type": "number"
+                          "world_mi":
+                            "type": "number"
+                        "type": "object"
+                      "one_to_one":
+                        "properties":
+                          "game_km":
+                            "type": "number"
+                          "game_mi":
+                            "type": "number"
+                          "world_km":
+                            "type": "number"
+                          "world_mi":
+                            "type": "number"
+                        "type": "object"
+                      "road":
+                        "properties":
+                          "game_km":
+                            "type": "number"
+                          "game_mi":
+                            "type": "number"
+                          "world_km":
+                            "type": "number"
+                          "world_mi":
+                            "type": "number"
+                        "type": "object"
+                      "unknown":
+                        "properties":
+                          "game_km":
+                            "type": "number"
+                          "game_mi":
+                            "type": "number"
+                          "world_km":
+                            "type": "number"
+                          "world_mi":
+                            "type": "number"
+                        "type": "object"
+                    "type": "object"
                   "game":
                     "type": "string"
                   "game_km":
@@ -3141,6 +4572,23 @@
                     "type": "number"
                   "job_count":
                     "type": "integer"
+                  "outcomes":
+                    "properties":
+                      "approved":
+                        "type": "integer"
+                      "discarded":
+                        "type": "integer"
+                      "invalid":
+                        "type": "integer"
+                      "pending_review":
+                        "type": "integer"
+                      "rejected":
+                        "type": "integer"
+                      "valid":
+                        "type": "integer"
+                      "voided":
+                        "type": "integer"
+                    "type": "object"
                   "pending_review_count":
                     "type": "integer"
                   "points":
@@ -3281,6 +4729,8 @@
                       "type": "string"
                     "job_version":
                       "type": "integer"
+                    "origin":
+                      "type": "string"
                     "outcome":
                       "type": "string"
                     "player":
