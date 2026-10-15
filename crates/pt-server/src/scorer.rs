@@ -58,6 +58,12 @@ struct Snapshot {
     /// Finished jobs that left the timelines but could not be stored yet.
     #[serde(default)]
     unstored: Vec<(Job, Facts)>,
+    /// A rebuild still working through the raw data in passes. Until it has
+    /// caught up, jobs still in the timelines are only part-way replayed and
+    /// are not stored (2026-10-15: a refresh wrote a delivered job back to
+    /// `tracking` for a few minutes).
+    #[serde(default)]
+    rebuilding: bool,
 }
 
 impl Snapshot {
@@ -69,6 +75,7 @@ impl Snapshot {
             jobs: BTreeMap::new(),
             truckersmp: BTreeMap::new(),
             unstored: Vec::new(),
+            rebuilding: false,
         }
     }
 }
@@ -178,13 +185,13 @@ impl Scorer {
                 sessions.get(i).is_some_and(|(sess, count)| sess == s && (i + 1 == n || count == done))
             })
         };
-        let trigger = if in_order {
-            Trigger::Upload
-        } else {
+        if !in_order {
             report.rebuilt = true;
-            self.snap = Some(Snapshot::new(key.clone(), scoring.cfg.clone()));
-            Trigger::Rebuild
-        };
+            let mut snap = Snapshot::new(key.clone(), scoring.cfg.clone());
+            snap.rebuilding = true;
+            self.snap = Some(snap);
+        }
+        let trigger = if self.snap.as_ref().expect("loaded").rebuilding { Trigger::Rebuild } else { Trigger::Upload };
 
         let names = scoring.cfg.multiplayer.truckersmp_module_names.clone();
         let mut evicted: Vec<Job> = Vec::new();
@@ -288,7 +295,9 @@ impl Scorer {
             }
         }
         let now = h.now_ms();
-        for j in snap.profiles.jobs() {
+        // Behind on the raw data: the jobs still in the timelines are stored
+        // once a pass reaches the end of it.
+        for j in snap.profiles.jobs().filter(|_| !report.more) {
             let m = snap.jobs.get(&memo_key(j)).cloned().unwrap_or_default();
             if m.fingerprint == fingerprint(j) {
                 continue;
@@ -317,6 +326,10 @@ impl Scorer {
                 m.shape = shape(job);
                 m.stored_ms = now;
             }
+            self.dirty = true;
+        }
+        if !report.more && snap.rebuilding {
+            snap.rebuilding = false;
             self.dirty = true;
         }
         if trigger == Trigger::Upload {

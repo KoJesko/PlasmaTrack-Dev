@@ -251,3 +251,6 @@ These answer the bot's open questions "(Q)". **The project owner confirmed all o
 - 2026-10-15: the scorer works through large uploads in passes and never loses a job whose
   data could not be written. It rebuilds once from raw data on deploy. Admin series of capture-mode
   jobs no longer answer `404`.
+- 2026-10-15: a rebuild (a refresh, or a deploy) that takes several passes no longer stores jobs
+  part-way through: a delivered job no longer goes back to `tracking`, and sends no `job.scored`
+  for those steps, until the rebuild has caught up.

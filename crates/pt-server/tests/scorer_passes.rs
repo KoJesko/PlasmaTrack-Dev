@@ -41,6 +41,40 @@ fn many_small_chunks_take_several_passes() {
 }
 
 #[test]
+fn a_rebuild_in_several_passes_never_stores_a_job_half_replayed() {
+    // 2026-10-15: a refresh replayed the owner's capture-mode session, and the
+    // first pass wrote the delivered job back to `tracking` for a few minutes.
+    let t = TestHost::new();
+    publish(&t);
+    let token = link(&t);
+    let lines = synthetic_job("0123456789abcdef0123456789abcdef", 50.0, 180.0);
+    upload(&t, &token, &lines, 4);
+    let mut s = Scorer::new(&user_id(&t), pt_core::Game::Ats);
+    while common::block_on(s.process(&t)).unwrap().more {}
+    let before = t.q("SELECT job_id, state, outcome, version FROM jobs");
+    assert_eq!(before[0]["state"], "delivered");
+    let events = t.q("SELECT event_id FROM webhook_outbox").len();
+
+    common::block_on(s.reset(&t)).unwrap();
+    let mut passes = 0;
+    loop {
+        let r = common::block_on(s.process(&t)).unwrap();
+        passes += 1;
+        let now = t.q("SELECT job_id, state, outcome, version FROM jobs");
+        assert_eq!(now[0]["state"], "delivered", "pass {passes}");
+        assert_eq!(now[0]["outcome"], before[0]["outcome"], "pass {passes}");
+        if !r.more {
+            break;
+        }
+        assert_eq!(r.jobs_stored, 0, "pass {passes}");
+    }
+    assert!(passes > 2, "{passes}");
+    assert_eq!(t.q("SELECT job_id FROM jobs").len(), 1);
+    // Nothing changed, so nothing was announced.
+    assert_eq!(t.q("SELECT event_id FROM webhook_outbox").len(), events);
+}
+
+#[test]
 fn a_job_whose_data_failed_to_store_is_stored_on_the_next_pass() {
     let t = TestHost::new();
     publish(&t);
