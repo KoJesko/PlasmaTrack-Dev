@@ -20,9 +20,9 @@ async fn dispatch<H: Host>(h: &H, req: &Request) -> ApiResult<Response> {
         ("POST", ["api", "v1", "chunks"]) => ingest::upload(h, req).await,
         ("GET", ["dl", "trace", id]) => admin::download_trace(h, req, id).await,
         ("GET", ["dl", "evidence", id]) => manual::download(h, req, id).await,
-        ("GET", ["dl", "releases", rest @ ..]) => updates::file(h, rest).await,
-        ("GET", ["dl", "setup"]) => updates::setup(h, "windows").await,
-        ("GET", ["dl", "setup", p @ ("windows" | "linux")]) => updates::setup(h, p).await,
+        ("GET", ["dl", "releases", rest @ ..]) => updates::file(h, req, rest).await,
+        ("GET", ["dl", "uninstall"]) => updates::uninstall(h, "windows").await,
+        ("GET", ["dl", "uninstall", p @ ("windows" | "linux")]) => updates::uninstall(h, p).await,
         ("GET", ["api", "v1", "client", "update"]) => updates::client_update(h, req).await,
 
         // Player self-service.
@@ -33,6 +33,7 @@ async fn dispatch<H: Host>(h: &H, req: &Request) -> ApiResult<Response> {
         ("POST", ["api", "v1", "players", d, "evidence"]) => manual::upload(h, req, d).await,
         ("POST", ["api", "v1", "players", d, "manual-jobs"]) => manual::submit(h, req, d).await,
         ("GET", ["api", "v1", "players", d, "jobs", id, "evidence"]) => manual::player_evidence(h, req, d, id).await,
+        ("GET", ["api", "v1", "players", d, "client-download"]) => updates::client_download(h, req, d).await,
 
         // Public reads.
         ("GET", ["api", "v1", "public", "client"]) => updates::latest(h, req).await,

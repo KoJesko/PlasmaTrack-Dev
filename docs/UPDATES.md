@@ -17,8 +17,9 @@ every new release installs itself the next time ETS2 and ATS are both closed.
 ## How it works
 
 1. **Check.** The windowless client checks one minute after it starts, then every 6 hours (every
-   hour after an error), with `GET {server_url}/api/v1/client/update?platform=windows&version=0.2.0`.
-   It sends no token, so a player without one still gets updates.
+   hour after an error), with `GET {server_url}/api/v1/client/update?platform=windows&version=0.2.1`.
+   - It sends its player token: only linked players get updates, as only they get the setup.
+   - A client without a token does not check.
 2. **Verify.** The answer carries an update manifest and its Ed25519 signature:
    - The manifest lists every file of the `bin` folder with its SHA-256, size and compressed size.
    - The client installs only a manifest signed by a release key compiled into it
@@ -27,7 +28,7 @@ every new release installs itself the next time ETS2 and ATS are both closed.
    - The server checks the signature as well, when the release is published, but it cannot sign.
      A compromised server or bot token cannot ship code to players.
 3. **Download.** The files come gzip-compressed from `/dl/releases/windows/<version>/<path>.gz`,
-   about 8.5 MB in all. Each one is checked against the manifest's size and SHA-256.
+   about 9 MB in all, with the player token as well. Each one is checked against the manifest's size and SHA-256.
    - They are kept in `%LOCALAPPDATA%\PlasmaTrack\updates\<version>\`.
    - An interrupted download resumes: files already there and correct are kept.
 4. **Install,** once no game runs and the plugin is not connected. The client starts
@@ -53,7 +54,8 @@ verifies what the server offers without installing it.
 plugin differs from it, whenever no game runs. That finishes an update whose plugin copy was
 blocked by a game starting at the wrong moment. Games without the plugin are left alone.
 
-**0.1.x has no updater.** Players on 0.1.0 or 0.1.1 run the 0.2.0 setup once, by hand.
+**0.1.x has no updater, and 0.2.0's updates without a token, so it cannot fetch 0.2.1.**
+Players on those versions run the 0.2.1 setup once, by hand.
 
 ## The release key
 
@@ -101,12 +103,35 @@ offered.
 - Clients that already installed the bad release stay on it until a newer one is offered. The
   updater never goes back to an older version.
 
-## Downloads for the bot and players
+## Downloads (owner, 2026-10-15)
 
-- **`https://plasmatrack-server.jansherremway.workers.dev/dl/setup`** always points to the
-  newest offered setup program (a `302` to the file). It is the link to share.
-- **`GET /api/v1/public/client`:** what the bot shows. It returns the version, notes, and the
-  setup program's name, size and that link (PUBLIC_API §7).
-- **Release files** never change once uploaded, so they are served with long cache lifetimes.
-  The setup program is not code-signed, so Windows SmartScreen warns on first run. Updates
-  downloaded by the client do not trigger SmartScreen.
+**Only some Discord roles may download the tracker.** The bot enforces this: they are the same
+roles as for using the bot.
+- **The setup program** has no public link. For a member with an allowed role, the bot asks
+  `GET /api/v1/players/{discord_id}/client-download`. It returns a personal link that works for
+  one hour, and the bot shows it privately (PUBLIC_API §7).
+- **Update files** need a player token.
+
+| What | Who may download it |
+|---|---|
+| Setup program | Whoever holds a personal link, valid for one hour |
+| Update files (`.gz`) | A client with a player token |
+| Uninstaller (`PlasmaTrack-Uninstall.exe`) | Anyone, at `/dl/uninstall` |
+
+**The uninstaller** removes everything PlasmaTrack put on a PC:
+- the running client;
+- the plugin and `plasmatrack.ini` from every game;
+- the startup entry, both Start menu shortcuts and the Installed apps entry;
+- the `bin` folder and the updater's leftovers.
+
+It asks before deleting local data and the token, and it works with nothing installed. It is also
+in `bin`:
+- Windows' **Installed apps** starts it (Setup registers PlasmaTrack there, and every update
+  refreshes the version shown).
+- So does the **Uninstall PlasmaTrack** Start menu shortcut.
+
+`--quiet` removes PlasmaTrack without asking, keeping data unless `--delete-data` is given.
+Setup's Uninstall button and `plasmatrack-client uninstall` do the same.
+
+**SmartScreen.** Neither program is code-signed, so Windows SmartScreen warns on first run. Updates
+downloaded by the client do not trigger SmartScreen.

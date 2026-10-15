@@ -18,7 +18,9 @@ or the config is done by the client, where it is tested.
    `bin\win_x64\plugins\` of every ETS2/ATS install in every Steam library, then writes
    `plasmatrack.ini` there. Existing lines such as `capture = 1` are kept; `port`,
    `sample_rate_hz` and `replay_buffer_s` come from the config.
-5. Adds a **PlasmaTrack** Start menu shortcut to `plasmatrack-clientw.exe run`.
+5. Adds a **PlasmaTrack** Start menu shortcut to `plasmatrack-clientw.exe run`, an
+   **Uninstall PlasmaTrack** shortcut, and an entry in Windows' **Installed apps**
+   (`plasmatrack-client register`), whose Uninstall button runs `plasmatrack-uninstall.exe`.
 6. Optionally adds `"…\plasmatrack-clientw.exe" run` to
    `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` (value `PlasmaTrack`). This is on by
    default.

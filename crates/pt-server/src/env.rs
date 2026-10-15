@@ -129,10 +129,10 @@ pub trait Host {
     async fn backup_list(&self, prefix: &str) -> HostResult<Vec<String>>;
     async fn backup_delete(&self, key: &str) -> HostResult<()>;
 
-    /// The release bucket (client updates and setup programs, docs/UPDATES.md):
-    /// an object's size, and its bytes.
+    /// The release bucket (client updates, setup programs and uninstallers,
+    /// docs/UPDATES.md): an object's size. The Worker streams the files itself
+    /// (`updates::STREAM_HEADER`).
     async fn release_size(&self, key: &str) -> HostResult<Option<u64>>;
-    async fn release_get(&self, key: &str) -> HostResult<Option<Vec<u8>>>;
 
     /// Asks the player's scorer to process new chunks. It must not wait for the
     /// scoring to finish (the Worker hands it to the Durable Object).

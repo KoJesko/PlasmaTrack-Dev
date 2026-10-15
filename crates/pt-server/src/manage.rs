@@ -679,7 +679,7 @@ pub async fn revocation_create<H: Host>(h: &H, req: &Request) -> ApiResult<Respo
     let (y, m, d) = util::civil_from_days(effective.div_euclid(86_400_000));
     const MONTHS: [&str; 12] = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
     let message = format!(
-        "{label} stops counting jobs on {d} {} {y} at {} UTC. Run PlasmaTrack Setup to update.",
+        "{label} stops counting jobs on {d} {} {y} at {} UTC. Get the new PlasmaTrack Setup with /download in Discord.",
         MONTHS[m as usize - 1],
         &date[11..16]
     );

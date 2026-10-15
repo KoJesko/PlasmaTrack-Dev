@@ -170,17 +170,6 @@ impl Host for CfHost {
         Ok(bucket.head(key).await.map_err(host_err)?.map(|o| o.size()))
     }
 
-    async fn release_get(&self, key: &str) -> HostResult<Option<Vec<u8>>> {
-        let bucket = self.env.bucket("RELEASES").map_err(host_err)?;
-        match bucket.get(key).execute().await.map_err(host_err)? {
-            Some(obj) => match obj.body() {
-                Some(b) => Ok(Some(b.bytes().await.map_err(host_err)?)),
-                None => Ok(Some(Vec::new())),
-            },
-            None => Ok(None),
-        }
-    }
-
     async fn poke_scorer(&self, user_id: &str, game: &str) -> HostResult<()> {
         let ns = self.env.durable_object("SCORER").map_err(host_err)?;
         let name = format!("{user_id}:{game}");
@@ -259,36 +248,36 @@ fn to_response(r: http::Response) -> Result<Response> {
     Ok(Response::from_bytes(r.body)?.with_status(r.status).with_headers(h))
 }
 
-/// `GET /dl/releases/…`, streamed from the release bucket: a setup program is
-/// too large to hold in memory. Anything else goes to pt-server.
-async fn release_file(env: &Env, path: &str) -> Result<Option<Response>> {
-    let Some(rest) = path.strip_prefix("/dl/releases/") else { return Ok(None) };
-    let parts: Vec<&str> = rest.split('/').collect();
-    let Some(key) = updates::release_key(&parts) else { return Ok(None) };
-    let Some(obj) = env.bucket("RELEASES")?.get(&key).execute().await? else { return Ok(None) };
-    let Some(body) = obj.body() else { return Ok(None) };
+/// A release file pt-server allowed (`updates::STREAM_HEADER`), streamed from
+/// the release bucket: a setup program is too large to hold in memory. The
+/// body is handed to the runtime as is, so it costs no CPU time and keeps its
+/// length.
+async fn stream_release(env: &Env, r: http::Response) -> Result<Response> {
+    let key = r.headers.iter().find(|(k, _)| k == updates::STREAM_HEADER).map(|(_, v)| v.clone()).unwrap_or_default();
+    let obj = env.bucket("RELEASES")?.get(&key).execute().await?;
+    let Some(body) = obj.as_ref().and_then(|o| o.body()) else {
+        return to_response(http::ApiError::not_found("file").response());
+    };
     let h = Headers::new();
-    for (k, v) in updates::file_headers(&key) {
-        h.set(&k, &v)?;
+    for (k, v) in r.headers.iter().filter(|(k, _)| k != updates::STREAM_HEADER) {
+        h.set(k, v)?;
     }
-    // Handed to the runtime as is: no CPU time, and the length is known.
-    Ok(Some(Response::from_body(body.response_body()?)?.with_headers(h)))
+    Ok(Response::from_body(body.response_body()?)?.with_status(r.status).with_headers(h))
 }
 
 #[event(fetch)]
 async fn fetch(req: Request, env: Env, ctx: Context) -> Result<Response> {
-    if req.method() == Method::Get {
-        if let Some(r) = release_file(&env, req.path().as_str()).await? {
-            return Ok(r);
-        }
-    }
     let mut host = CfHost::new(env, Some(ctx));
     if host.settings.public_url.is_empty() {
         // Signed download links point back at whatever URL the bot called.
         let url = req.url()?;
         host.settings.public_url = url.origin().ascii_serialization();
     }
-    to_response(pt_server::handle(&host, to_request(req).await?).await)
+    let r = pt_server::handle(&host, to_request(req).await?).await;
+    if r.headers.iter().any(|(k, _)| k == updates::STREAM_HEADER) {
+        return stream_release(&host.env, r).await;
+    }
+    to_response(r)
 }
 
 /// Both queues: webhook deliveries (an `evt_…` id) and operation steps (JSON

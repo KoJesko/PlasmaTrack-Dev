@@ -504,30 +504,55 @@ Only for the player who submitted the job (`404` otherwise):
 
 ## 7. Downloading PlasmaTrack (owner, 2026-10-15)
 
+**Only some Discord roles may download the tracker** (the same roles as for the bot). The bot
+checks the role; the server hands out no public setup link.
+
+### `GET /api/v1/players/{discord_id}/client-download?platform=windows`: a personal setup link
+
+Bot token.
+
+```json
+{"platform": "windows", "release_id": "rel_0_2_1_windows", "version": "0.2.1",
+ "notes": "…", "file_name": "PlasmaTrack-Setup-0.2.1.exe", "bytes": 103203097,
+ "url": "https://…/dl/releases/windows/0.2.1/PlasmaTrack-Setup-0.2.1.exe?exp=…&sig=…",
+ "expires_at": "2026-10-15T17:40:00.000Z"}
+```
+
+- **Which setup:** the newest offered release that has one.
+- **The link** works for **one hour** and needs no token. Show it privately. After it expires
+  the server answers `403` ("Ask the Discord bot for a new one").
+- **Accounts:** it does not create the player.
+- **`403`** for a disabled player.
+- **`404`** before any setup is published.
+
 ### `GET /api/v1/public/client?platform=windows`: the newest release
 
 Read token or bot token.
 
 ```json
-{"platform": "windows", "release_id": "rel_0_2_0_windows", "version": "0.2.0",
- "published_at": "2026-10-15T10:24:00.000Z",
- "notes": "PlasmaTrack now updates itself: new versions install automatically once ETS2 and ATS are closed.",
- "installer": {"file_name": "PlasmaTrack-Setup-0.2.0.exe", "bytes": 103079567,
-               "url": "https://plasmatrack-server.jansherremway.workers.dev/dl/setup/windows"}}
+{"platform": "windows", "release_id": "rel_0_2_1_windows", "version": "0.2.1",
+ "published_at": "2026-10-15T17:00:00.000Z", "notes": "…",
+ "installer": {"file_name": "PlasmaTrack-Setup-0.2.1.exe", "bytes": 103203097},
+ "uninstaller": {"file_name": "PlasmaTrack-Uninstall.exe", "bytes": 1689088,
+                 "url": "https://plasmatrack-server.jansherremway.workers.dev/dl/uninstall/windows"}}
 ```
 
-- **Which release:** the newest one offered to clients.
+- **`installer`** has no link (see above). It is `null` for a release without a setup program.
+- **`uninstaller.url`** is public and the same across releases. `GET /dl/uninstall` redirects
+  (`302`) to the newest uninstaller, with no token, for anyone.
 - **`404`** before any release is offered.
-- **`installer`** is `null` for a release published without a setup program.
 
-**`installer.url` stays the same across releases.** `GET /dl/setup/windows`, or just
-`/dl/setup`, needs no token. It redirects (`302`) to the newest setup program, so the bot
-can post it once and it never goes stale.
+**What the uninstaller does** (docs/UPDATES.md):
+- stops PlasmaTrack;
+- removes the plugin from both games;
+- removes PlasmaTrack from startup, the Start menu and Installed apps;
+- deletes the program files.
 
-**Installed clients update themselves** (docs/UPDATES.md). A player only needs the setup:
+It asks before deleting local data and the token. Installed copies also appear in Windows'
+**Installed apps**, and as **Uninstall PlasmaTrack** in the Start menu, so most players need not
+download it.
+
+**Installed clients update themselves** (docs/UPDATES.md), with their player token. A player needs
+the setup only:
 - the first time;
-- to move from 0.1.x, which has no updater, to 0.2.0.
-
-**What clients ask:** `GET /api/v1/client/update?platform=windows&version=0.2.0`, without a
-token. It returns `{"update": null}`, or the newer release's signed manifest. The bot does not
-need it.
+- to move from 0.1.x or 0.2.0 to 0.2.1.

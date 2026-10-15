@@ -1,20 +1,16 @@
 //! Client updates (docs/UPDATES.md): a release published with a signed update
-//! manifest is offered to older clients, its files and setup program are served
-//! from the release bucket, and the bot gets one download link.
+//! manifest is offered to older clients with a player token, the setup program
+//! only through a personal link the bot asks for, and the uninstaller to anyone.
 
 mod common;
 
+use common::seed::{link, PLAYER};
 use common::{SignedUpdate, TestHost};
+use pt_server::http::{Request, Response};
+use pt_server::updates::STREAM_HEADER;
 use ed25519_dalek::Signer;
 use pt_core::update::SIGNING_CONTEXT;
 use serde_json::{json, Value};
-
-fn gzip(b: &[u8]) -> Vec<u8> {
-    use std::io::Write;
-    let mut e = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
-    e.write_all(b).unwrap();
-    e.finish().unwrap()
-}
 
 fn build(t: &TestHost, version: &str) -> SignedUpdate {
     common::signed_update(t, version)
@@ -33,10 +29,32 @@ fn publish(t: &TestHost, version: &str, b: &SignedUpdate, extra: Value) -> pt_se
     t.call(t.admin("POST", "/api/v1/admin/releases").with_json(&body))
 }
 
+/// A client with a player token.
+fn client(t: &TestHost, path: &str) -> Response {
+    let token = match t.q("SELECT 1 AS x FROM tokens").len() {
+        0 => link(t),
+        _ => TOKEN.with(|k| k.borrow().clone()),
+    };
+    TOKEN.with(|k| *k.borrow_mut() = token.clone());
+    t.call(Request::new("GET", path).with_header("authorization", &format!("Bearer {token}")))
+}
+
+thread_local! {
+    static TOKEN: std::cell::RefCell<String> = const { std::cell::RefCell::new(String::new()) };
+}
+
 fn check(t: &TestHost, version: &str) -> Value {
-    let r = t.call(pt_server::http::Request::new("GET", &format!("/api/v1/client/update?platform=windows&version={version}")));
+    let r = client(t, &format!("/api/v1/client/update?platform=windows&version={version}"));
     assert_eq!(r.status, 200, "{}", r.body_json());
     r.body_json()["update"].clone()
+}
+
+fn header<'a>(r: &'a Response, name: &str) -> Option<&'a str> {
+    r.headers.iter().find(|(k, _)| k == name).map(|(_, v)| v.as_str())
+}
+
+fn anyone(t: &TestHost, path: &str) -> Response {
+    t.call(Request::new("GET", path))
 }
 
 #[test]
@@ -56,29 +74,74 @@ fn a_signed_release_is_offered_to_older_clients() {
     assert_eq!(m.version, "0.2.0");
     assert_eq!(check(&t, "0.2.0"), Value::Null, "already current");
     assert_eq!(check(&t, "0.10.0"), Value::Null, "newer than anything offered");
-    let bad = t.call(pt_server::http::Request::new("GET", "/api/v1/client/update?version=latest"));
-    assert_eq!(bad.status, 400);
+    assert_eq!(client(&t, "/api/v1/client/update?version=latest").status, 400);
+    assert_eq!(anyone(&t, "/api/v1/client/update?platform=windows&version=0.1.1").status, 401, "a client needs its token");
 
-    // The files, compressed, straight from the bucket; cacheable.
-    let f = t.call(pt_server::http::Request::new("GET", &format!("/dl/releases/{}", m.key(&m.files[2]))));
+    // Update files: for clients with a token, streamed by the Worker.
+    let dll = format!("/dl/releases/{}", m.key(&m.files[2]));
+    let f = client(&t, &dll);
     assert_eq!(f.status, 200);
-    assert_eq!(f.body, gzip(b"dll 0.2.0"));
-    assert!(f.headers.iter().any(|(k, v)| k == "cache-control" && v.contains("immutable")));
+    assert_eq!(header(&f, STREAM_HEADER), Some("windows/0.2.0/plasmatrack.dll.gz"));
+    assert!(f.body.is_empty());
+    assert_eq!(anyone(&t, &dll).status, 401);
     for p in ["/dl/releases/windows/0.2.0/../secret", "/dl/releases/windows/latest/x.gz", "/dl/releases/windows/0.2.0/missing.gz"] {
-        assert_eq!(t.call(pt_server::http::Request::new("GET", p)).status, 404, "{p}");
+        assert_eq!(client(&t, p).status, 404, "{p}");
     }
+    assert_eq!(anyone(&t, "/dl/setup").status, 404, "no public setup link");
+}
 
-    // One stable setup link, and what the bot shows.
-    let s = t.call(pt_server::http::Request::new("GET", "/dl/setup"));
-    assert_eq!(s.status, 302);
-    let to = s.headers.iter().find(|(k, _)| k == "location").unwrap().1.clone();
-    assert_eq!(to, "https://pt.example/dl/releases/windows/0.2.0/PlasmaTrack-Setup-0.2.0.exe");
-    let exe = t.call(pt_server::http::Request::new("GET", to.trim_start_matches("https://pt.example")));
-    assert!(exe.headers.iter().any(|(k, v)| k == "content-disposition" && v.contains("PlasmaTrack-Setup-0.2.0.exe")));
-    assert_eq!(t.call(pt_server::http::Request::new("GET", "/api/v1/public/client")).status, 401);
+#[test]
+fn the_setup_needs_a_personal_link_and_the_uninstaller_is_public() {
+    let t = TestHost::new();
+    let b = build(&t, "0.2.0");
+    assert_eq!(publish(&t, "0.2.0", &b, json!({})).status, 201);
+    let setup = "/dl/releases/windows/0.2.0/PlasmaTrack-Setup-0.2.0.exe";
+    assert_eq!(anyone(&t, setup).status, 403);
+    assert_eq!(client(&t, setup).status, 403, "a token is not a link");
+
+    // The bot asks for a link for a member with the right role.
+    assert_eq!(t.call(Request::new("GET", "/api/v1/players/555/client-download")).status, 401);
+    let r = t.call(t.bot("GET", "/api/v1/players/555/client-download?platform=windows"));
+    assert_eq!(r.status, 200, "{}", r.body_json());
+    let d = r.body_json();
+    assert_eq!((d["version"].as_str(), d["file_name"].as_str(), d["bytes"].as_u64()), (Some("0.2.0"), Some("PlasmaTrack-Setup-0.2.0.exe"), Some(5)));
+    assert!(t.q("SELECT 1 AS x FROM users WHERE discord_user_id = '555'").is_empty(), "nobody is created");
+    let url = d["url"].as_str().unwrap().trim_start_matches("https://pt.example").to_string();
+    let f = anyone(&t, &url);
+    assert_eq!(f.status, 200, "{}", f.body_json());
+    assert_eq!(header(&f, STREAM_HEADER), Some("windows/0.2.0/PlasmaTrack-Setup-0.2.0.exe"));
+    assert!(header(&f, "content-disposition").unwrap().contains("PlasmaTrack-Setup-0.2.0.exe"));
+    assert_eq!(header(&f, "cache-control"), Some("private, no-store"));
+    // Another file, or a changed expiry, does not pass; an hour later it expires.
+    assert_eq!(anyone(&t, &url.replace("PlasmaTrack-Setup-0.2.0.exe", "plasmatrack.dll")).status, 403);
+    let exp: i64 = url.split("exp=").nth(1).unwrap().split('&').next().unwrap().parse().unwrap();
+    assert_eq!(anyone(&t, &url.replace(&format!("exp={exp}"), &format!("exp={}", exp + 3600))).status, 403);
+    t.advance(3_601_000);
+    let late = anyone(&t, &url);
+    assert_eq!(late.status, 403);
+    assert!(late.body_json()["error"]["message"].as_str().unwrap().contains("expired"));
+
+    // A disabled player gets none (linked above, by client()).
+    t.advance(1000);
+    let r = t.call(t.admin("PATCH", &format!("/api/v1/admin/players/{PLAYER}")).with_json(&json!({"disabled": true, "reason": "Cheating"})));
+    assert_eq!(r.status, 200, "{}", r.body_json());
+    assert_eq!(t.call(t.bot("GET", &format!("/api/v1/players/{PLAYER}/client-download"))).status, 403);
+
+    // The uninstaller: one link for anyone, cacheable.
+    let u = anyone(&t, "/dl/uninstall");
+    assert_eq!(u.status, 302);
+    let to = header(&u, "location").unwrap().trim_start_matches("https://pt.example").to_string();
+    assert_eq!(to, "/dl/releases/windows/0.2.0/PlasmaTrack-Uninstall.exe");
+    let f = anyone(&t, &to);
+    assert_eq!((f.status, header(&f, STREAM_HEADER)), (200, Some("windows/0.2.0/PlasmaTrack-Uninstall.exe")));
+    assert!(header(&f, "cache-control").unwrap().contains("public"));
+
+    // What the bot shows: no setup link, the uninstaller's link.
+    assert_eq!(anyone(&t, "/api/v1/public/client").status, 401);
     let l = t.call(t.bot("GET", "/api/v1/public/client?platform=windows")).body_json();
-    assert_eq!((l["version"].as_str(), l["installer"]["url"].as_str()), (Some("0.2.0"), Some("https://pt.example/dl/setup/windows")));
-    assert_eq!(l["installer"]["bytes"], 5);
+    assert_eq!(l["version"], "0.2.0");
+    assert_eq!(l["installer"], json!({"file_name": "PlasmaTrack-Setup-0.2.0.exe", "bytes": 5}));
+    assert_eq!(l["uninstaller"]["url"], "https://pt.example/dl/uninstall/windows");
 }
 
 #[test]

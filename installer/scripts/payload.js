@@ -1,5 +1,6 @@
 // Copies the files the installer puts on the player's PC into payload/:
-// the client (console and windowless), the plugin DLL and the licence texts.
+// the client (console and windowless), the uninstaller, the plugin DLL and the
+// licence texts.
 // Build them first: `cargo build --release -p pt-client` and
 // `scripts/build-plugin.ps1 -Config Release`.
 'use strict';
@@ -14,6 +15,7 @@ const out = path.resolve(__dirname, '..', 'payload');
 const files = [
   ['target/release/plasmatrack-client.exe', 'plasmatrack-client.exe'],
   ['target/release/plasmatrack-clientw.exe', 'plasmatrack-clientw.exe'],
+  ['target/release/plasmatrack-uninstall.exe', 'plasmatrack-uninstall.exe'],
   ['plugin/build-win/plasmatrack.dll', 'plasmatrack.dll'],
   ['LICENSE.md', 'LICENSE.md'],
   ['THIRD_PARTY_NOTICES.md', 'THIRD_PARTY_NOTICES.md'],

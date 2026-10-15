@@ -1,12 +1,16 @@
 {
   "installer": {
     "bytes": 5,
-    "file_name": "PlasmaTrack-Setup-0.3.0.exe",
-    "url": "https://pt.example/dl/setup/windows"
+    "file_name": "PlasmaTrack-Setup-0.3.0.exe"
   },
   "notes": "Uploads resume faster after a network outage.",
   "platform": "windows",
   "published_at": "2026-10-14T09:00:51.000Z",
   "release_id": "rel_0_3_0_windows",
+  "uninstaller": {
+    "bytes": 9,
+    "file_name": "PlasmaTrack-Uninstall.exe",
+    "url": "https://pt.example/dl/uninstall/windows"
+  },
   "version": "0.3.0"
 }

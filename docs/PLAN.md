@@ -757,7 +757,10 @@ I cannot run the games in this session, so the following steps need a real game 
       them.
     - Files are served from the R2 bucket `plasmatrack-releases`.
     - Updates install once no game runs, and a failed update rolls back.
-    - The bot links to `/dl/setup`, which always points to the newest setup program.
+    - Only some Discord roles may download the tracker. The bot gets personal one-hour setup
+      links, and updates need a player token.
+    - Anyone may download the uninstaller (`/dl/uninstall`). Installed copies are in Windows'
+      Installed apps.
 
 ## 12. Open questions
 

@@ -1,0 +1,10 @@
+{
+  "bytes": 5,
+  "expires_at": "2026-10-14T10:00:54.000Z",
+  "file_name": "PlasmaTrack-Setup-0.3.0.exe",
+  "notes": "Uploads resume faster after a network outage.",
+  "platform": "windows",
+  "release_id": "rel_0_3_0_windows",
+  "url": "https://pt.example/dl/releases/windows/0.3.0/PlasmaTrack-Setup-0.3.0.exe?exp=1791972054&sig=aaf61d272c5a07a98657eabb6f906c30df8422a9724322008d10a62eb40e2bb8",
+  "version": "0.3.0"
+}

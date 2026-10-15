@@ -73,11 +73,17 @@ plasmatrack-client uninstall-plugin  # remove the plugin and plasmatrack.ini aga
 plasmatrack-client set-local         # stdin: {"server_url": "...", "token": "..."} (both optional)
 plasmatrack-client show-local        # [local] as JSON; the token only as token_set
 plasmatrack-client check-update      # download and verify a newer release, without installing it
+plasmatrack-client uninstall [--delete-data] [--json]   # remove PlasmaTrack (as PlasmaTrack-Uninstall.exe does)
+plasmatrack-client register          # add PlasmaTrack to Windows' Installed apps (Setup and updates do this)
 ```
 
 **Updates** (docs/UPDATES.md). The windowless client installed by Setup checks the server every
 6 hours and downloads newer releases. It installs them once ETS2 and ATS are closed, with
-`apply-update` (not meant to be run by hand). The status page shows any pending update.
+`apply-update` (not meant to be run by hand). The status page shows any pending update. Updates need the player token.
+
+**`plasmatrack-uninstall`** (published as `PlasmaTrack-Uninstall.exe`) removes PlasmaTrack from
+the PC. It asks first, and asks again before deleting local data and the token. `--quiet` asks
+nothing. Run from `bin`, it continues from a copy in the temp folder, so it can delete `bin`.
 
 - `set-local` edits only `[local]` and keeps comments. It creates the config from the sample
   if it is missing. The token is read from stdin so it never appears in a process list.

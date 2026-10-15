@@ -6,7 +6,7 @@ use std::io::Write;
 use std::sync::{Arc, Mutex};
 
 use axum::extract::{Path as UrlPath, State};
-use axum::http::StatusCode;
+use axum::http::{HeaderMap, StatusCode};
 use axum::routing::get;
 use axum::{Json, Router};
 use ed25519_dalek::{Signer, SigningKey};
@@ -23,11 +23,23 @@ struct Fake {
 
 type Shared = Arc<Mutex<Fake>>;
 
-async fn offer(State(s): State<Shared>) -> Json<serde_json::Value> {
-    Json(serde_json::json!({"update": s.lock().unwrap().offer.clone()}))
+const TOKEN: &str = "pt_live_test-token";
+
+fn authorized(h: &HeaderMap) -> bool {
+    h.get("authorization").is_some_and(|v| v == &format!("Bearer {TOKEN}"))
 }
 
-async fn file(State(s): State<Shared>, UrlPath(key): UrlPath<String>) -> Result<Vec<u8>, StatusCode> {
+async fn offer(State(s): State<Shared>, h: HeaderMap) -> Result<Json<serde_json::Value>, StatusCode> {
+    if !authorized(&h) {
+        return Err(StatusCode::UNAUTHORIZED);
+    }
+    Ok(Json(serde_json::json!({"update": s.lock().unwrap().offer.clone()})))
+}
+
+async fn file(State(s): State<Shared>, UrlPath(key): UrlPath<String>, h: HeaderMap) -> Result<Vec<u8>, StatusCode> {
+    if !authorized(&h) {
+        return Err(StatusCode::UNAUTHORIZED);
+    }
     let mut s = s.lock().unwrap();
     s.downloads += 1;
     s.files.get(&key).cloned().ok_or(StatusCode::NOT_FOUND)
@@ -87,11 +99,12 @@ async fn downloads_verifies_and_resumes() {
     let dir = tempfile::tempdir().unwrap();
     let updates = dir.path().join("updates");
 
-    assert!(updater::fetch_offer(&http, &url, "0.1.0", &keys()).await.unwrap().is_none(), "nothing offered");
+    assert!(updater::fetch_offer(&http, &url, TOKEN, "0.1.0", &keys()).await.unwrap().is_none(), "nothing offered");
     release(&fake, "0.2.0", &key());
-    let offer = updater::fetch_offer(&http, &url, "0.1.0", &keys()).await.unwrap().unwrap();
-    assert!(updater::fetch_offer(&http, &url, "0.2.0", &keys()).await.is_err(), "not newer: refused");
-    let staged = updater::stage(&http, &url, &offer, &updates).await.unwrap();
+    let offer = updater::fetch_offer(&http, &url, TOKEN, "0.1.0", &keys()).await.unwrap().unwrap();
+    assert!(updater::fetch_offer(&http, &url, TOKEN, "0.2.0", &keys()).await.is_err(), "not newer: refused");
+    assert!(updater::fetch_offer(&http, &url, "wrong", "0.1.0", &keys()).await.unwrap_err().contains("401"));
+    let staged = updater::stage(&http, &url, TOKEN, &offer, &updates).await.unwrap();
     assert_eq!(std::fs::read_to_string(staged.join("plasmatrack-clientw.exe")).unwrap(), "new client 0.2.0");
     assert_eq!(std::fs::read_to_string(staged.join("licenses").join("LICENSE.txt")).unwrap(), "licence");
     let (found, m) = updater::staged(&updates, "0.1.0", &keys()).unwrap();
@@ -100,11 +113,11 @@ async fn downloads_verifies_and_resumes() {
 
     // Staging again downloads nothing; a damaged file is fetched again.
     let before = fake.lock().unwrap().downloads;
-    updater::stage(&http, &url, &offer, &updates).await.unwrap();
+    updater::stage(&http, &url, TOKEN, &offer, &updates).await.unwrap();
     assert_eq!(fake.lock().unwrap().downloads, before);
     std::fs::write(staged.join("plasmatrack-clientw.exe"), "tampered").unwrap();
     assert!(updater::staged(&updates, "0.1.0", &keys()).is_none(), "a changed file is not installed");
-    updater::stage(&http, &url, &offer, &updates).await.unwrap();
+    updater::stage(&http, &url, TOKEN, &offer, &updates).await.unwrap();
     assert_eq!(fake.lock().unwrap().downloads, before + 1);
     assert!(updater::staged(&updates, "0.1.0", &keys()).is_some());
 }
@@ -117,12 +130,12 @@ async fn refuses_unsigned_and_tampered_releases() {
     let dir = tempfile::tempdir().unwrap();
 
     release(&fake, "0.2.0", &SigningKey::from_bytes(&[6; 32]));
-    let e = updater::fetch_offer(&http, &url, "0.1.0", &keys()).await.unwrap_err();
+    let e = updater::fetch_offer(&http, &url, TOKEN, "0.1.0", &keys()).await.unwrap_err();
     assert!(e.contains("release key"), "{e}");
 
     // Signed, but the server hands out a different file.
     release(&fake, "0.2.0", &key());
-    let offer = updater::fetch_offer(&http, &url, "0.1.0", &keys()).await.unwrap().unwrap();
+    let offer = updater::fetch_offer(&http, &url, TOKEN, "0.1.0", &keys()).await.unwrap().unwrap();
     let k = offer.manifest.key(&offer.manifest.files[0]);
     let evil = gzip(b"evil client 0.2.0");
     let same_size = {
@@ -131,7 +144,7 @@ async fn refuses_unsigned_and_tampered_releases() {
         v
     };
     fake.lock().unwrap().files.insert(k, same_size);
-    let e = updater::stage(&http, &url, &offer, &dir.path().join("updates")).await.unwrap_err();
+    let e = updater::stage(&http, &url, TOKEN, &offer, &dir.path().join("updates")).await.unwrap_err();
     assert!(e.contains("does not match") || e.contains("expected"), "{e}");
     assert!(updater::staged(&dir.path().join("updates"), "0.1.0", &keys()).is_none());
 }
@@ -148,8 +161,8 @@ async fn swaps_bin_and_restores_it() {
     std::fs::write(bin.join("old-only.txt"), "x").unwrap();
 
     release(&fake, "0.2.0", &key());
-    let offer = updater::fetch_offer(&http, &url, "0.1.0", &keys()).await.unwrap().unwrap();
-    let staged = updater::stage(&http, &url, &offer, &dir.path().join("updates")).await.unwrap();
+    let offer = updater::fetch_offer(&http, &url, TOKEN, "0.1.0", &keys()).await.unwrap().unwrap();
+    let staged = updater::stage(&http, &url, TOKEN, &offer, &dir.path().join("updates")).await.unwrap();
     let m = updater::verify_staged(&staged, &keys()).unwrap();
     let old = updater::swap_bin(&staged, &m, &bin).unwrap();
     assert_eq!(std::fs::read_to_string(bin.join("plasmatrack-clientw.exe")).unwrap(), "new client 0.2.0");

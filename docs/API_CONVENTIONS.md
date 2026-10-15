@@ -236,3 +236,13 @@ These answer the bot's open questions "(Q)". **The project owner confirmed all o
   - **New:** `POST /admin/releases/{id}/offer`.
   - **Releases** take and return `update`, `installer`, `notes` and `offered`
     (ADMIN_API §11).
+- 2026-10-15 (owner): only some Discord roles may download the tracker, and anyone may download
+  an uninstaller (PUBLIC_API §7).
+  - **Removed:** the public `/dl/setup` link.
+  - **New:** `GET /players/{id}/client-download`, a personal one-hour setup link; the bot checks
+    roles first.
+  - **New:** `/dl/uninstall`, public.
+  - **`GET /public/client`:** `installer` no longer has a `url`; there is a new
+    `uninstaller` block.
+  - **Clients** send their player token for updates (client 0.2.1).
+  - **The revocation message** now points to `/download` in Discord.

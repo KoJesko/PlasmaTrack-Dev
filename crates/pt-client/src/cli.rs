@@ -18,6 +18,9 @@
 //!   show-local       [--config PATH]   [local] as JSON, with the token only as set/unset
 //!   check-update     [--config PATH] [--data-dir PATH]   ask the server, download and
 //!                                      verify a newer release without installing it
+//!   uninstall        [--delete-data] [--json] [--config PATH] [--data-dir PATH]
+//!                                      remove PlasmaTrack (what PlasmaTrack-Uninstall.exe does)
+//!   register         [--bin PATH]      add PlasmaTrack to Windows' "Installed apps"
 //!   apply-update     --bin PATH [--from VERSION] [--config PATH] [--data-dir PATH]
 //!                                      run by the updater from the staged release
 //!                                      (docs/UPDATES.md); installs it into PATH
@@ -50,6 +53,7 @@ struct Args {
     plugin: Option<PathBuf>,
     bin: Option<PathBuf>,
     from: Option<String>,
+    delete_data: bool,
 }
 
 fn parse_args() -> Result<Args, String> {
@@ -63,6 +67,7 @@ fn parse_args() -> Result<Args, String> {
         plugin: None,
         bin: None,
         from: None,
+        delete_data: false,
     };
     while let Some(a) = it.next() {
         match a.as_str() {
@@ -72,6 +77,7 @@ fn parse_args() -> Result<Args, String> {
             "--bin" => args.bin = Some(it.next().ok_or("--bin needs a path")?.into()),
             "--from" => args.from = Some(it.next().ok_or("--from needs a version")?),
             "--json" => args.json = true,
+            "--delete-data" => args.delete_data = true,
             other => return Err(format!("unknown argument {other:?}")),
         }
     }
@@ -223,10 +229,11 @@ async fn run(args: Args, hooks: Hooks) -> Result<(), RunError> {
     if !ucfg.is_configured() {
         log!("uploads paused until [local] server_url and token are set; everything is kept locally");
     }
+    let can_update = ucfg.is_configured();
     tokio::spawn(uploader::run(ucfg, db.clone(), status.clone(), manifest.clone()));
     if let (true, Some(bin)) = (hooks.auto_update, updater::installed_bin(&args.data_dir)) {
-        if cfg.local.server_url.contains(".invalid") {
-            log!("updates paused until [local] server_url is set");
+        if !can_update {
+            log!("updates paused until [local] server_url and token are set");
         } else {
             let u = UpdateLoop { cfg: cfg.clone(), args: args.clone_paths(), bin, exe: exe.clone() };
             tokio::spawn(update_loop(u, status.clone(), manifest.clone(), hooks.shutdown.clone(), hooks.notify.clone()));
@@ -258,7 +265,16 @@ struct UpdateLoop {
 
 impl Args {
     fn clone_paths(&self) -> Args {
-        Args { command: String::new(), config: self.config.clone(), data_dir: self.data_dir.clone(), json: false, plugin: None, bin: None, from: None }
+Args {
+            command: String::new(),
+            config: self.config.clone(),
+            data_dir: self.data_dir.clone(),
+            json: false,
+            plugin: None,
+            bin: None,
+            from: None,
+            delete_data: false,
+        }
     }
 }
 
@@ -346,14 +362,14 @@ async fn update_loop(u: UpdateLoop, status: SharedStatus, manifest: Arc<Mutex<Ve
             }
         } else if tokio::time::Instant::now() >= next_check {
             next_check = tokio::time::Instant::now() + CHECK_EVERY;
-            match updater::fetch_offer(&http, &u.cfg.local.server_url, crate::CLIENT_VERSION, keys).await {
+            match updater::fetch_offer(&http, &u.cfg.local.server_url, &u.cfg.local.token, crate::CLIENT_VERSION, keys).await {
                 Ok(None) => {}
                 Ok(Some(offer)) => {
                     log!("downloading PlasmaTrack {}", offer.manifest.version);
                     if let Ok(mut s) = status.lock() {
                         s.update = Some(format!("Downloading PlasmaTrack {}", offer.manifest.version));
                     }
-                    if let Err(e) = updater::stage(&http, &u.cfg.local.server_url, &offer, &updates_dir).await {
+                    if let Err(e) = updater::stage(&http, &u.cfg.local.server_url, &u.cfg.local.token, &offer, &updates_dir).await {
                         log!("update download failed: {e}");
                         next_check = tokio::time::Instant::now() + CHECK_AFTER_ERROR;
                     }
@@ -420,6 +436,9 @@ fn apply_update(args: &Args) -> Result<(), String> {
     });
     let ini = rebased.as_ref().map(managed_ini).unwrap_or_default();
     updater::sync_plugins(&bin, &ini);
+    if let Err(e) = crate::uninstall::register(&bin, &m.version) {
+        log!("apply-update: Installed apps entry: {e}");
+    }
     let done = updater::Outcome { version: m.version.clone(), from: from.clone(), at_ms: crate::now_ms(), error: None };
     updater::write_outcome(&args.data_dir.join(updater::UPDATED_FILE), &done);
     let started = start(&bin).is_ok()
@@ -460,6 +479,24 @@ fn apply_update(args: &Args) -> Result<(), String> {
     fail(why)
 }
 
+/// `uninstall`: removes PlasmaTrack, printing each step (as JSON with
+/// `--json`, for Setup). Fails when any step failed.
+fn uninstall(args: &Args) -> Result<(), String> {
+    let p = crate::uninstall::Paths { config: args.config.clone(), data_dir: args.data_dir.clone() };
+    let steps = crate::uninstall::uninstall(&p, args.delete_data);
+    if args.json {
+        print_json(&serde_json::json!({ "steps": steps }));
+    } else {
+        for s in &steps {
+            println!("{} {}{}", if s.ok { "ok  " } else { "FAIL" }, s.text, s.detail.as_ref().map(|d| format!(" ({d})")).unwrap_or_default());
+        }
+    }
+    match steps.iter().filter(|s| !s.ok).count() {
+        0 => Ok(()),
+        n => Err(format!("{n} step(s) failed")),
+    }
+}
+
 /// `check-update`: what the updater would download, verified, without
 /// installing it. Prints the result as JSON.
 fn check_update(args: &Args) -> Result<(), String> {
@@ -467,12 +504,12 @@ fn check_update(args: &Args) -> Result<(), String> {
     let rt = tokio::runtime::Runtime::new().map_err(|e| e.to_string())?;
     let http = http_for_updates()?;
     let keys = pt_core::update::UPDATE_KEYS;
-    let offer = rt.block_on(updater::fetch_offer(&http, &cfg.local.server_url, crate::CLIENT_VERSION, keys))?;
+    let offer = rt.block_on(updater::fetch_offer(&http, &cfg.local.server_url, &cfg.local.token, crate::CLIENT_VERSION, keys))?;
     let Some(offer) = offer else {
         print_json(&serde_json::json!({"current": crate::CLIENT_VERSION, "update": null}));
         return Ok(());
     };
-    let dir = rt.block_on(updater::stage(&http, &cfg.local.server_url, &offer, &args.data_dir.join(updater::UPDATES_DIR)))?;
+    let dir = rt.block_on(updater::stage(&http, &cfg.local.server_url, &cfg.local.token, &offer, &args.data_dir.join(updater::UPDATES_DIR)))?;
     let m = updater::verify_staged(&dir, keys)?;
     print_json(&serde_json::json!({"current": crate::CLIENT_VERSION, "update": m.version, "staged": dir, "files": m.files.len()}));
     Ok(())
@@ -757,6 +794,11 @@ pub fn main(windowless: bool) -> ExitCode {
         "set-local" => set_local(&args),
         "show-local" => show_local(&args),
         "check-update" => check_update(&args),
+        "uninstall" => uninstall(&args),
+        "register" => {
+            let bin = args.bin.clone().or_else(|| std::env::current_exe().ok().and_then(|e| e.parent().map(PathBuf::from)));
+            bin.ok_or_else(|| "register needs --bin PATH".to_string()).and_then(|b| crate::uninstall::register(&b, crate::CLIENT_VERSION))
+        }
         "apply-update" => apply_update(&args),
         other => Err(format!("unknown command {other:?}")),
     };

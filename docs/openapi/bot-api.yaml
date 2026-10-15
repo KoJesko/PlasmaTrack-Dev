@@ -3082,57 +3082,6 @@
       "summary": "TruckersMP account flags"
       "tags":
       - "Review"
-  "/api/v1/client/update":
-    "get":
-      "operationId": "client_update"
-      "parameters":
-      - "in": "query"
-        "name": "platform"
-        "required": false
-        "schema":
-          "type": "string"
-      - "in": "query"
-        "name": "version"
-        "required": false
-        "schema":
-          "type": "string"
-      "responses":
-        "200":
-          "content":
-            "application/json":
-              "examples":
-                "client_update":
-                  "externalValue": "../examples/client_update.json"
-              "schema":
-                "properties":
-                  "update":
-                    "properties":
-                      "manifest":
-                        "type": "string"
-                      "notes":
-                        "type": "string"
-                      "published_at":
-                        "format": "date-time"
-                        "type": "string"
-                      "release_id":
-                        "type": "string"
-                      "signature":
-                        "type": "string"
-                      "version":
-                        "type": "string"
-                    "type": "object"
-                "type": "object"
-          "description": "See docs/examples/client_update.json"
-        "4XX":
-          "$ref": "#/components/responses/Error"
-        "5XX":
-          "$ref": "#/components/responses/Error"
-      "security":
-      - "readToken": []
-      - "botToken": []
-      "summary": "What the client asks for updates (no token)"
-      "tags":
-      - "Public"
   "/api/v1/players/{discord_id}":
     "patch":
       "operationId": "player_rename"
@@ -3383,6 +3332,57 @@
       "security":
       - "botToken": []
       "summary": "Change the display name"
+      "tags":
+      - "Players"
+  "/api/v1/players/{discord_id}/client-download":
+    "get":
+      "operationId": "player_client_download"
+      "parameters":
+      - "in": "path"
+        "name": "discord_id"
+        "required": true
+        "schema":
+          "type": "string"
+      - "in": "query"
+        "name": "platform"
+        "required": false
+        "schema":
+          "type": "string"
+      "responses":
+        "200":
+          "content":
+            "application/json":
+              "examples":
+                "player_client_download":
+                  "externalValue": "../examples/player_client_download.json"
+              "schema":
+                "properties":
+                  "bytes":
+                    "type": "integer"
+                  "expires_at":
+                    "format": "date-time"
+                    "type": "string"
+                  "file_name":
+                    "type": "string"
+                  "notes":
+                    "type": "string"
+                  "platform":
+                    "type": "string"
+                  "release_id":
+                    "type": "string"
+                  "url":
+                    "type": "string"
+                  "version":
+                    "type": "string"
+                "type": "object"
+          "description": "See docs/examples/player_client_download.json"
+        "4XX":
+          "$ref": "#/components/responses/Error"
+        "5XX":
+          "$ref": "#/components/responses/Error"
+      "security":
+      - "botToken": []
+      "summary": "A personal one-hour link to the newest setup program (the bot checks Discord roles first)"
       "tags":
       - "Players"
   "/api/v1/players/{discord_id}/evidence":
@@ -3886,8 +3886,6 @@
                         "type": "integer"
                       "file_name":
                         "type": "string"
-                      "url":
-                        "type": "string"
                     "type": "object"
                   "notes":
                     "type": "string"
@@ -3898,6 +3896,15 @@
                     "type": "string"
                   "release_id":
                     "type": "string"
+                  "uninstaller":
+                    "properties":
+                      "bytes":
+                        "type": "integer"
+                      "file_name":
+                        "type": "string"
+                      "url":
+                        "type": "string"
+                    "type": "object"
                   "version":
                     "type": "string"
                 "type": "object"

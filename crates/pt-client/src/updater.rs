@@ -72,9 +72,9 @@ fn hex_sha256(bytes: &[u8]) -> String {
 }
 
 /// Asks the server whether there is something newer than `current`.
-pub async fn fetch_offer(http: &reqwest::Client, server_url: &str, current: &str, keys: &[[u8; 32]]) -> Result<Option<Offer>, String> {
+pub async fn fetch_offer(http: &reqwest::Client, server_url: &str, token: &str, current: &str, keys: &[[u8; 32]]) -> Result<Option<Offer>, String> {
     let url = format!("{}{UPDATE_PATH}?platform={PLATFORM}&version={current}", server_url.trim_end_matches('/'));
-    let res = http.get(url).send().await.map_err(|e| format!("update check: {e}"))?;
+    let res = http.get(url).bearer_auth(token.trim()).send().await.map_err(|e| format!("update check: {e}"))?;
     if !res.status().is_success() {
         return Err(format!("update check: server returned {}", res.status()));
     }
@@ -96,7 +96,7 @@ fn file_matches(path: &Path, f: &update::UpdateFile) -> bool {
 /// already there with the right hash are kept, so an interrupted download
 /// resumes. The manifest and signature are written last: their presence means
 /// the folder is complete.
-pub async fn stage(http: &reqwest::Client, server_url: &str, offer: &Offer, updates_dir: &Path) -> Result<PathBuf, String> {
+pub async fn stage(http: &reqwest::Client, server_url: &str, token: &str, offer: &Offer, updates_dir: &Path) -> Result<PathBuf, String> {
     let m = &offer.manifest;
     let dir = updates_dir.join(&m.version);
     let io = |e: std::io::Error| format!("{}: {e}", dir.display());
@@ -107,7 +107,7 @@ pub async fn stage(http: &reqwest::Client, server_url: &str, offer: &Offer, upda
             continue;
         }
         let url = format!("{}{DOWNLOAD_PATH}{}", server_url.trim_end_matches('/'), m.key(f));
-        let res = http.get(&url).send().await.map_err(|e| format!("{url}: {e}"))?;
+        let res = http.get(&url).bearer_auth(token.trim()).send().await.map_err(|e| format!("{url}: {e}"))?;
         if !res.status().is_success() {
             return Err(format!("{url}: server returned {}", res.status()));
         }
@@ -173,38 +173,47 @@ pub fn clean(updates_dir: &Path, current: &str) {
     }
 }
 
-/// True while ETS2 or ATS runs (their plugin DLL cannot be replaced then).
-/// When the process list cannot be read, it says yes, to be safe.
+/// IDs of running processes with one of these (lowercase) file names, except
+/// this one. `None` when the process list cannot be read.
 #[cfg(windows)]
-pub fn games_running() -> bool {
+pub fn processes(names: &[&str]) -> Option<Vec<u32>> {
     use windows_sys::Win32::Foundation::{CloseHandle, INVALID_HANDLE_VALUE};
     use windows_sys::Win32::System::Diagnostics::ToolHelp::{
         CreateToolhelp32Snapshot, Process32FirstW, Process32NextW, PROCESSENTRY32W, TH32CS_SNAPPROCESS,
     };
+    let me = std::process::id();
     // SAFETY: a process snapshot is walked with a correctly sized entry and closed.
     unsafe {
         let snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
         if snap == INVALID_HANDLE_VALUE {
-            return true;
+            return None;
         }
         let mut e: PROCESSENTRY32W = std::mem::zeroed();
         e.dwSize = std::mem::size_of::<PROCESSENTRY32W>() as u32;
-        let mut found = false;
+        let mut found = Vec::new();
         let mut more = Process32FirstW(snap, &mut e) != 0;
-        while more && !found {
+        while more {
             let len = e.szExeFile.iter().position(|&c| c == 0).unwrap_or(e.szExeFile.len());
             let name = String::from_utf16_lossy(&e.szExeFile[..len]).to_ascii_lowercase();
-            found = GAME_PROCESSES.contains(&name.as_str());
+            if names.contains(&name.as_str()) && e.th32ProcessID != me {
+                found.push(e.th32ProcessID);
+            }
             more = Process32NextW(snap, &mut e) != 0;
         }
         CloseHandle(snap);
-        found
+        Some(found)
     }
 }
 
 #[cfg(not(windows))]
+pub fn processes(_names: &[&str]) -> Option<Vec<u32>> {
+    None
+}
+
+/// True while ETS2 or ATS runs (their plugin DLL cannot be replaced then).
+/// When the process list cannot be read, it says yes, to be safe.
 pub fn games_running() -> bool {
-    true
+    processes(&GAME_PROCESSES).is_none_or(|p| !p.is_empty())
 }
 
 /// The client's `bin` folder when this program runs from the installed one

@@ -224,10 +224,6 @@ impl Host for TestHost {
         Ok(self.releases.borrow().get(key).map(|b| b.len() as u64))
     }
 
-    async fn release_get(&self, key: &str) -> HostResult<Option<Vec<u8>>> {
-        Ok(self.releases.borrow().get(key).cloned())
-    }
-
     async fn poke_scorer(&self, user_id: &str, game: &str) -> HostResult<()> {
         self.pokes.borrow_mut().push((user_id.to_string(), game.to_string()));
         Ok(())
@@ -283,6 +279,7 @@ pub fn signed_update(t: &TestHost, version: &str) -> SignedUpdate {
         m.files.push(f);
     }
     t.releases.borrow_mut().insert(format!("windows/{version}/PlasmaTrack-Setup-{version}.exe"), b"setup".to_vec());
+    t.releases.borrow_mut().insert(format!("windows/{version}/PlasmaTrack-Uninstall.exe"), b"uninstall".to_vec());
     let manifest = serde_json::to_string(&m).unwrap();
     let sig = update_signing_key().sign(&[SIGNING_CONTEXT, manifest.as_bytes()].concat());
     let signature = sig.to_bytes().iter().map(|b| format!("{b:02x}")).collect();

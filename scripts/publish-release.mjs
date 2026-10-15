@@ -5,15 +5,17 @@
 //    version;
 // 2. the release in installer/payload (its manifest.json, written by
 //    `npm run payload`), so jobs from that build pass rule 0 (PLAN §6a), with a
-//    signed update manifest so older clients update themselves, and the setup
-//    program installer/dist/PlasmaTrack-Setup-<version>.exe for new players.
+//    signed update manifest so older clients update themselves, the setup
+//    program installer/dist/PlasmaTrack-Setup-<version>.exe for new players
+//    (downloaded through personal links the bot asks for), and the uninstaller
+//    PlasmaTrack-Uninstall.exe, which anyone may download.
 //
 //   node scripts/publish-release.mjs --env production|test --url https://… --actor DISCORD_ID
 //        [--version 0.2.0] [--upload] [--notes "What changed"] [--no-offer]
 //
-// --upload  gzips the payload files and puts them, and the setup program, in the
-//           R2 bucket plasmatrack-releases (shared by both servers, so once is
-//           enough) with wrangler.
+// --upload  gzips the payload files and puts them, the setup program and the
+//           uninstaller in the R2 bucket plasmatrack-releases (shared by both
+//           servers, so once is enough) with wrangler.
 // --no-offer publishes without offering the update yet
 //           (POST /api/v1/admin/releases/{id}/offer starts it later).
 //
@@ -95,6 +97,7 @@ if (flag("upload")) {
     console.log(`uploaded ${key} (${statSync(file).size} bytes)`);
   };
   for (const f of manifest.files) put(`${PLATFORM}/${version}/${f.path}.gz`, gzPath(f.path), "application/gzip");
+  put(`${PLATFORM}/${version}/PlasmaTrack-Uninstall.exe`, join(payloadDir, "plasmatrack-uninstall.exe"), "application/vnd.microsoft.portable-executable");
   if (existsSync(setupPath)) put(`${PLATFORM}/${version}/${setupName}`, setupPath, "application/vnd.microsoft.portable-executable");
   else console.warn(`no ${setupPath}; publishing without a setup program`);
 }
@@ -130,6 +133,7 @@ const files = [
   { role: "plugin", path_pattern: "*/plugins/plasmatrack.dll", sha256: payload["plasmatrack.dll"] },
   { role: "client_binary", path_pattern: "*/plasmatrack-clientw.exe", sha256: payload["plasmatrack-clientw.exe"] },
   { role: "client_binary", path_pattern: "*/plasmatrack-client.exe", sha256: payload["plasmatrack-client.exe"] },
+  { role: "client_binary", path_pattern: "*/plasmatrack-uninstall.exe", sha256: payload["plasmatrack-uninstall.exe"] },
 ];
 r = await post("/api/v1/admin/releases", {
   release_version: version,

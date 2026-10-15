@@ -13,6 +13,8 @@
 //! - [`cli`]: the command line of both binaries.
 //! - `tray` (Windows): the notification-area icon of the windowless client.
 //! - [`updater`]: downloads signed releases and installs them (docs/UPDATES.md).
+//! - [`uninstall`]: removes PlasmaTrack (`PlasmaTrack-Uninstall.exe`, Setup) and
+//!   registers it in Windows' "Installed apps".
 
 pub mod cli;
 pub mod db;
@@ -26,6 +28,7 @@ pub mod status;
 pub mod steam;
 #[cfg(windows)]
 pub mod tray;
+pub mod uninstall;
 pub mod updater;
 pub mod uploader;
 

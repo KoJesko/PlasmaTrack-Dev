@@ -1,6 +1,8 @@
 //! Client updates and downloads (docs/UPDATES.md). A release published with a
-//! signed update manifest is offered to clients; its files and the setup
-//! program are in the release bucket. The server checks the signature when the
+//! signed update manifest is offered to clients; its files, the setup program
+//! and the uninstaller are in the release bucket. Only the uninstaller is
+//! public: updates need a player token, the setup a personal link the bot asks
+//! for (owner, 2026-10-15: only some Discord roles may download the tracker). The server checks the signature when the
 //! release is published but cannot sign anything itself: the key stays with the
 //! maintainer, and clients verify again before installing.
 
@@ -9,7 +11,8 @@ use serde_json::{json, Value};
 
 use crate::env::{Host, Row, RowExt};
 use crate::http::{ApiError, ApiResult, Request, Response};
-use crate::util::rfc3339;
+use crate::store;
+use crate::util::{self, rfc3339};
 use crate::{auth, params};
 
 pub const MAX_NOTES_CHARS: usize = 2000;
@@ -106,17 +109,22 @@ pub fn release_extras(r: &Row) -> Value {
     })
 }
 
-/// The newest offered release for a platform that nothing revokes (a scheduled
-/// revocation counts: a release on its way out is not handed out).
-async fn newest<H: Host>(h: &H, platform: &str) -> ApiResult<Option<Row>> {
-    let rows = h
+/// Offered releases for a platform that nothing revokes (a scheduled
+/// revocation counts: a release on its way out is not handed out), newest first.
+async fn offered<H: Host>(h: &H, platform: &str) -> ApiResult<Vec<Row>> {
+    let mut rows = h
         .all(
             "SELECT * FROM releases WHERE platform = ?1 AND offered = 1 AND update_manifest IS NOT NULL
              AND release_id NOT IN (SELECT target_id FROM revocations WHERE target_kind = 'release' AND cancelled_at IS NULL)",
             params![platform],
         )
         .await?;
-    Ok(rows.into_iter().max_by_key(|r| update::parse_version(&r.s("release_version"))))
+    rows.sort_by_key(|r| std::cmp::Reverse(update::parse_version(&r.s("release_version"))));
+    Ok(rows)
+}
+
+async fn newest<H: Host>(h: &H, platform: &str) -> ApiResult<Option<Row>> {
+    Ok(offered(h, platform).await?.into_iter().next())
 }
 
 fn platform_of(req: &Request) -> ApiResult<String> {
@@ -127,11 +135,13 @@ fn platform_of(req: &Request) -> ApiResult<String> {
     Ok(p)
 }
 
-/// `GET /api/v1/client/update?platform=windows&version=0.2.0`, asked by clients
-/// without a token: the newest offered release when it is newer than `version`.
+/// `GET /api/v1/client/update?platform=windows&version=0.2.1`, asked by
+/// clients with their player token: the newest offered release when it is
+/// newer than `version`.
 pub async fn client_update<H: Host>(h: &H, req: &Request) -> ApiResult<Response> {
+    auth::player(h, req).await?;
     let platform = platform_of(req)?;
-    let current = req.q("version").and_then(update::parse_version).ok_or_else(|| ApiError::bad_request("version is like 0.2.0"))?;
+    let current = req.q("version").and_then(update::parse_version).ok_or_else(|| ApiError::bad_request("version is like 0.2.1"))?;
     let offer = newest(h, &platform).await?.filter(|r| update::parse_version(&r.s("release_version")) > Some(current));
     let body = match offer {
         Some(r) => json!({"update": {
@@ -147,11 +157,38 @@ pub async fn client_update<H: Host>(h: &H, req: &Request) -> ApiResult<Response>
     Ok(Response::ok(body).with_header("cache-control", "no-store"))
 }
 
-fn setup_url<H: Host>(h: &H, platform: &str) -> String {
-    format!("{}/dl/setup/{platform}", h.settings().public_url.trim_end_matches('/'))
+/// The uninstaller's name in every release folder. Anyone may download it.
+pub const UNINSTALLER: &str = "PlasmaTrack-Uninstall.exe";
+/// How long a personal setup link works.
+pub const SETUP_LINK_TTL_MS: i64 = 3_600_000;
+/// On a response from [`file`]: the release-bucket key whose bytes are the
+/// body. The Worker streams the object and drops the header.
+pub const STREAM_HEADER: &str = "x-plasmatrack-release-key";
+
+fn origin<H: Host>(h: &H) -> String {
+    h.settings().public_url.trim_end_matches('/').to_string()
 }
 
-/// `GET /api/v1/public/client?platform=windows`: what the bot links to.
+fn release_sig<H: Host>(h: &H, key: &str, exp_s: i64) -> String {
+    util::hex(&util::hmac_sha256(h.settings().download_secret.as_bytes(), format!("release.{key}.{exp_s}").as_bytes()))
+}
+
+/// The newest offered release whose folder holds the file `name` picks, with
+/// that file's name and size.
+async fn newest_with<H: Host>(h: &H, platform: &str, name: impl Fn(&Row) -> Option<String>) -> ApiResult<Option<(Row, String, u64)>> {
+    for r in offered(h, platform).await? {
+        if let Some(n) = name(&r) {
+            if let Some(size) = h.release_size(&format!("{platform}/{}/{n}", r.s("release_version"))).await? {
+                return Ok(Some((r, n, size)));
+            }
+        }
+    }
+    Ok(None)
+}
+
+/// `GET /api/v1/public/client?platform=windows`: the newest release, its
+/// setup program (downloaded through a personal link, [`client_download`])
+/// and the uninstaller (a public link).
 pub async fn latest<H: Host>(h: &H, req: &Request) -> ApiResult<Response> {
     auth::service(h, req)?;
     let platform = platform_of(req)?;
@@ -159,10 +196,13 @@ pub async fn latest<H: Host>(h: &H, req: &Request) -> ApiResult<Response> {
     let installer = match r.opt_s("installer") {
         Some(name) => {
             let size = h.release_size(&format!("{platform}/{}/{name}", r.s("release_version"))).await?;
-            json!({"file_name": name, "bytes": size, "url": setup_url(h, &platform)})
+            json!({"file_name": name, "bytes": size})
         }
         None => Value::Null,
     };
+    let uninstaller = newest_with(h, &platform, |_| Some(UNINSTALLER.to_string())).await?.map_or(Value::Null, |(_, name, size)| {
+        json!({"file_name": name, "bytes": size, "url": format!("{}/dl/uninstall/{platform}", origin(h))})
+    });
     Ok(Response::ok(json!({
         "platform": platform,
         "release_id": r.s("release_id"),
@@ -170,15 +210,42 @@ pub async fn latest<H: Host>(h: &H, req: &Request) -> ApiResult<Response> {
         "published_at": rfc3339(r.i("created_at")),
         "notes": r.opt_s("notes"),
         "installer": installer,
+        "uninstaller": uninstaller,
     })))
 }
 
-/// `GET /dl/setup/{platform}`: a redirect to the newest offered setup program,
-/// so one link stays right across releases.
-pub async fn setup<H: Host>(h: &H, platform: &str) -> ApiResult<Response> {
-    let r = newest(h, platform).await?.ok_or_else(|| ApiError::not_found("release"))?;
-    let name = r.opt_s("installer").ok_or_else(|| ApiError::not_found("release"))?;
-    let to = format!("{}/dl/releases/{platform}/{}/{name}", h.settings().public_url.trim_end_matches('/'), r.s("release_version"));
+/// `GET /api/v1/players/{discord_id}/client-download?platform=windows` (bot
+/// token): a personal link to the newest setup program, valid for an hour.
+/// The bot decides who may have one (Discord roles); a disabled player gets 403.
+pub async fn client_download<H: Host>(h: &H, req: &Request, discord_id: &str) -> ApiResult<Response> {
+    auth::bot(h, req)?;
+    store::check_discord_id(discord_id)?;
+    if store::user_by_discord(h, discord_id).await?.is_some_and(|u| u.disabled) {
+        return Err(ApiError::forbidden("This player is disabled."));
+    }
+    let platform = platform_of(req)?;
+    let (r, name, size) = newest_with(h, &platform, |r| r.opt_s("installer")).await?.ok_or_else(|| ApiError::not_found("release"))?;
+    let key = format!("{platform}/{}/{name}", r.s("release_version"));
+    let exp_s = (h.now_ms() + SETUP_LINK_TTL_MS) / 1000;
+    let url = format!("{}/dl/releases/{key}?exp={exp_s}&sig={}", origin(h), release_sig(h, &key, exp_s));
+    Ok(Response::ok(json!({
+        "platform": platform,
+        "release_id": r.s("release_id"),
+        "version": r.s("release_version"),
+        "notes": r.opt_s("notes"),
+        "file_name": name,
+        "bytes": size,
+        "url": url,
+        "expires_at": rfc3339(exp_s * 1000),
+    }))
+    .with_header("cache-control", "no-store"))
+}
+
+/// `GET /dl/uninstall/{platform}`: a redirect to the newest uninstaller, for
+/// anyone, so one link stays right across releases.
+pub async fn uninstall<H: Host>(h: &H, platform: &str) -> ApiResult<Response> {
+    let (r, name, _) = newest_with(h, platform, |_| Some(UNINSTALLER.to_string())).await?.ok_or_else(|| ApiError::not_found("file"))?;
+    let to = format!("{}/dl/releases/{platform}/{}/{name}", origin(h), r.s("release_version"));
     Ok(Response::bytes(302, "text/plain", Vec::new()).with_header("location", &to).with_header("cache-control", "no-store"))
 }
 
@@ -199,25 +266,39 @@ pub fn content_type(key: &str) -> &'static str {
     }
 }
 
-/// Headers of a release file. Versions never change, so it can be cached.
-pub fn file_headers(key: &str) -> Vec<(String, String)> {
-    let mut v = vec![
-        ("content-type".to_string(), content_type(key).to_string()),
-        ("cache-control".to_string(), "public, max-age=31536000, immutable".to_string()),
-    ];
-    if !key.ends_with(".gz") {
-        let name = key.rsplit('/').next().unwrap_or_default();
-        v.push(("content-disposition".to_string(), format!("attachment; filename=\"{name}\"")));
-    }
-    v
-}
-
-/// `GET /dl/releases/{platform}/{version}/{path}`. The Worker streams these
-/// itself (setup programs are large); this serves them in the native tests.
-pub async fn file<H: Host>(h: &H, parts: &[&str]) -> ApiResult<Response> {
+/// `GET /dl/releases/{platform}/{version}/{path}`. Who may download what:
+/// - update files (`.gz`): a client with a player token;
+/// - the uninstaller: anyone;
+/// - anything else (the setup program): a personal link from
+///   [`client_download`].
+///
+/// The answer names the object in [`STREAM_HEADER`] with an empty body: the
+/// Worker streams it (setup programs are large), and the native tests read
+/// the header.
+pub async fn file<H: Host>(h: &H, req: &Request, parts: &[&str]) -> ApiResult<Response> {
     let key = release_key(parts).ok_or_else(|| ApiError::not_found("file"))?;
-    let bytes = h.release_get(&key).await?.ok_or_else(|| ApiError::not_found("file"))?;
-    let mut r = Response::bytes(200, content_type(&key), bytes);
-    r.headers = file_headers(&key);
+    let name = key.rsplit('/').next().unwrap_or_default().to_string();
+    let cache = if key.ends_with(".gz") {
+        auth::player(h, req).await?;
+        "private, max-age=86400"
+    } else if name == UNINSTALLER {
+        "public, max-age=31536000, immutable"
+    } else {
+        let bad = || ApiError::forbidden("This link is not valid. Ask the Discord bot for a new one.");
+        let (Some(exp), Some(sig)) = (req.q("exp"), req.q("sig")) else { return Err(bad()) };
+        let exp_s: i64 = exp.parse().map_err(|_| bad())?;
+        if !util::constant_eq(sig.as_bytes(), release_sig(h, &key, exp_s).as_bytes()) {
+            return Err(bad());
+        }
+        if h.now_ms() / 1000 > exp_s {
+            return Err(ApiError::forbidden("This link has expired. Ask the Discord bot for a new one."));
+        }
+        "private, no-store"
+    };
+    h.release_size(&key).await?.ok_or_else(|| ApiError::not_found("file"))?;
+    let mut r = Response::bytes(200, content_type(&key), Vec::new()).with_header("cache-control", cache).with_header(STREAM_HEADER, &key);
+    if !key.ends_with(".gz") {
+        r = r.with_header("content-disposition", &format!("attachment; filename=\"{name}\""));
+    }
     Ok(r)
 }

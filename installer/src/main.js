@@ -14,14 +14,16 @@ const PAYLOAD = app.isPackaged
   : path.join(__dirname, '..', 'payload');
 // %LOCALAPPDATA%\PlasmaTrack is also the client's data directory (paths.rs).
 const DATA_DIR = path.join(process.env.LOCALAPPDATA || app.getPath('userData'), 'PlasmaTrack');
-const CONFIG_DIR = path.join(process.env.APPDATA || app.getPath('appData'), 'PlasmaTrack');
 const BIN_DIR = path.join(DATA_DIR, 'bin');
 // Left behind by the client's own updater (docs/UPDATES.md).
 const UPDATE_LEFTOVERS = ['updates', 'bin.new', 'bin.old', 'bin.failed'].map((d) => path.join(DATA_DIR, d));
 const CLIENTW = path.join(BIN_DIR, 'plasmatrack-clientw.exe');
 const RUN_KEY = 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run';
 const RUN_VALUE = 'PlasmaTrack';
-const START_MENU_LINK = path.join(app.getPath('appData'), 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'PlasmaTrack.lnk');
+const START_MENU = path.join(app.getPath('appData'), 'Microsoft', 'Windows', 'Start Menu', 'Programs');
+const START_MENU_LINK = path.join(START_MENU, 'PlasmaTrack.lnk');
+const UNINSTALL_LINK = path.join(START_MENU, 'Uninstall PlasmaTrack.lnk');
+const UNINSTALLER = path.join(BIN_DIR, 'plasmatrack-uninstall.exe');
 const GAME_PROCESSES = ['eurotrucks2.exe', 'amtrucks.exe'];
 
 /** Runs a program without a console window. Resolves even on a non-zero exit. */
@@ -79,14 +81,21 @@ async function stopClient() {
   await sleep(300); // let Windows release the exe
 }
 
-function writeStartMenuShortcut() {
-  return shell.writeShortcutLink(START_MENU_LINK, 'create', {
+function writeStartMenuShortcuts() {
+  const run = shell.writeShortcutLink(START_MENU_LINK, 'create', {
     target: CLIENTW,
     args: 'run',
     description: 'PlasmaTrack runs in the background and records your ETS2/ATS jobs',
     icon: CLIENTW,
     iconIndex: 0,
   });
+  const remove = shell.writeShortcutLink(UNINSTALL_LINK, 'create', {
+    target: UNINSTALLER,
+    description: 'Remove PlasmaTrack from this PC',
+    icon: CLIENTW,
+    iconIndex: 0,
+  });
+  return run && remove;
 }
 
 function startClient() {
@@ -138,8 +147,10 @@ async function install({ serverUrl, token, autostart }) {
     step(false, 'Plugin not installed', plugin.stderr);
   }
 
-  const linked = writeStartMenuShortcut();
+  const linked = writeStartMenuShortcuts();
   step(linked, linked ? 'Added PlasmaTrack to the Start menu' : 'Could not add PlasmaTrack to the Start menu');
+  const registered = await run(client, ['register', '--bin', BIN_DIR]);
+  step(registered.ok, registered.ok ? 'Added PlasmaTrack to Installed apps' : 'Could not add PlasmaTrack to Installed apps', registered.stderr);
 
   if (autostart) {
     const r = await run('reg.exe', ['add', RUN_KEY, '/v', RUN_VALUE, '/t', 'REG_SZ', '/d', `"${CLIENTW}" run`, '/f']);
@@ -164,32 +175,12 @@ async function install({ serverUrl, token, autostart }) {
   return { steps };
 }
 
+// The client does it (pt-client uninstall.rs), exactly as PlasmaTrack-Uninstall.exe does.
 async function uninstall({ deleteData }) {
-  const steps = [];
-  const step = (ok, text, detail) => steps.push({ ok, text, detail });
-
-  await stopClient();
-  await run('reg.exe', ['delete', RUN_KEY, '/v', RUN_VALUE, '/f']);
-  fs.rmSync(START_MENU_LINK, { force: true });
-  step(true, 'Stopped the client and removed it from startup and the Start menu');
-
-  const r = await run(payloadClient(), ['uninstall-plugin']);
-  const folders = parseJson(r.stdout) || [];
-  for (const f of folders.filter((f) => f.changed || f.error)) {
-    step(!f.error, f.error ? `Could not remove the plugin from ${f.plugins_dir}` : `Removed the plugin from ${f.plugins_dir}`, f.error);
-  }
-
-  fs.rmSync(BIN_DIR, { recursive: true, force: true });
-  for (const d of UPDATE_LEFTOVERS) fs.rmSync(d, { recursive: true, force: true });
-  step(true, `Removed ${BIN_DIR}`);
-  if (deleteData) {
-    fs.rmSync(DATA_DIR, { recursive: true, force: true });
-    fs.rmSync(CONFIG_DIR, { recursive: true, force: true });
-    step(true, 'Deleted local data, settings and token');
-  } else {
-    step(true, `Kept local data in ${DATA_DIR} and settings in ${CONFIG_DIR}`);
-  }
-  return { steps };
+  const r = await run(payloadClient(), ['uninstall', '--json', ...(deleteData ? ['--delete-data'] : [])]);
+  const out = parseJson(r.stdout);
+  if (out && Array.isArray(out.steps)) return { steps: out.steps };
+  return { steps: [{ ok: false, text: 'Could not uninstall PlasmaTrack', detail: r.stderr }] };
 }
 
 async function startNow() {
