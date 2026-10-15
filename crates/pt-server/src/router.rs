@@ -2,7 +2,7 @@
 
 use crate::env::Host;
 use crate::http::{ApiError, ApiResult, Request, Response};
-use crate::{admin, ingest, manage, manual, public, route};
+use crate::{admin, ingest, manage, manual, public, route, updates};
 
 pub async fn handle<H: Host>(h: &H, req: Request) -> Response {
     match dispatch(h, &req).await {
@@ -20,6 +20,10 @@ async fn dispatch<H: Host>(h: &H, req: &Request) -> ApiResult<Response> {
         ("POST", ["api", "v1", "chunks"]) => ingest::upload(h, req).await,
         ("GET", ["dl", "trace", id]) => admin::download_trace(h, req, id).await,
         ("GET", ["dl", "evidence", id]) => manual::download(h, req, id).await,
+        ("GET", ["dl", "releases", rest @ ..]) => updates::file(h, rest).await,
+        ("GET", ["dl", "setup"]) => updates::setup(h, "windows").await,
+        ("GET", ["dl", "setup", p @ ("windows" | "linux")]) => updates::setup(h, p).await,
+        ("GET", ["api", "v1", "client", "update"]) => updates::client_update(h, req).await,
 
         // Player self-service.
         ("POST", ["api", "v1", "players", d, "token"]) => public::issue_token(h, req, d).await,
@@ -31,6 +35,7 @@ async fn dispatch<H: Host>(h: &H, req: &Request) -> ApiResult<Response> {
         ("GET", ["api", "v1", "players", d, "jobs", id, "evidence"]) => manual::player_evidence(h, req, d, id).await,
 
         // Public reads.
+        ("GET", ["api", "v1", "public", "client"]) => updates::latest(h, req).await,
         ("GET", ["api", "v1", "public", "players", d]) => public::player(h, req, d).await,
         ("GET", ["api", "v1", "public", "players", d, "jobs"]) => public::player_jobs_all(h, req, d).await,
         ("GET", ["api", "v1", "public", "jobs", id]) => public::job(h, req, id).await,
@@ -68,6 +73,7 @@ async fn dispatch<H: Host>(h: &H, req: &Request) -> ApiResult<Response> {
         ("POST", ["api", "v1", "admin", "config-versions", id, "make-current"]) => manage::config_make_current(h, req, id).await,
         ("GET", ["api", "v1", "admin", "releases"]) => manage::release_list(h, req).await,
         ("POST", ["api", "v1", "admin", "releases"]) => manage::release_create(h, req).await,
+        ("POST", ["api", "v1", "admin", "releases", id, "offer"]) => manage::release_offer(h, req, id).await,
         ("GET", ["api", "v1", "admin", "revocations"]) => manage::revocation_list(h, req).await,
         ("POST", ["api", "v1", "admin", "revocations"]) => manage::revocation_create(h, req).await,
         ("POST", ["api", "v1", "admin", "revocations", id, "cancel"]) => manage::revocation_cancel(h, req, id).await,

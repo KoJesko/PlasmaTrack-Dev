@@ -19,3 +19,5 @@ flate2 = "1"
 rusqlite = { version = "0.32", features = ["bundled"] }
 tokio = { version = "1", features = ["rt", "macros"] }
 pt-replay = { path = "../pt-replay" }
+ed25519-dalek = { version = "2", default-features = false, features = ["std"] }
+flate2 = "1"

@@ -30,6 +30,8 @@ pub struct Status {
     pub last_upload_error: Option<String>,
     pub config_hash: String,
     pub manifest_files: usize,
+    /// A newer release being downloaded or waiting to install (docs/UPDATES.md).
+    pub update: Option<String>,
 }
 
 pub type SharedStatus = Arc<Mutex<Status>>;

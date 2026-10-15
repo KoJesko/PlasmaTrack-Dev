@@ -2574,12 +2574,20 @@
                                 "type": "string"
                             "type": "object"
                           "type": "array"
+                        "installer":
+                          "type": "null"
+                        "notes":
+                          "type": "null"
+                        "offered":
+                          "type": "boolean"
                         "platform":
                           "type": "string"
                         "release_id":
                           "type": "string"
                         "release_version":
                           "type": "string"
+                        "update":
+                          "type": "null"
                       "type": "object"
                     "type": "array"
                   "next_cursor":
@@ -2637,12 +2645,31 @@
                           "type": "string"
                       "type": "object"
                     "type": "array"
+                  "installer":
+                    "type":
+                    - "null"
+                    - "string"
+                  "notes":
+                    "type":
+                    - "null"
+                    - "string"
+                  "offered":
+                    "type": "boolean"
                   "platform":
                     "type": "string"
                   "release_id":
                     "type": "string"
                   "release_version":
                     "type": "string"
+                  "update":
+                    "properties":
+                      "bytes":
+                        "type": "integer"
+                      "files":
+                        "type": "integer"
+                    "type":
+                    - "null"
+                    - "object"
                 "type": "object"
           "description": "See docs/examples/admin_release_create.json"
         "4XX":
@@ -2652,6 +2679,77 @@
       "security":
       - "botToken": []
       "summary": "Publish a release's file hashes"
+      "tags":
+      - "Versions"
+  "/api/v1/admin/releases/{release_id}/offer":
+    "post":
+      "operationId": "admin_release_offer"
+      "parameters":
+      - "in": "path"
+        "name": "release_id"
+        "required": true
+        "schema":
+          "type": "string"
+      - "$ref": "#/components/parameters/Actor"
+      - "$ref": "#/components/parameters/IdempotencyKey"
+      "requestBody":
+        "content":
+          "application/json":
+            "example":
+              "offered": true
+              "reason": "Tested on the test server"
+        "required": true
+      "responses":
+        "200":
+          "content":
+            "application/json":
+              "examples":
+                "admin_release_offer":
+                  "externalValue": "../examples/admin_release_offer.json"
+              "schema":
+                "properties":
+                  "created_at":
+                    "format": "date-time"
+                    "type": "string"
+                  "files":
+                    "items":
+                      "properties":
+                        "path_pattern":
+                          "type": "string"
+                        "role":
+                          "type": "string"
+                        "sha256":
+                          "type": "string"
+                      "type": "object"
+                    "type": "array"
+                  "installer":
+                    "type": "string"
+                  "notes":
+                    "type": "string"
+                  "offered":
+                    "type": "boolean"
+                  "platform":
+                    "type": "string"
+                  "release_id":
+                    "type": "string"
+                  "release_version":
+                    "type": "string"
+                  "update":
+                    "properties":
+                      "bytes":
+                        "type": "integer"
+                      "files":
+                        "type": "integer"
+                    "type": "object"
+                "type": "object"
+          "description": "See docs/examples/admin_release_offer.json"
+        "4XX":
+          "$ref": "#/components/responses/Error"
+        "5XX":
+          "$ref": "#/components/responses/Error"
+      "security":
+      - "botToken": []
+      "summary": "Start or stop offering a release's update to clients"
       "tags":
       - "Versions"
   "/api/v1/admin/review-queue":
@@ -2984,6 +3082,57 @@
       "summary": "TruckersMP account flags"
       "tags":
       - "Review"
+  "/api/v1/client/update":
+    "get":
+      "operationId": "client_update"
+      "parameters":
+      - "in": "query"
+        "name": "platform"
+        "required": false
+        "schema":
+          "type": "string"
+      - "in": "query"
+        "name": "version"
+        "required": false
+        "schema":
+          "type": "string"
+      "responses":
+        "200":
+          "content":
+            "application/json":
+              "examples":
+                "client_update":
+                  "externalValue": "../examples/client_update.json"
+              "schema":
+                "properties":
+                  "update":
+                    "properties":
+                      "manifest":
+                        "type": "string"
+                      "notes":
+                        "type": "string"
+                      "published_at":
+                        "format": "date-time"
+                        "type": "string"
+                      "release_id":
+                        "type": "string"
+                      "signature":
+                        "type": "string"
+                      "version":
+                        "type": "string"
+                    "type": "object"
+                "type": "object"
+          "description": "See docs/examples/client_update.json"
+        "4XX":
+          "$ref": "#/components/responses/Error"
+        "5XX":
+          "$ref": "#/components/responses/Error"
+      "security":
+      - "readToken": []
+      - "botToken": []
+      "summary": "What the client asks for updates (no token)"
+      "tags":
+      - "Public"
   "/api/v1/players/{discord_id}":
     "patch":
       "operationId": "player_rename"
@@ -3713,6 +3862,56 @@
       "summary": "Link a Discord user, or rotate their token"
       "tags":
       - "Players"
+  "/api/v1/public/client":
+    "get":
+      "operationId": "public_client"
+      "parameters":
+      - "in": "query"
+        "name": "platform"
+        "required": false
+        "schema":
+          "type": "string"
+      "responses":
+        "200":
+          "content":
+            "application/json":
+              "examples":
+                "public_client":
+                  "externalValue": "../examples/public_client.json"
+              "schema":
+                "properties":
+                  "installer":
+                    "properties":
+                      "bytes":
+                        "type": "integer"
+                      "file_name":
+                        "type": "string"
+                      "url":
+                        "type": "string"
+                    "type": "object"
+                  "notes":
+                    "type": "string"
+                  "platform":
+                    "type": "string"
+                  "published_at":
+                    "format": "date-time"
+                    "type": "string"
+                  "release_id":
+                    "type": "string"
+                  "version":
+                    "type": "string"
+                "type": "object"
+          "description": "See docs/examples/public_client.json"
+        "4XX":
+          "$ref": "#/components/responses/Error"
+        "5XX":
+          "$ref": "#/components/responses/Error"
+      "security":
+      - "readToken": []
+      - "botToken": []
+      "summary": "The newest PlasmaTrack release and its setup download link"
+      "tags":
+      - "Public"
   "/api/v1/public/jobs/{job_id}":
     "get":
       "operationId": "public_job"

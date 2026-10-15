@@ -1,6 +1,6 @@
 [package]
 name = "pt-client"
-version = "0.1.1"
+version = "0.2.0"
 description = "PlasmaTrack client: receives plugin telemetry, keeps the local SQLite log, uploads raw chunks to the server."
 edition.workspace = true
 rust-version.workspace = true
@@ -32,7 +32,8 @@ tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "io-uti
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.55"
-windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Graphics_Gdi", "Win32_System_LibraryLoader", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging"] }
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Graphics_Gdi", "Win32_System_LibraryLoader", "Win32_System_Diagnostics_ToolHelp", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging"] }
 
 [dev-dependencies]
 tempfile = "3"
+ed25519-dalek = { version = "2", default-features = false, features = ["std"] }

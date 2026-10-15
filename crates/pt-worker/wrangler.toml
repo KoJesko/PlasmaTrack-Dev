@@ -10,6 +10,9 @@
 #   WEBHOOK_SECRETS            HMAC secret(s), comma-separated during rotation
 #   DOWNLOAD_SECRET            signs trace download links
 #   BOOTSTRAP_ADMINS           Discord IDs that are admins from the start (comma-separated)
+# Client updates and setup programs (docs/UPDATES.md) are in the bucket
+# plasmatrack-releases, shared by both instances; scripts/publish-release.mjs
+# uploads them.
 # Backups: every Sunday 03:47 UTC the D1 data goes to the private bucket
 # plasmatrack-backups under BACKUP_PREFIX; the newest two are kept.
 # The database_id values are filled in by `wrangler d1 create` (docs/SERVER.md).
@@ -41,6 +44,10 @@ bucket_name = "plasmatrack-raw"
 [[r2_buckets]]
 binding = "BACKUPS"
 bucket_name = "plasmatrack-backups"
+
+[[r2_buckets]]
+binding = "RELEASES"
+bucket_name = "plasmatrack-releases"
 
 [vars]
 BACKUP_PREFIX = "d1/plasmatrack-server/"
@@ -97,6 +104,10 @@ bucket_name = "plasmatrack-raw-test"
 [[env.test.r2_buckets]]
 binding = "BACKUPS"
 bucket_name = "plasmatrack-backups"
+
+[[env.test.r2_buckets]]
+binding = "RELEASES"
+bucket_name = "plasmatrack-releases"
 
 [env.test.vars]
 BACKUP_PREFIX = "d1/plasmatrack-server-test/"

@@ -32,7 +32,9 @@ taskbar tray:
 - **Starting it again** (Start menu) while it runs just opens the status page.
 - **Startup errors** (for example a missing config) appear as a dialog.
 
-**Update** does the same again. **Uninstall** stops the client and removes the startup
+**Updates** install themselves: the background client downloads each new release, checks its
+signature and installs it once ETS2 and ATS are closed (docs/UPDATES.md). Running Setup again
+does the same by hand. **Uninstall** stops the client and removes the startup
 entry, the Start menu shortcut, the plugin, `plasmatrack.ini` and the `bin` folder. Local data, settings and the
 token are kept unless the player ticks the box. The plugin's `plasmatrack\` journal
 folder in each game is left in place.

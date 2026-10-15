@@ -16,6 +16,11 @@
 //!                                      in a process list; writes the config this build
 //!                                      ships, keeping the existing [local] values
 //!   show-local       [--config PATH]   [local] as JSON, with the token only as set/unset
+//!   check-update     [--config PATH] [--data-dir PATH]   ask the server, download and
+//!                                      verify a newer release without installing it
+//!   apply-update     --bin PATH [--from VERSION] [--config PATH] [--data-dir PATH]
+//!                                      run by the updater from the staged release
+//!                                      (docs/UPDATES.md); installs it into PATH
 
 use std::io::Read;
 use std::net::{IpAddr, SocketAddr};
@@ -31,7 +36,7 @@ use crate::db::Db;
 use crate::status::{SharedStatus, Status};
 use crate::uploader::UploaderConfig;
 use crate::live::{self, Alert, LiveJobs};
-use crate::{gamelog, listener, log, manifest, paths, setup, status, steam, uploader};
+use crate::{gamelog, listener, log, manifest, paths, setup, status, steam, updater, uploader};
 
 /// Log file of the windowless client, in the data directory.
 pub const LOG_FILE: &str = "client.log";
@@ -43,6 +48,8 @@ struct Args {
     data_dir: PathBuf,
     json: bool,
     plugin: Option<PathBuf>,
+    bin: Option<PathBuf>,
+    from: Option<String>,
 }
 
 fn parse_args() -> Result<Args, String> {
@@ -54,12 +61,16 @@ fn parse_args() -> Result<Args, String> {
         data_dir: paths::default_data_dir(),
         json: false,
         plugin: None,
+        bin: None,
+        from: None,
     };
     while let Some(a) = it.next() {
         match a.as_str() {
             "--config" => args.config = it.next().ok_or("--config needs a path")?.into(),
             "--data-dir" => args.data_dir = it.next().ok_or("--data-dir needs a path")?.into(),
             "--plugin" => args.plugin = Some(it.next().ok_or("--plugin needs a path")?.into()),
+            "--bin" => args.bin = Some(it.next().ok_or("--bin needs a path")?.into()),
+            "--from" => args.from = Some(it.next().ok_or("--from needs a version")?),
             "--json" => args.json = true,
             other => return Err(format!("unknown argument {other:?}")),
         }
@@ -73,7 +84,7 @@ fn load_config(path: &PathBuf) -> Result<Config, String> {
     Config::from_toml_str(&text).map_err(|e| format!("{}: {e}", path.display()))
 }
 
-fn managed_ini(cfg: &Config) -> Vec<(&'static str, String)> {
+pub fn managed_ini(cfg: &Config) -> Vec<(&'static str, String)> {
     vec![
         ("port", cfg.local.port.to_string()),
         ("sample_rate_hz", cfg.plugin.sample_rate_hz.to_string()),
@@ -102,6 +113,9 @@ pub struct Hooks {
     pub live: Arc<OnceLock<Live>>,
     /// Shows a desktop notification (title, text); the tray sets it.
     pub notify: Arc<OnceLock<NotifyFn>>,
+    /// Keep this client up to date (the windowless client run from the
+    /// installed `bin` folder; docs/UPDATES.md).
+    pub auto_update: bool,
 }
 
 pub type NotifyFn = Box<dyn Fn(&str, &str) + Send + Sync>;
@@ -210,6 +224,14 @@ async fn run(args: Args, hooks: Hooks) -> Result<(), RunError> {
         log!("uploads paused until [local] server_url and token are set; everything is kept locally");
     }
     tokio::spawn(uploader::run(ucfg, db.clone(), status.clone(), manifest.clone()));
+    if let (true, Some(bin)) = (hooks.auto_update, updater::installed_bin(&args.data_dir)) {
+        if cfg.local.server_url.contains(".invalid") {
+            log!("updates paused until [local] server_url is set");
+        } else {
+            let u = UpdateLoop { cfg: cfg.clone(), args: args.clone_paths(), bin, exe: exe.clone() };
+            tokio::spawn(update_loop(u, status.clone(), manifest.clone(), hooks.shutdown.clone(), hooks.notify.clone()));
+        }
+    }
     let _ = hooks.live.set(Live { status, db, status_url: url });
 
     // Ctrl+C (console), POST /quit (`stop`, installer) or the tray's Quit.
@@ -224,6 +246,235 @@ async fn run(args: Args, hooks: Hooks) -> Result<(), RunError> {
         _ = hooks.shutdown.notified() => {}
     }
     log!("shutting down");
+    Ok(())
+}
+
+struct UpdateLoop {
+    cfg: Config,
+    args: Args,
+    bin: PathBuf,
+    exe: Option<PathBuf>,
+}
+
+impl Args {
+    fn clone_paths(&self) -> Args {
+        Args { command: String::new(), config: self.config.clone(), data_dir: self.data_dir.clone(), json: false, plugin: None, bin: None, from: None }
+    }
+}
+
+const FIRST_CHECK: Duration = Duration::from_secs(60);
+const CHECK_EVERY: Duration = Duration::from_secs(6 * 3600);
+const CHECK_AFTER_ERROR: Duration = Duration::from_secs(3600);
+const UPDATE_TICK: Duration = Duration::from_secs(60);
+
+fn http_for_updates() -> Result<reqwest::Client, String> {
+    reqwest::Client::builder()
+        .timeout(Duration::from_secs(600))
+        .user_agent(format!("plasmatrack-client/{}", crate::CLIENT_VERSION))
+        .build()
+        .map_err(|e| e.to_string())
+}
+
+/// Starts a program of the client without a window, detached from this one.
+fn launch(exe: &std::path::Path, args: &[&std::ffi::OsStr]) -> std::io::Result<()> {
+    let mut c = std::process::Command::new(exe);
+    c.args(args).stdin(std::process::Stdio::null()).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null());
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const DETACHED_PROCESS: u32 = 0x0000_0008;
+        const CREATE_NEW_PROCESS_GROUP: u32 = 0x0000_0200;
+        c.creation_flags(DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP);
+    }
+    c.spawn().map(|_| ())
+}
+
+fn path_args(args: &Args) -> [&std::ffi::OsStr; 4] {
+    ["--config".as_ref(), args.config.as_os_str(), "--data-dir".as_ref(), args.data_dir.as_os_str()]
+}
+
+/// Checks for updates, downloads them and, once no game runs, hands over to
+/// `apply-update` and quits. Also keeps the games' plugin in step with `bin`.
+async fn update_loop(u: UpdateLoop, status: SharedStatus, manifest: Arc<Mutex<Vec<pt_core::upload::ManifestEntry>>>, shutdown: Arc<Notify>, notify: Arc<OnceLock<NotifyFn>>) {
+    let keys = pt_core::update::UPDATE_KEYS;
+    let data_dir = u.args.data_dir.clone();
+    let updates_dir = data_dir.join(updater::UPDATES_DIR);
+    let Ok(http) = http_for_updates() else { return };
+    let ini = managed_ini(&u.cfg);
+    tokio::time::sleep(FIRST_CHECK).await;
+    if let Some(o) = updater::read_outcome(&data_dir.join(updater::UPDATED_FILE)) {
+        let _ = std::fs::remove_file(data_dir.join(updater::UPDATED_FILE));
+        let text = format!("Updated from {} to {}.", o.from, o.version);
+        log!("{text}");
+        if let Some(show) = notify.get() {
+            show("PlasmaTrack updated", &text);
+        }
+    }
+    updater::clean(&updates_dir, crate::CLIENT_VERSION);
+    let mut next_check = tokio::time::Instant::now();
+    loop {
+        let (bin, ini2) = (u.bin.clone(), ini.clone());
+        let synced = tokio::task::spawn_blocking(move || updater::sync_plugins(&bin, &ini2)).await.unwrap_or_default();
+        if synced.iter().any(|r| r.changed) {
+            let installs = steam::discover();
+            *manifest.lock().expect("manifest") = manifest::compute(u.exe.as_deref(), Some(&u.args.config), &installs);
+        }
+        let (dir, current) = (updates_dir.clone(), crate::CLIENT_VERSION);
+        let ready = tokio::task::spawn_blocking(move || updater::staged(&dir, current, keys)).await.ok().flatten();
+        if let Some((dir, m)) = ready {
+            let failed = updater::failed_recently(&data_dir, &m.version, crate::now_ms());
+            let connected = status.lock().map(|s| s.plugin_connections > 0).unwrap_or(true);
+            let note = match &failed {
+                Some(e) => format!("PlasmaTrack {} could not be installed ({e}); trying again later", m.version),
+                None => format!("PlasmaTrack {} is ready and installs once ETS2 and ATS are closed", m.version),
+            };
+            if let Ok(mut s) = status.lock() {
+                s.update = Some(note);
+            }
+            if failed.is_none() && !connected && !tokio::task::spawn_blocking(updater::games_running).await.unwrap_or(true) {
+                let exe = dir.join("plasmatrack-clientw.exe");
+                let mut a: Vec<&std::ffi::OsStr> = vec!["apply-update".as_ref(), "--bin".as_ref(), u.bin.as_os_str(), "--from".as_ref(), current.as_ref()];
+                a.extend(path_args(&u.args));
+                match launch(&exe, &a) {
+                    Ok(()) => {
+                        log!("installing PlasmaTrack {}; this client quits", m.version);
+                        shutdown.notify_one();
+                        return;
+                    }
+                    Err(e) => log!("cannot start {}: {e}", exe.display()),
+                }
+            }
+        } else if tokio::time::Instant::now() >= next_check {
+            next_check = tokio::time::Instant::now() + CHECK_EVERY;
+            match updater::fetch_offer(&http, &u.cfg.local.server_url, crate::CLIENT_VERSION, keys).await {
+                Ok(None) => {}
+                Ok(Some(offer)) => {
+                    log!("downloading PlasmaTrack {}", offer.manifest.version);
+                    if let Ok(mut s) = status.lock() {
+                        s.update = Some(format!("Downloading PlasmaTrack {}", offer.manifest.version));
+                    }
+                    if let Err(e) = updater::stage(&http, &u.cfg.local.server_url, &offer, &updates_dir).await {
+                        log!("update download failed: {e}");
+                        next_check = tokio::time::Instant::now() + CHECK_AFTER_ERROR;
+                    }
+                }
+                Err(e) => {
+                    log!("{e}");
+                    next_check = tokio::time::Instant::now() + CHECK_AFTER_ERROR;
+                }
+            }
+        }
+        tokio::time::sleep(UPDATE_TICK).await;
+    }
+}
+
+/// `apply-update`, run from the staged release (docs/UPDATES.md): waits for
+/// the old client to quit, swaps `bin`, rebases the config, updates the
+/// plugin and starts the new client. Anything that fails puts the old version
+/// back and starts it again.
+fn apply_update(args: &Args) -> Result<(), String> {
+    let staged = std::env::current_exe().map_err(|e| e.to_string())?.parent().ok_or("no folder")?.to_path_buf();
+    let bin = args.bin.clone().ok_or("apply-update needs --bin PATH")?;
+    let from = args.from.clone().unwrap_or_else(|| "an older version".into());
+    let m = updater::verify_staged(&staged, pt_core::update::UPDATE_KEYS)?;
+    log!("apply-update: installing {} from {} into {}", m.version, staged.display(), bin.display());
+    let rt = tokio::runtime::Runtime::new().map_err(|e| e.to_string())?;
+    let url = load_config(&args.config).map(|c| status_url(&c)).unwrap_or_else(|_| "http://127.0.0.1:30456/".into());
+    let start = |dir: &std::path::Path| {
+        let mut a: Vec<&std::ffi::OsStr> = vec!["run".as_ref()];
+        a.extend(path_args(args));
+        launch(&dir.join("plasmatrack-clientw.exe"), &a)
+    };
+    let fail = |e: String| -> Result<(), String> {
+        log!("apply-update: {e}");
+        updater::write_outcome(&args.data_dir.join(updater::FAILED_FILE), &updater::Outcome {
+            version: m.version.clone(), from: from.clone(), at_ms: crate::now_ms(), error: Some(e.clone()),
+        });
+        let _ = start(&bin);
+        Err(e)
+    };
+    let gone = rt.block_on(async {
+        for _ in 0..300 {
+            if !client_answers(&url).await {
+                return true;
+            }
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+        false
+    });
+    if !gone {
+        return fail("the running client did not quit".into());
+    }
+    if updater::games_running() {
+        return fail("a game was started".into());
+    }
+    let old = match updater::swap_bin(&staged, &m, &bin) {
+        Ok(old) => old,
+        Err(e) => return fail(e),
+    };
+    // The config this release ships, with the player's [local] values.
+    let old_config = std::fs::read_to_string(&args.config).ok();
+    let rebased = setup::rebase_config(old_config.as_deref(), paths::SAMPLE_CONFIG).and_then(|text| {
+        setup::write_atomically(&args.config, &text).map_err(|e| e.to_string())?;
+        Config::from_toml_str(&text).map_err(|e| e.to_string())
+    });
+    let ini = rebased.as_ref().map(managed_ini).unwrap_or_default();
+    updater::sync_plugins(&bin, &ini);
+    let done = updater::Outcome { version: m.version.clone(), from: from.clone(), at_ms: crate::now_ms(), error: None };
+    updater::write_outcome(&args.data_dir.join(updater::UPDATED_FILE), &done);
+    let started = start(&bin).is_ok()
+        && rt.block_on(async {
+            for _ in 0..60 {
+                tokio::time::sleep(Duration::from_millis(500)).await;
+                if client_answers(&url).await {
+                    return true;
+                }
+            }
+            false
+        });
+    if started && rebased.is_ok() {
+        let _ = std::fs::remove_dir_all(&old);
+        let _ = std::fs::remove_file(args.data_dir.join(updater::FAILED_FILE));
+        log!("apply-update: PlasmaTrack {} is running", m.version);
+        return Ok(());
+    }
+    // Back to the old version: its bin, its config, its plugin.
+    let why = match rebased {
+        Err(e) => format!("config: {e}"),
+        Ok(_) => "the new client did not start".into(),
+    };
+    let _ = std::fs::remove_file(args.data_dir.join(updater::UPDATED_FILE));
+    let _ = rt.block_on(async {
+        let http = local_http()?;
+        http.post(format!("{url}quit")).header(status::QUIT_HEADER.0, status::QUIT_HEADER.1).send().await.ok()
+    });
+    std::thread::sleep(Duration::from_secs(2));
+    if let Err(e) = updater::restore_bin(&bin, &old) {
+        log!("apply-update: {e}");
+    }
+    if let Some(text) = old_config {
+        let _ = setup::write_atomically(&args.config, &text);
+    }
+    let old_ini = load_config(&args.config).map(|c| managed_ini(&c)).unwrap_or(ini);
+    updater::sync_plugins(&bin, &old_ini);
+    fail(why)
+}
+
+/// `check-update`: what the updater would download, verified, without
+/// installing it. Prints the result as JSON.
+fn check_update(args: &Args) -> Result<(), String> {
+    let cfg = load_config(&args.config)?;
+    let rt = tokio::runtime::Runtime::new().map_err(|e| e.to_string())?;
+    let http = http_for_updates()?;
+    let keys = pt_core::update::UPDATE_KEYS;
+    let offer = rt.block_on(updater::fetch_offer(&http, &cfg.local.server_url, crate::CLIENT_VERSION, keys))?;
+    let Some(offer) = offer else {
+        print_json(&serde_json::json!({"current": crate::CLIENT_VERSION, "update": null}));
+        return Ok(());
+    };
+    let dir = rt.block_on(updater::stage(&http, &cfg.local.server_url, &offer, &args.data_dir.join(updater::UPDATES_DIR)))?;
+    let m = updater::verify_staged(&dir, keys)?;
+    print_json(&serde_json::json!({"current": crate::CLIENT_VERSION, "update": m.version, "staged": dir, "files": m.files.len()}));
     Ok(())
 }
 
@@ -288,7 +539,7 @@ fn run_windowless(args: Args) -> Result<(), String> {
         return Ok(());
     }
 
-    let hooks = Hooks::default();
+    let hooks = Hooks { auto_update: true, ..Hooks::default() };
     let (live, live2, shutdown) = (hooks.live.clone(), hooks.live.clone(), hooks.shutdown.clone());
     let data_dir = args.data_dir.clone();
     let cb = tray::Callbacks {
@@ -505,6 +756,8 @@ pub fn main(windowless: bool) -> ExitCode {
         "uninstall-plugin" => report(setup::uninstall_plugin(&steam::discover())),
         "set-local" => set_local(&args),
         "show-local" => show_local(&args),
+        "check-update" => check_update(&args),
+        "apply-update" => apply_update(&args),
         other => Err(format!("unknown command {other:?}")),
     };
     match result {

@@ -12,6 +12,7 @@
 //! - [`status`]: local status page.
 //! - [`cli`]: the command line of both binaries.
 //! - `tray` (Windows): the notification-area icon of the windowless client.
+//! - [`updater`]: downloads signed releases and installs them (docs/UPDATES.md).
 
 pub mod cli;
 pub mod db;
@@ -25,6 +26,7 @@ pub mod status;
 pub mod steam;
 #[cfg(windows)]
 pub mod tray;
+pub mod updater;
 pub mod uploader;
 
 use std::sync::{Mutex, OnceLock};

@@ -14,9 +14,13 @@
           "sha256": "bb22bb22bb22bb22bb22bb22bb22bb22bb22bb22bb22bb22bb22bb22bb22bb22"
         }
       ],
+      "installer": null,
+      "notes": null,
+      "offered": false,
       "platform": "windows",
       "release_id": "rel_0_1_0_windows",
-      "release_version": "0.1.0"
+      "release_version": "0.1.0",
+      "update": null
     }
   ],
   "next_cursor": null,

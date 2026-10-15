@@ -1,0 +1,30 @@
+{
+  "created_at": "2026-10-14T09:00:51.000Z",
+  "files": [
+    {
+      "path_pattern": "*/plugins/plasmatrack.dll",
+      "role": "plugin",
+      "sha256": "e297399f4f0ed2f462a58aa38fcaa2a21af452c662b8819b2649f111ece5ddea"
+    },
+    {
+      "path_pattern": "*/plasmatrack-clientw.exe",
+      "role": "client_binary",
+      "sha256": "a961d42d272f4c8e7500fe116830a1b4d9c105bf46e69b0879946af64a41d4e3"
+    },
+    {
+      "path_pattern": "*/plasmatrack-client.exe",
+      "role": "client_binary",
+      "sha256": "6c15292ba2fab6fcc1ee6c41429256e9a3f6dc6d13e951e2e6cebd4ebea78bd0"
+    }
+  ],
+  "installer": "PlasmaTrack-Setup-0.3.0.exe",
+  "notes": "Uploads resume faster after a network outage.",
+  "offered": false,
+  "platform": "windows",
+  "release_id": "rel_0_3_0_windows",
+  "release_version": "0.3.0",
+  "update": {
+    "bytes": 121,
+    "files": 4
+  }
+}

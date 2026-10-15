@@ -1,7 +1,7 @@
 //! The PlasmaTrack server on Cloudflare Workers (PLAN §7a). All logic lives in
 //! `pt-server`; this crate only adapts it to the bindings in `wrangler.toml`:
 //!
-//! - `DB` (D1), `RAW` (R2), queues `WEBHOOKS` and `OPS`, Durable Object
+//! - `DB` (D1), `RAW`, `BACKUPS` and `RELEASES` (R2), queues `WEBHOOKS` and `OPS`, Durable Object
 //!   `SCORER` (one per player and game), and a Cron Trigger;
 //! - variables `PUBLIC_URL`, `WEBHOOK_URL`, `BOOTSTRAP_ADMINS`;
 //! - secrets `READ_TOKEN`, `BOT_TOKEN`, `WEBHOOK_SECRETS`, `DOWNLOAD_SECRET`
@@ -16,7 +16,7 @@ use pt_server::env::{Host, HostError, HostResult, Row, Settings, Stmt, P};
 use pt_server::http;
 use pt_server::scorer::Scorer;
 use pt_server::webhooks::Delivery;
-use pt_server::{manage, util, webhooks};
+use pt_server::{manage, updates, util, webhooks};
 use serde_json::{json, Value};
 use worker::wasm_bindgen::JsValue;
 use worker::*;
@@ -42,6 +42,7 @@ fn settings(env: &Env) -> Settings {
         public_url: list(env, "PUBLIC_URL", false).into_iter().next().unwrap_or_default(),
         download_secret: list(env, "DOWNLOAD_SECRET", true).into_iter().next().unwrap_or_default(),
         backup_prefix: list(env, "BACKUP_PREFIX", false).into_iter().next().unwrap_or_default(),
+        update_keys: Vec::new(),
     }
 }
 
@@ -164,6 +165,22 @@ impl Host for CfHost {
         bucket.delete(key).await.map_err(host_err)
     }
 
+    async fn release_size(&self, key: &str) -> HostResult<Option<u64>> {
+        let bucket = self.env.bucket("RELEASES").map_err(host_err)?;
+        Ok(bucket.head(key).await.map_err(host_err)?.map(|o| o.size()))
+    }
+
+    async fn release_get(&self, key: &str) -> HostResult<Option<Vec<u8>>> {
+        let bucket = self.env.bucket("RELEASES").map_err(host_err)?;
+        match bucket.get(key).execute().await.map_err(host_err)? {
+            Some(obj) => match obj.body() {
+                Some(b) => Ok(Some(b.bytes().await.map_err(host_err)?)),
+                None => Ok(Some(Vec::new())),
+            },
+            None => Ok(None),
+        }
+    }
+
     async fn poke_scorer(&self, user_id: &str, game: &str) -> HostResult<()> {
         let ns = self.env.durable_object("SCORER").map_err(host_err)?;
         let name = format!("{user_id}:{game}");
@@ -242,8 +259,30 @@ fn to_response(r: http::Response) -> Result<Response> {
     Ok(Response::from_bytes(r.body)?.with_status(r.status).with_headers(h))
 }
 
+/// `GET /dl/releases/…`, streamed from the release bucket: a setup program is
+/// too large to hold in memory. Anything else goes to pt-server.
+async fn release_file(env: &Env, path: &str) -> Result<Option<Response>> {
+    let Some(rest) = path.strip_prefix("/dl/releases/") else { return Ok(None) };
+    let parts: Vec<&str> = rest.split('/').collect();
+    let Some(key) = updates::release_key(&parts) else { return Ok(None) };
+    let Some(obj) = env.bucket("RELEASES")?.get(&key).execute().await? else { return Ok(None) };
+    let size = obj.size();
+    let Some(body) = obj.body() else { return Ok(None) };
+    let h = Headers::new();
+    for (k, v) in updates::file_headers(&key) {
+        h.set(&k, &v)?;
+    }
+    h.set("content-length", &size.to_string())?;
+    Ok(Some(Response::from_stream(body.stream()?)?.with_headers(h)))
+}
+
 #[event(fetch)]
 async fn fetch(req: Request, env: Env, ctx: Context) -> Result<Response> {
+    if req.method() == Method::Get {
+        if let Some(r) = release_file(&env, req.path().as_str()).await? {
+            return Ok(r);
+        }
+    }
     let mut host = CfHost::new(env, Some(ctx));
     if host.settings.public_url.is_empty() {
         // Signed download links point back at whatever URL the bot called.

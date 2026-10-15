@@ -16,6 +16,8 @@ const PAYLOAD = app.isPackaged
 const DATA_DIR = path.join(process.env.LOCALAPPDATA || app.getPath('userData'), 'PlasmaTrack');
 const CONFIG_DIR = path.join(process.env.APPDATA || app.getPath('appData'), 'PlasmaTrack');
 const BIN_DIR = path.join(DATA_DIR, 'bin');
+// Left behind by the client's own updater (docs/UPDATES.md).
+const UPDATE_LEFTOVERS = ['updates', 'bin.new', 'bin.old', 'bin.failed'].map((d) => path.join(DATA_DIR, d));
 const CLIENTW = path.join(BIN_DIR, 'plasmatrack-clientw.exe');
 const RUN_KEY = 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run';
 const RUN_VALUE = 'PlasmaTrack';
@@ -115,6 +117,7 @@ async function install({ serverUrl, token, autostart }) {
   await stopClient();
   // The whole payload: binaries, plugin, licence texts, manifest.json.
   fs.rmSync(BIN_DIR, { recursive: true, force: true });
+  for (const d of UPDATE_LEFTOVERS) fs.rmSync(d, { recursive: true, force: true });
   fs.cpSync(PAYLOAD, BIN_DIR, { recursive: true });
   step(true, `Copied the client to ${BIN_DIR}`);
 
@@ -177,6 +180,7 @@ async function uninstall({ deleteData }) {
   }
 
   fs.rmSync(BIN_DIR, { recursive: true, force: true });
+  for (const d of UPDATE_LEFTOVERS) fs.rmSync(d, { recursive: true, force: true });
   step(true, `Removed ${BIN_DIR}`);
   if (deleteData) {
     fs.rmSync(DATA_DIR, { recursive: true, force: true });

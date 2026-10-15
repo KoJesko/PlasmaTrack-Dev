@@ -18,6 +18,7 @@ pub mod manage;
 pub mod backup;
 pub mod public;
 pub mod route;
+pub mod updates;
 pub mod router;
 
 pub use router::handle;

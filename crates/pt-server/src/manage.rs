@@ -508,9 +508,13 @@ pub async fn config_make_current<H: Host>(h: &H, req: &Request, id: &str) -> Api
     done(h, idem, 200, config_json(&row)).await
 }
 
-fn release_json(r: &Row) -> Value {
-    json!({"release_id": r.s("release_id"), "release_version": r.s("release_version"), "platform": r.s("platform"),
-           "files": r.json("files"), "created_at": rfc3339(r.i("created_at"))})
+pub fn release_json(r: &Row) -> Value {
+    let mut v = json!({"release_id": r.s("release_id"), "release_version": r.s("release_version"), "platform": r.s("platform"),
+           "files": r.json("files"), "created_at": rfc3339(r.i("created_at"))});
+    if let (Value::Object(o), Value::Object(extra)) = (&mut v, crate::updates::release_extras(r)) {
+        o.extend(extra);
+    }
+    v
 }
 
 pub async fn release_create<H: Host>(h: &H, req: &Request) -> ApiResult<Response> {
@@ -547,14 +551,20 @@ pub async fn release_create<H: Host>(h: &H, req: &Request) -> ApiResult<Response
     if store::one(h, "SELECT 1 AS x FROM releases WHERE release_id = ?1", params![&id]).await?.is_some() {
         return Err(ApiError::conflict("This release is already published.", json!({"release_id": id})));
     }
+    let up = crate::updates::check(h, &body, &version, &platform, &files).await?;
     h.batch(vec![
         (
-            "INSERT INTO releases (release_id, release_version, platform, files, created_at, created_by) VALUES (?1, ?2, ?3, ?4, ?5, ?6)".into(),
-            params![&id, &version, &platform, Value::Array(files.clone()).to_string(), h.now_ms(), &admin.discord_user_id],
+            "INSERT INTO releases (release_id, release_version, platform, files, created_at, created_by,
+                                   update_manifest, update_signature, installer, notes, offered)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)"
+                .into(),
+            params![&id, &version, &platform, Value::Array(files.clone()).to_string(), h.now_ms(), &admin.discord_user_id,
+                    up.manifest.clone(), up.signature, up.installer.clone(), up.notes, up.offered],
         ),
         store::audit_stmt(h, Audit {
             actor: &admin.discord_user_id, action: "release.publish", target_kind: "release", target_id: &id,
-            target_user: None, reason: Some(&reason), before: json!({}), after: json!({"files": files.len()}),
+            target_user: None, reason: Some(&reason), before: json!({}),
+            after: json!({"files": files.len(), "update": up.manifest.is_some(), "installer": up.installer, "offered": up.offered}),
         }),
     ])
     .await?;
@@ -570,6 +580,29 @@ pub async fn release_list<H: Host>(h: &H, req: &Request) -> ApiResult<Response> 
     let total = rows.len();
     let items = rows.iter().skip(offset).take(limit).map(release_json).collect();
     Ok(Response::ok(http::list(items, offset, limit, Some(total), offset + limit < total, now)))
+}
+
+/// `POST /api/v1/admin/releases/{id}/offer` with `{"offered": bool, "reason"}`:
+/// starts or stops offering a release's update to clients (docs/UPDATES.md).
+pub async fn release_offer<H: Host>(h: &H, req: &Request, id: &str) -> ApiResult<Response> {
+    let (admin, idem, body, reason) = begin!(h, req);
+    let Some(offered) = body.get("offered").and_then(Value::as_bool) else {
+        return Err(ApiError::field("offered", "true or false"));
+    };
+    let row = store::one(h, "SELECT * FROM releases WHERE release_id = ?1", params![id]).await?.ok_or_else(|| ApiError::not_found("release"))?;
+    if offered && row.opt_s("update_manifest").is_none() {
+        return Err(ApiError::field("offered", "this release has no update"));
+    }
+    h.batch(vec![
+        ("UPDATE releases SET offered = ?2 WHERE release_id = ?1".into(), params![id, offered]),
+        store::audit_stmt(h, Audit {
+            actor: &admin.discord_user_id, action: "release.offer", target_kind: "release", target_id: id,
+            target_user: None, reason: Some(&reason), before: json!({"offered": row.b("offered")}), after: json!({"offered": offered}),
+        }),
+    ])
+    .await?;
+    let row = store::one(h, "SELECT * FROM releases WHERE release_id = ?1", params![id]).await?.expect("exists");
+    done(h, idem, 200, release_json(&row)).await
 }
 
 /// Discord IDs of players whose latest session used the target.

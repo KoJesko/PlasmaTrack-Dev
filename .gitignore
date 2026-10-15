@@ -30,3 +30,6 @@ Thumbs.db
 /crates/pt-worker/.wrangler/
 /crates/pt-worker/.dev.vars*
 /crates/pt-worker/.secrets.*
+
+# Signs client updates (scripts/make-release-key.mjs); keep an offline copy
+/.release-signing-key.pem

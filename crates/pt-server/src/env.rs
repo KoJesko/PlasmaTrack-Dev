@@ -101,6 +101,9 @@ pub struct Settings {
     /// Where this server's backups go in the backup bucket, ending in `/`
     /// (docs/SERVER.md).
     pub backup_prefix: String,
+    /// Keys whose signed updates may be published; empty means the release
+    /// keys built into every client (`pt_core::update::UPDATE_KEYS`).
+    pub update_keys: Vec<[u8; 32]>,
 }
 
 #[allow(async_fn_in_trait)]
@@ -125,6 +128,11 @@ pub trait Host {
     async fn backup_put(&self, key: &str, bytes: Vec<u8>) -> HostResult<()>;
     async fn backup_list(&self, prefix: &str) -> HostResult<Vec<String>>;
     async fn backup_delete(&self, key: &str) -> HostResult<()>;
+
+    /// The release bucket (client updates and setup programs, docs/UPDATES.md):
+    /// an object's size, and its bytes.
+    async fn release_size(&self, key: &str) -> HostResult<Option<u64>>;
+    async fn release_get(&self, key: &str) -> HostResult<Option<Vec<u8>>>;
 
     /// Asks the player's scorer to process new chunks. It must not wait for the
     /// scoring to finish (the Worker hands it to the Durable Object).

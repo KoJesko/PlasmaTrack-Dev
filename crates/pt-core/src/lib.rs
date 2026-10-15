@@ -12,6 +12,7 @@ pub mod rules;
 pub mod timeline;
 pub mod trace;
 pub mod units;
+pub mod update;
 pub mod upload;
 pub mod wire;
 

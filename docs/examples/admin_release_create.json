@@ -7,7 +7,11 @@
       "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
     }
   ],
+  "installer": null,
+  "notes": null,
+  "offered": false,
   "platform": "windows",
   "release_id": "rel_0_2_0_windows",
-  "release_version": "0.2.0"
+  "release_version": "0.2.0",
+  "update": null
 }
