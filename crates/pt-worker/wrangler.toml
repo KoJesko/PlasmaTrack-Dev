@@ -15,6 +15,9 @@
 name = "plasmatrack-server"
 main = "build/worker/shim.mjs"
 compatibility_date = "2026-10-01"
+# Webhooks go to the bot, another Worker on this account's workers.dev: without
+# this flag Cloudflare refuses that fetch (error 1042, answered as 404).
+compatibility_flags = ["global_fetch_strictly_public"]
 workers_dev = true
 
 [build]
