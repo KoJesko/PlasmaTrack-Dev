@@ -6,7 +6,7 @@ use serde_json::{json, Value};
 use crate::env::{Host, RowExt};
 use crate::http::{self, ApiError, ApiResult, Request, Response};
 use crate::store::{self, Audit, User};
-use crate::util::{self, mi, round2};
+use crate::util::{self, mi, rfc3339, round2};
 use crate::{auth, config, jobs, params};
 
 pub fn game(s: &str) -> ApiResult<Game> {
@@ -274,6 +274,166 @@ pub async fn job<H: Host>(h: &H, req: &Request, raw_id: &str) -> ApiResult<Respo
     Ok(Response::ok(v))
 }
 
+// ---- history buckets (§7) --------------------------------------------------------
+
+const DAY_MS: i64 = 86_400_000;
+pub const MAX_BUCKETS: usize = 400;
+
+fn bucket_start(kind: &str, ms: i64) -> i64 {
+    match kind {
+        "week" => {
+            let (y, w) = util::iso_week_of(ms);
+            util::iso_week_start(y, w)
+        }
+        "month" => {
+            let (y, m) = util::year_month_of(ms);
+            util::month_start(y, m)
+        }
+        _ => ms - ms.rem_euclid(DAY_MS),
+    }
+}
+
+fn bucket_next(kind: &str, start: i64) -> i64 {
+    match kind {
+        "week" => start + 7 * DAY_MS,
+        "month" => bucket_start("month", start + 32 * DAY_MS),
+        _ => start + DAY_MS,
+    }
+}
+
+/// An instant or a date (`2026-10-15`, taken as 00:00 UTC).
+fn instant_or_date(name: &str, s: &str) -> ApiResult<i64> {
+    util::parse_rfc3339(s)
+        .or_else(|| util::parse_rfc3339(&format!("{s}T00:00:00Z")))
+        .ok_or_else(|| ApiError::bad_request(&format!("{name} is an RFC 3339 instant or a date")).details(json!({name: s})))
+}
+
+/// Sums of counted jobs, as one bucket's numbers.
+#[derive(Default, Clone)]
+struct Sums {
+    jobs: i64,
+    points: f64,
+    world_km: f64,
+    game_km: f64,
+    fuel_l: f64,
+    income: f64,
+    damage_sum: f64,
+    damage_n: i64,
+}
+
+impl Sums {
+    fn add(&mut self, r: &crate::env::Row) {
+        self.jobs += 1;
+        self.points += r.f("points");
+        self.world_km += r.f("world_km");
+        self.game_km += r.f("game_km");
+        self.fuel_l += r.f("fuel");
+        self.income += r.f("income");
+        if let Some(d) = r.opt_f("damage") {
+            self.damage_sum += d;
+            self.damage_n += 1;
+        }
+    }
+
+    fn merge(&mut self, o: &Sums) {
+        self.jobs += o.jobs;
+        self.points += o.points;
+        self.world_km += o.world_km;
+        self.game_km += o.game_km;
+        self.fuel_l += o.fuel_l;
+        self.income += o.income;
+        self.damage_sum += o.damage_sum;
+        self.damage_n += o.damage_n;
+    }
+
+    fn json(&self, cfg: &pt_core::Config) -> Value {
+        json!({"job_count": self.jobs, "points": cfg.rules.floor_points(self.points),
+               "world_km": round2(self.world_km), "world_mi": mi(self.world_km),
+               "game_km": round2(self.game_km), "game_mi": mi(self.game_km),
+               "fuel_used_l": round2(self.fuel_l), "income": self.income.round() as i64,
+               "damage_pct_avg": (self.damage_n > 0).then(|| round2(self.damage_sum / self.damage_n as f64))})
+    }
+}
+
+const COUNTED_COLUMNS: &str = "delivered_at, points, world_km, game_km, json_extract(summary, '$.fuel_used_l') AS fuel,
+    json_extract(summary, '$.income') AS income, json_extract(summary, '$.damage_pct') AS damage";
+
+/// `GET /api/v1/public/{game}/players/{discord_id}/history?bucket=day|week|month&from=&to=`
+pub async fn player_history<H: Host>(h: &H, req: &Request, g: &str, discord_id: &str) -> ApiResult<Response> {
+    auth::service(h, req)?;
+    let g = game(g)?;
+    let user = linked(h, discord_id).await?;
+    let kind = req.q("bucket").unwrap_or("day");
+    if !matches!(kind, "day" | "week" | "month") {
+        return Err(ApiError::bad_request("bucket is day, week or month").details(json!({"bucket": kind})));
+    }
+    let now = h.now_ms();
+    let to = match req.q("to") {
+        Some(s) => instant_or_date("to", s)?,
+        None => now,
+    };
+    let last = bucket_start(kind, to);
+    let first = match req.q("from") {
+        Some(s) => bucket_start(kind, instant_or_date("from", s)?),
+        None => {
+            let back = match kind {
+                "week" => 11,
+                "month" => 11,
+                _ => 29,
+            };
+            (0..back).fold(last, |b, _| bucket_start(kind, b - 1))
+        }
+    };
+    if first > last {
+        return Err(ApiError::bad_request("from is after to"));
+    }
+    let mut starts = vec![first];
+    while *starts.last().expect("one") < last {
+        let next = bucket_next(kind, *starts.last().expect("one"));
+        starts.push(next);
+        if starts.len() > MAX_BUCKETS {
+            return Err(ApiError::bad_request(&format!("at most {MAX_BUCKETS} buckets")).details(json!({"max_buckets": MAX_BUCKETS})));
+        }
+    }
+    let end = bucket_next(kind, last);
+    let counted = "user_id = ?1 AND game = ?2 AND outcome IN ('valid', 'approved')";
+    let mut before = Sums::default();
+    for r in h.all(&format!("SELECT {COUNTED_COLUMNS} FROM jobs WHERE {counted} AND delivered_at < ?3"), params![&user.user_id, g.as_str(), first]).await? {
+        before.add(&r);
+    }
+    let rows = h
+        .all(
+            &format!("SELECT {COUNTED_COLUMNS} FROM jobs WHERE {counted} AND delivered_at >= ?3 AND delivered_at < ?4 ORDER BY delivered_at"),
+            params![&user.user_id, g.as_str(), first, end],
+        )
+        .await?;
+    let cfg = config::scoring(h).await?.cfg;
+    let mut sums = vec![Sums::default(); starts.len()];
+    for r in &rows {
+        let t = r.i("delivered_at");
+        let i = starts.partition_point(|s| *s <= t).saturating_sub(1);
+        sums[i].add(r);
+    }
+    let mut running = before.clone();
+    let items: Vec<Value> = starts
+        .iter()
+        .zip(&sums)
+        .map(|(s, b)| {
+            running.merge(b);
+            let mut v = b.json(&cfg);
+            v["start"] = rfc3339(*s).into();
+            v["end"] = rfc3339(bucket_next(kind, *s)).into();
+            v["running"] = running.json(&cfg);
+            v
+        })
+        .collect();
+    Ok(Response::ok(json!({
+        "game": g.as_str(), "discord_user_id": user.discord_user_id, "bucket": kind,
+        "from": rfc3339(first), "to": rfc3339(end), "currency": jobs::currency(g),
+        "before": before.json(&cfg), "items": items,
+    })))
+}
+
 // ---- leaderboards (§5) -----------------------------------------------------------
 
 /// `[start, end)` of a period, and its `at` label.
@@ -326,12 +486,24 @@ pub async fn leaderboard<H: Host>(h: &H, req: &Request, g: &str) -> ApiResult<Re
         return Err(ApiError::bad_request("division is all or singleplayer"));
     }
     let (limit, offset) = http::page(req, now)?;
+    // What to rank by (owner, 2026-10-15); damage ranks the least first.
+    let sort = req.q("sort").unwrap_or("points");
+    if !matches!(sort, "points" | "distance" | "game_distance" | "fuel" | "income" | "damage") {
+        return Err(ApiError::bad_request("sort is points, distance, game_distance, fuel, income or damage").details(json!({"sort": sort})));
+    }
+    let order = req.q("order").unwrap_or(if sort == "damage" { "asc" } else { "desc" });
+    if !matches!(order, "asc" | "desc") {
+        return Err(ApiError::bad_request("order is asc or desc"));
+    }
     let (from, to) = range.unwrap_or((i64::MIN, i64::MAX));
     let rows = h
         .all(
             &format!(
                 "SELECT u.user_id, u.discord_user_id, u.display_name, SUM(j.points) AS points, COUNT(*) AS n,
-                        SUM(j.world_km) AS world_km, SUM(j.game_km) AS game_km, MAX(j.delivered_at) AS reached
+                        SUM(j.world_km) AS world_km, SUM(j.game_km) AS game_km, MAX(j.delivered_at) AS reached,
+                        COALESCE(SUM(json_extract(j.summary, '$.fuel_used_l')), 0) AS fuel,
+                        COALESCE(SUM(json_extract(j.summary, '$.income')), 0) AS income,
+                        AVG(json_extract(j.summary, '$.damage_pct')) AS damage
                  FROM jobs j JOIN users u ON u.user_id = j.user_id
                  WHERE j.game = ?1 AND j.outcome IN ('valid', 'approved') AND u.disabled = 0
                    AND j.delivered_at >= ?2 AND j.delivered_at < ?3 {}
@@ -342,23 +514,43 @@ pub async fn leaderboard<H: Host>(h: &H, req: &Request, g: &str) -> ApiResult<Re
         )
         .await?;
     let cfg = config::scoring(h).await?.cfg;
-    let mut board: Vec<(f64, i64, String, Value)> = rows
+    // (value ranked by, reached, user, item); players with no damage data last.
+    let mut board: Vec<(Option<f64>, i64, String, Value)> = rows
         .iter()
         .map(|r| {
             let pts = cfg.rules.floor_points(r.f("points"));
             let (w, gk) = (r.f("world_km"), r.f("game_km"));
+            let damage = r.opt_f("damage").map(round2);
             let item = json!({"user_id": r.s("user_id"), "discord_user_id": r.s("discord_user_id"),
                 "display_name": r.s("display_name"), "points": pts, "job_count": r.i("n"),
-                "world_km": round2(w), "world_mi": mi(w), "game_km": round2(gk), "game_mi": mi(gk)});
-            (pts, r.i("reached"), r.s("user_id"), item)
+                "world_km": round2(w), "world_mi": mi(w), "game_km": round2(gk), "game_mi": mi(gk),
+                "fuel_used_l": round2(r.f("fuel")), "income": r.f("income").round() as i64, "damage_pct_avg": damage});
+            let key = match sort {
+                "distance" => Some(round2(w)),
+                "game_distance" => Some(round2(gk)),
+                "fuel" => Some(round2(r.f("fuel"))),
+                "income" => Some(r.f("income").round()),
+                "damage" => damage,
+                _ => Some(pts),
+            };
+            (key, r.i("reached"), r.s("user_id"), item)
         })
         .collect();
-    board.sort_by(|a, b| b.0.total_cmp(&a.0).then(a.1.cmp(&b.1)).then(a.2.cmp(&b.2)));
+    board.sort_by(|a, b| {
+        let by = match (a.0, b.0) {
+            (Some(x), Some(y)) if order == "asc" => x.total_cmp(&y),
+            (Some(x), Some(y)) => y.total_cmp(&x),
+            (Some(_), None) => std::cmp::Ordering::Less,
+            (None, Some(_)) => std::cmp::Ordering::Greater,
+            (None, None) => std::cmp::Ordering::Equal,
+        };
+        by.then(a.1.cmp(&b.1)).then(a.2.cmp(&b.2))
+    });
     let total = board.len();
     let mut items = Vec::new();
     let mut rank = 0;
-    for (i, (pts, _, _, item)) in board.iter().enumerate() {
-        if i == 0 || *pts != board[i - 1].0 {
+    for (i, (key, _, _, item)) in board.iter().enumerate() {
+        if i == 0 || *key != board[i - 1].0 {
             rank = i + 1;
         }
         if i >= offset && i < offset + limit {
@@ -372,6 +564,9 @@ pub async fn leaderboard<H: Host>(h: &H, req: &Request, g: &str) -> ApiResult<Re
     v["period"] = kind.into();
     v["at"] = at;
     v["division"] = division.into();
+    v["sort"] = sort.into();
+    v["order"] = order.into();
+    v["currency"] = jobs::currency(g).into();
     v["period_start"] = range.map_or(Value::Null, |r| util::rfc3339(r.0).into());
     v["period_end"] = range.map_or(Value::Null, |r| util::rfc3339(r.1).into());
     v["generated_at"] = util::rfc3339(now).into();

@@ -63,6 +63,9 @@ pub struct Sample {
     pub mp_time_offset: Option<i64>,
     /// First trailer hitched (`trailer.0.connected`); absent in older captures.
     pub trailer_connected: Option<bool>,
+    /// Cargo damage 0-1 (`job.cargo.damage`), for the job graphs.
+    #[serde(default)]
+    pub cargo_damage: Option<f64>,
 }
 
 #[derive(Debug, thiserror::Error, PartialEq, Eq)]
@@ -106,6 +109,7 @@ fn parse_sample(ch: &Value) -> Sample {
         local_scale: f("local.scale"),
         mp_time_offset: ch.get("multiplayer.time.offset").and_then(Value::as_i64),
         trailer_connected: ch.get("trailer.0.connected").and_then(Value::as_bool),
+        cargo_damage: f("job.cargo.damage"),
     }
 }
 

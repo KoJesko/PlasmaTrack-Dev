@@ -334,8 +334,23 @@ pub async fn recalculate_job<H: Host>(h: &H, req: &Request, raw_id: &str) -> Api
 
 // ---- series (§5) -----------------------------------------------------------------
 
-/// Bucket start, speed min and max, fuel min and max.
-type Bucket = (i64, f64, f64, Option<f64>, Option<f64>);
+/// One series bucket: start, speed and fuel and damage ranges, and the
+/// cumulative distances at its last point.
+#[derive(Clone)]
+struct Bucket {
+    t: i64,
+    speed: (f64, f64),
+    fuel: Option<(f64, f64)>,
+    damage: Option<(f64, f64)>,
+    game_km: f64,
+    world_km: f64,
+}
+
+fn widen(r: &mut Option<(f64, f64)>, v: Option<f64>) {
+    if let Some(x) = v {
+        *r = Some(r.map_or((x, x), |(lo, hi)| (lo.min(x), hi.max(x))));
+    }
+}
 
 pub async fn load_job<H: Host>(h: &H, job_id: &str) -> ApiResult<(Job, Vec<(u32, String)>)> {
     let blob = h.blob_get(&jobs::blob_key(job_id)).await?.ok_or_else(|| ApiError::not_found("job data"))?;
@@ -345,42 +360,70 @@ pub async fn load_job<H: Host>(h: &H, job_id: &str) -> ApiResult<(Job, Vec<(u32,
     Ok((job, serde_json::from_value(v["sess_ids"].clone()).unwrap_or_default()))
 }
 
-pub async fn series<H: Host>(h: &H, req: &Request, raw_id: &str) -> ApiResult<Response> {
-    auth::admin(h, req).await?;
-    let max_points = match req.q("max_points") {
-        None => 1000,
-        Some(s) => s.parse::<usize>().ok().filter(|n| (1..=4000).contains(n)).ok_or_else(|| ApiError::bad_request("max_points is 1..4000"))?,
-    };
-    let row = job_row(h, raw_id).await?;
+fn max_points(req: &Request) -> ApiResult<usize> {
+    match req.q("max_points") {
+        None => Ok(1000),
+        Some(s) => s.parse::<usize>().ok().filter(|n| (1..=4000).contains(n)).ok_or_else(|| ApiError::bad_request("max_points is 1..4000")),
+    }
+}
+
+/// The series of a job (§5). `public` (PUBLIC_API §3): no reverted windows
+/// and no review markers.
+pub async fn series_json<H: Host>(h: &H, row: &Row, max_points: usize, public: bool) -> ApiResult<Value> {
     let (job, _) = load_job(h, &row.s("job_id")).await?;
     let cfg = config::scoring(h).await?.cfg;
     let limits = cfg.rules.speed.limits(job.game);
     let (Some(first), Some(last)) = (job.kept.first(), job.kept.last()) else {
-        return Ok(Response::ok(json!({"job_id": row.s("job_id"), "game": row.s("game"), "bucket_s": 0.0,
+        return Ok(json!({"job_id": row.s("job_id"), "game": row.s("game"), "bucket_s": 0.0,
             "penalty_over_mph": limits.penalty_over_mph, "invalid_over_mph": limits.invalid_over_mph,
-            "points": [], "windows": [], "markers": []})));
+            "points": [], "windows": [], "markers": []}));
     };
     let span = (last.wall_ms - first.wall_ms).max(1);
     let bucket_ms = (span as f64 / max_points as f64).max(1.0);
     let mut buckets: Vec<Option<Bucket>> = vec![None; max_points];
-    for p in &job.kept {
+    // Distance from the job's start: the odometer (in game), and the scored
+    // part at 1:1 (loaded and hitched, or any driving for World of Trucks).
+    let wot = job.info.is_world_of_trucks();
+    let gaps: Vec<_> = job.active_gaps().collect();
+    let (mut game_km, mut world_km) = (0.0f64, 0.0f64);
+    for (k, p) in job.kept.iter().enumerate() {
+        if let Some(a) = k.checked_sub(1).map(|j| &job.kept[j]) {
+            if let (true, Some(x), Some(y)) = (a.run == p.run && a.truck == p.truck, a.odometer_km, p.odometer_km) {
+                let d = (y - x).max(0.0);
+                game_km += d;
+                if wot || (p.cargo_loaded && p.trailer_connected) {
+                    world_km += d / p.local_scale;
+                }
+            }
+        }
+        for g in gaps.iter().filter(|g| g.to_sess == p.sess && g.to_seq == p.seq) {
+            let d = g.game_km.unwrap_or(0.0).max(0.0);
+            game_km += d;
+            if g.counted || wot {
+                world_km += d / g.local_scale;
+            }
+        }
         let i = (((p.wall_ms - first.wall_ms) as f64 / bucket_ms) as usize).min(max_points - 1);
         let mph = p.mph();
-        let b = buckets[i].get_or_insert((first.wall_ms + (i as f64 * bucket_ms) as i64, mph, mph, p.fuel_l, p.fuel_l));
-        b.1 = b.1.min(mph);
-        b.2 = b.2.max(mph);
-        if let Some(f) = p.fuel_l {
-            b.3 = Some(b.3.map_or(f, |x| x.min(f)));
-            b.4 = Some(b.4.map_or(f, |x| x.max(f)));
-        }
+        let b = buckets[i].get_or_insert(Bucket {
+            t: first.wall_ms + (i as f64 * bucket_ms) as i64, speed: (mph, mph), fuel: None, damage: None, game_km, world_km,
+        });
+        b.speed = (b.speed.0.min(mph), b.speed.1.max(mph));
+        widen(&mut b.fuel, p.fuel_l);
+        widen(&mut b.damage, p.cargo_damage.map(|d| d * 100.0));
+        b.game_km = game_km;
+        b.world_km = world_km;
     }
     let r2 = util::round2;
     let points: Vec<Value> = buckets
         .into_iter()
         .flatten()
-        .map(|(t, lo, hi, flo, fhi)| {
-            json!({"t": rfc3339(t), "speed_mph_min": r2(lo), "speed_mph_max": r2(hi),
-                   "fuel_l_min": flo.map(r2), "fuel_l_max": fhi.map(r2), "reverted": false})
+        .map(|b| {
+            json!({"t": rfc3339(b.t), "speed_mph_min": r2(b.speed.0), "speed_mph_max": r2(b.speed.1),
+                   "fuel_l_min": b.fuel.map(|f| r2(f.0)), "fuel_l_max": b.fuel.map(|f| r2(f.1)),
+                   "damage_pct_min": b.damage.map(|d| r2(d.0)), "damage_pct_max": b.damage.map(|d| r2(d.1)),
+                   "game_km": r2(b.game_km), "game_mi": util::mi(b.game_km), "world_km": util::round3(b.world_km),
+                   "world_mi": util::round3(pt_core::units::km_to_mi(b.world_km)), "reverted": false})
         })
         .collect();
     let mut windows = Vec::new();
@@ -399,9 +442,11 @@ pub async fn series<H: Host>(h: &H, req: &Request, raw_id: &str) -> ApiResult<Re
             windows.push(json!({"kind": kind, "from": rfc3339(from), "to": rfc3339(*wall_ms)}));
         }
     }
-    for br in &job.reverted {
-        if let (Some(a), Some(b)) = (br.points.first(), br.points.last()) {
-            windows.push(json!({"kind": "reverted", "from": rfc3339(a.wall_ms), "to": rfc3339(b.wall_ms)}));
+    if !public {
+        for br in &job.reverted {
+            if let (Some(a), Some(b)) = (br.points.first(), br.points.last()) {
+                windows.push(json!({"kind": "reverted", "from": rfc3339(a.wall_ms), "to": rfc3339(b.wall_ms)}));
+            }
         }
     }
     let result = pt_core::rules::evaluate(&job, &cfg, &Default::default());
@@ -409,21 +454,44 @@ pub async fn series<H: Host>(h: &H, req: &Request, raw_id: &str) -> ApiResult<Re
         windows.push(json!({"kind": "refuel", "from": rfc3339(f.wall_ms),
             "to": rfc3339(f.wall_ms + (f.duration_s * 1000.0) as i64), "litres": r2(f.litres)}));
     }
-    let markers: Vec<Value> = result
-        .review
-        .iter()
-        .filter_map(|x| match x {
-            pt_core::rules::ReviewReason::FuelJump { wall_ms, litres } => {
-                Some(json!({"kind": "fuel_jump", "at": rfc3339(*wall_ms), "litres": r2(*litres)}))
-            }
-            _ => None,
-        })
-        .collect();
-    Ok(Response::ok(json!({
+    let markers: Vec<Value> = if public {
+        Vec::new()
+    } else {
+        result
+            .review
+            .iter()
+            .filter_map(|x| match x {
+                pt_core::rules::ReviewReason::FuelJump { wall_ms, litres } => {
+                    Some(json!({"kind": "fuel_jump", "at": rfc3339(*wall_ms), "litres": r2(*litres)}))
+                }
+                _ => None,
+            })
+            .collect()
+    };
+    Ok(json!({
         "job_id": row.s("job_id"), "game": row.s("game"), "bucket_s": r2(bucket_ms / 1000.0),
         "penalty_over_mph": limits.penalty_over_mph, "invalid_over_mph": limits.invalid_over_mph,
         "points": points, "windows": windows, "markers": markers,
-    })))
+    }))
+}
+
+pub async fn series<H: Host>(h: &H, req: &Request, raw_id: &str) -> ApiResult<Response> {
+    auth::admin(h, req).await?;
+    let n = max_points(req)?;
+    let row = job_row(h, raw_id).await?;
+    Ok(Response::ok(series_json(h, &row, n, false).await?))
+}
+
+/// `GET /api/v1/public/jobs/{job_id}/series`: everyone, but only for counted
+/// jobs (owner, 2026-10-15: the community helps catch cheating).
+pub async fn public_series<H: Host>(h: &H, req: &Request, raw_id: &str) -> ApiResult<Response> {
+    auth::service(h, req)?;
+    let n = max_points(req)?;
+    let row = job_row(h, raw_id).await?;
+    if !matches!(row.s("outcome").as_str(), "valid" | "approved") {
+        return Err(ApiError::not_found("job"));
+    }
+    Ok(Response::ok(series_json(h, &row, n, true).await?))
 }
 
 // ---- trace (§6) ------------------------------------------------------------------

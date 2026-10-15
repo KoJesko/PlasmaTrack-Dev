@@ -4,7 +4,9 @@
     "id": "househd_appl",
     "name": "Household Appliances"
   },
+  "currency": "USD",
   "custom_map": null,
+  "damage_pct": 0.0,
   "delivered_at": "2026-10-14T09:00:01.000Z",
   "destination": {
     "city_id": "chicago",
@@ -44,10 +46,12 @@
       "world_mi": 0.0
     }
   },
+  "fuel_used_l": 23.14,
   "game": "ats",
   "game_km": 70.25,
   "game_mi": 43.65,
   "held_points": null,
+  "income": 4314,
   "job_id": "A2NDM8HC",
   "market": "cargo_market",
   "multiplayer": {

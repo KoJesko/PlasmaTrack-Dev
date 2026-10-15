@@ -53,6 +53,9 @@ pub struct Point {
     /// here, but distance carries on (the odometer does not move on a teleport).
     #[serde(default)]
     pub after_teleport: bool,
+    /// Cargo damage 0-1 when the game reports it (job graphs only).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cargo_damage: Option<f64>,
 }
 
 impl Point {
@@ -446,6 +449,7 @@ impl Timeline {
             mp_time_offset: s.mp_time_offset.unwrap_or(0),
             truckersmp: self.truckersmp,
             after_teleport: false,
+            cargo_damage: s.cargo_damage,
         }
     }
 

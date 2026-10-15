@@ -223,3 +223,10 @@ These answer the bot's open questions "(Q)". **The project owner confirmed all o
   `adjusted_scale`. A city-scale section must be at least 3 mi in game (1 mi real), or it is
   rejected. Up to 12 images per job; adjusted-scale images carry `section`. Moderators edit
   sections by number (ADMIN_API §14). Migration 0003.
+- 2026-10-15 (owner): data for graphs.
+  - **Job summaries** gain `fuel_used_l`, `damage_pct` (cargo) and `income` with `currency`.
+  - **New:** `GET /public/{game}/players/{id}/history` (day/week/month buckets with running
+    totals) and the public job series for `valid`/`approved` jobs.
+  - **Leaderboards** take `sort` and `order`.
+  - **Series points** gain cargo damage and distance from the start (PUBLIC_API §3, §5;
+    ADMIN_API §5).

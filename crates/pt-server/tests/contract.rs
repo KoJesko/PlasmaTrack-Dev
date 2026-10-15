@@ -259,6 +259,9 @@ fn scenario(t: &TestHost) -> (Vec<(Call, Value)>, BTreeMap<String, Value>) {
     r.call("public_job", "Public", "Job detail", "GET", "/api/v1/public/jobs/{job_id}", &format!("/api/v1/public/jobs/{valid}"), None, Read, 200);
     r.call("public_job_pending", "Public", "", "GET", "/api/v1/public/jobs/{job_id}", &format!("/api/v1/public/jobs/{pending}"), None, Read, 200);
     r.call("public_job_route", "Public", "Route GeoJSON", "GET", "/api/v1/public/jobs/{job_id}/route", &format!("/api/v1/public/jobs/{valid}/route"), None, Read, 200);
+    r.call("public_player_history", "Public", "A player's totals per day, week or month, with running totals", "GET", "/api/v1/public/{game}/players/{discord_id}/history", &format!("/api/v1/public/ets2/players/{p}/history?bucket=week&from=2026-10-05&to=2026-10-18"), None, Read, 200);
+    r.call("public_job_series", "Public", "Speed, fuel, damage and distance over a counted job", "GET", "/api/v1/public/jobs/{job_id}/series", &format!("/api/v1/public/jobs/{valid}/series?max_points=20"), None, Read, 200);
+    r.call("public_leaderboard_by_fuel", "Public", "", "GET", "/api/v1/public/{game}/leaderboard", "/api/v1/public/ets2/leaderboard?sort=fuel", None, Read, 200);
     r.call("public_leaderboard", "Public", "Leaderboard", "GET", "/api/v1/public/{game}/leaderboard", "/api/v1/public/ets2/leaderboard?period=month&at=2026-10", None, Read, 200);
 
     r.call("admin_review_queue", "Review", "Jobs waiting for a moderator", "GET", "/api/v1/admin/review-queue", "/api/v1/admin/review-queue", None, Admin, 200);

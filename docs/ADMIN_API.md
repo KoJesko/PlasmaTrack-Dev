@@ -207,6 +207,15 @@ downsampling.
 ```
 
 - **Speed** is world mph, the same as the speedometer.
+- **Each point also has** (owner, 2026-10-15, for graphs):
+  - `damage_pct_min` and `damage_pct_max`: cargo damage 0–100, or `null` where not reported;
+  - `game_km`/`game_mi`: the odometer distance from the job's start, all driving;
+  - `world_km`/`world_mi`: the scored part at 1:1 from the start.
+
+  The distances are taken at the bucket's end. Older jobs show `null` damage until their data is
+  replayed.
+- **Public version:** `GET /api/v1/public/jobs/{job_id}/series`, for `valid` and `approved` jobs
+  only, without reverted windows and review markers (PUBLIC_API §3).
 - **Pauses, ferries and trains** are excluded from overspeed. Their windows are listed so the
   chart can shade them.
 - **Size:** about 120 bytes per point, so 4000 points stay under 500 KB.

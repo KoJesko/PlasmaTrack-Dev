@@ -140,9 +140,22 @@ comma-separated outcomes. Each item is a **job summary**:
   "market": "cargo_market",
   "delivered_at": "2026-10-13T21:25:03.512Z",
   "reported_delivered_at": "2026-10-13T21:25:00.070Z",
-  "multiplayer": {"kind": "truckersmp", "truckersmp": {"server_id": 4, "account_id": 1234567}}
+  "multiplayer": {"kind": "truckersmp", "truckersmp": {"server_id": 4, "account_id": 1234567}},
+  "fuel_used_l": 41.2, "damage_pct": 0.4, "income": 6767, "currency": "EUR"
 }
 ```
+
+**Fuel, damage and income** (public, like distance and points; owner, 2026-10-15). Each is
+`null` when unknown:
+
+- **`fuel_used_l`:** litres used on the job; the bot converts to gallons for ATS.
+- **`damage_pct`:** **cargo** damage at delivery, 0–100. The tracker doesn't record truck wear, so
+  a manual job's `damage` means cargo damage too.
+- **`income`:** whole units of `currency` (`EUR` for ETS2, `USD` for ATS).
+  - **Tracked jobs:** the game's revenue for the job.
+  - **Manual jobs:** the submitted `profit`.
+- **Moderator corrections** (ADMIN_API §14) of `fuel_used`, `damage` or `profit` show here.
+- **Older jobs** show `null` until they are re-scored.
 
 - **`outcome`** is one of:
   - `valid`, `approved`: count on the leaderboard;
@@ -173,6 +186,23 @@ comma-separated outcomes. Each item is a **job summary**:
 The same list across **both games**, for a player's whole history: the same job summaries,
 newest first, paginated with `total`, with the `?outcome=` filter. Each item's `game` says which
 game it is from. This is the only endpoint that mixes the games.
+
+### `GET /api/v1/public/jobs/{job_id}/series?max_points=1000`: graphs within a job
+
+- **Who can see it:** everyone, but only for `valid` and `approved` jobs (owner: "the community
+  helps catch cheating"). Every other outcome, and every manual job, gives `404`.
+- **What it is:** the same shape as the admin series (ADMIN_API §5), with three differences:
+  - no `reverted` windows;
+  - no review `markers` (always `[]`);
+  - only kept driving, as in the public route.
+- **Each point has:**
+  - speed, fuel and cargo damage ranges for its time bucket;
+  - the distance from the job's start at the bucket's end:
+    - `game_km`/`game_mi`: the odometer, all driving;
+    - `world_km`/`world_mi`: the scored part at 1:1.
+
+    These are the tracked figures. The job's final world distance comes from the game's delivery
+    figure, so the two can differ slightly.
 
 ### `GET /api/v1/public/jobs/{job_id}`: job detail
 
@@ -290,27 +320,66 @@ The job summary plus:
 | `period` | `all`, `month`, `week` | `all` |
 | `at` | for `month`: `2026-10`; for `week`: ISO week `2026-W42` | the current period |
 | `division` | `all`, `singleplayer` | `all` |
+| `sort` | `points`, `distance` (1:1), `game_distance`, `fuel`, `income`, `damage` (average cargo damage) | `points` |
+| `order` | `asc`, `desc` | `desc`; `asc` for `damage`, so the most careful driver ranks first |
 | `limit`, `cursor` | API_CONVENTIONS §5 | 20 |
 
 ```json
 {
-  "game": "ets2", "period": "month", "at": "2026-10", "division": "all",
+  "game": "ets2", "period": "month", "at": "2026-10", "division": "all", "sort": "points", "order": "desc",
+  "currency": "EUR",
   "period_start": "2026-10-01T00:00:00.000Z", "period_end": "2026-11-01T00:00:00.000Z",
   "generated_at": "2026-10-14T09:15:00.000Z",
   "items": [
     {"rank": 1, "user_id": "usr_8f3k2m", "discord_user_id": "123456789012345678", "display_name": "Example Driver",
-     "points": 97.4, "job_count": 5, "world_km": 158.2, "world_mi": 98.3, "game_km": 2850.0, "game_mi": 1770.9}
+     "points": 97.4, "job_count": 5, "world_km": 158.2, "world_mi": 98.3, "game_km": 2850.0, "game_mi": 1770.9,
+     "fuel_used_l": 812.4, "income": 61250, "damage_pct_avg": 1.2}
   ],
   "next_cursor": null, "total": 1
 }
 ```
 
+- **`sort`** ranks by that column. `rank` and ties follow it.
+  - Players with no damage data (`damage_pct_avg: null`) rank last on a `damage` board.
+  - `income` is in `currency`.
+
 - **Periods are in UTC.** A job counts in the period of its `delivered_at`. Weeks are ISO weeks,
   starting Monday 00:00 UTC.
 - **What counts:** `valid` and `approved` jobs. Points held for review do not count until
   approved.
-- **Order:** points descending. Ties go to whoever reached that total first, then by `user_id`.
-  Tied players get the same `rank` (1, 1, 3…).
+- **Order:** by `sort` (points descending by default). Ties go to whoever reached that total
+  first, then by `user_id`. Tied players get the same `rank` (1, 1, 3…).
+
+### `GET /api/v1/public/{game}/players/{discord_id}/history`: a player over time
+
+Counted jobs (`valid`, `approved`) summed per bucket of `delivered_at`, in UTC, for graphs.
+
+| Query | Values | Default |
+|---|---|---|
+| `bucket` | `day`, `week` (ISO, Monday), `month` | `day` |
+| `from`, `to` | an RFC 3339 instant or a date (`2026-10-15`); each picks the bucket it falls in | the last 30 days, 12 weeks or 12 months up to now |
+
+```json
+{
+  "game": "ets2", "discord_user_id": "123456789012345678", "bucket": "week", "currency": "EUR",
+  "from": "2026-10-05T00:00:00.000Z", "to": "2026-10-19T00:00:00.000Z",
+  "before": {"job_count": 0, "points": 0.0, "world_km": 0.0, "…": "…"},
+  "items": [
+    {"start": "2026-10-12T00:00:00.000Z", "end": "2026-10-19T00:00:00.000Z",
+     "job_count": 2, "points": 7.2, "world_km": 11.71, "world_mi": 7.28, "game_km": 126.7, "game_mi": 78.73,
+     "fuel_used_l": 0.71, "income": 6767, "damage_pct_avg": 0.0,
+     "running": {"job_count": 2, "points": 7.2, "world_km": 11.71, "…": "…"}}
+  ]
+}
+```
+
+- **Every bucket in the range is listed**, empty ones with zeros, so charts get an even axis.
+  At most 400 buckets (`400`).
+- **`running`** is the all-time total up to the end of that bucket. **`before`** is the total
+  before the first bucket.
+- **`damage_pct_avg`** is the average cargo damage of the jobs that report it; `null` when none
+  do.
+- **`points`** are floored per bucket and per running total.
 - **`division=singleplayer`** ranks only Singleplayer Division players. On the `all` board they
   are ranked like everyone else.
 - **Excluded:** disabled users.

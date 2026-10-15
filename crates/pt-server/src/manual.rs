@@ -334,6 +334,10 @@ async fn store_scored<H: Host>(h: &H, cfg: &Config, user: &User, row: &Row, trig
         "bonus": bonus.map_or(Value::Null, |(b, l)| jobs::bonus_json(b, l)),
         "distance_by_scale_class": jobs::by_class_json(&classes),
         "multiplayer": {"kind": "unknown", "truckersmp": null},
+        "fuel_used_l": eff.get("fuel_used_l").and_then(Value::as_f64).map(round2),
+        "damage_pct": eff.get("damage_pct").and_then(Value::as_f64).map(round2),
+        "income": eff.get("profit").and_then(Value::as_f64).map(|x| x.round() as i64),
+        "currency": jobs::currency(game),
     });
     let detail = json!({
         "state": "delivered", "start_kind": "manual", "profile_key": "manual", "plugin_sessions": [],

@@ -7,404 +7,704 @@
   "penalty_over_mph": 105.0,
   "points": [
     {
+      "damage_pct_max": 0.0,
+      "damage_pct_min": 0.0,
       "fuel_l_max": 1034.58,
       "fuel_l_min": 1034.58,
+      "game_km": 0.2,
+      "game_mi": 0.13,
       "reverted": false,
       "speed_mph_max": 21.18,
       "speed_mph_min": 0.0,
-      "t": "2026-09-28T17:47:21.596Z"
+      "t": "2026-09-28T17:47:21.596Z",
+      "world_km": 0.0,
+      "world_mi": 0.0
     },
     {
+      "damage_pct_max": 0.0,
+      "damage_pct_min": 0.0,
       "fuel_l_max": 1034.58,
       "fuel_l_min": 1034.58,
+      "game_km": 0.29,
+      "game_mi": 0.18,
       "reverted": false,
       "speed_mph_max": 7.86,
       "speed_mph_min": 0.04,
-      "t": "2026-09-28T17:47:34.785Z"
+      "t": "2026-09-28T17:47:34.785Z",
+      "world_km": 0.0,
+      "world_mi": 0.0
     },
     {
+      "damage_pct_max": 0.0,
+      "damage_pct_min": 0.0,
       "fuel_l_max": 1034.58,
       "fuel_l_min": 1034.58,
+      "game_km": 0.4,
+      "game_mi": 0.25,
       "reverted": false,
       "speed_mph_max": 12.84,
       "speed_mph_min": 0.47,
-      "t": "2026-09-28T17:47:47.975Z"
+      "t": "2026-09-28T17:47:47.975Z",
+      "world_km": 0.0,
+      "world_mi": 0.0
     },
     {
+      "damage_pct_max": 0.0,
+      "damage_pct_min": 0.0,
       "fuel_l_max": 1034.58,
       "fuel_l_min": 1034.58,
+      "game_km": 0.5,
+      "game_mi": 0.31,
       "reverted": false,
       "speed_mph_max": 12.88,
       "speed_mph_min": 0.0,
-      "t": "2026-09-28T17:48:01.165Z"
+      "t": "2026-09-28T17:48:01.165Z",
+      "world_km": 0.0,
+      "world_mi": 0.0
     },
     {
+      "damage_pct_max": 0.0,
+      "damage_pct_min": 0.0,
       "fuel_l_max": 1034.58,
       "fuel_l_min": 1034.58,
+      "game_km": 0.51,
+      "game_mi": 0.32,
       "reverted": false,
       "speed_mph_max": 8.22,
       "speed_mph_min": 0.0,
-      "t": "2026-09-28T17:48:14.355Z"
+      "t": "2026-09-28T17:48:14.355Z",
+      "world_km": 0.0,
+      "world_mi": 0.0
     },
     {
+      "damage_pct_max": 0.0,
+      "damage_pct_min": 0.0,
       "fuel_l_max": 1034.58,
       "fuel_l_min": 1034.58,
+      "game_km": 0.59,
+      "game_mi": 0.37,
       "reverted": false,
       "speed_mph_max": 10.18,
       "speed_mph_min": 0.06,
-      "t": "2026-09-28T17:48:27.545Z"
+      "t": "2026-09-28T17:48:27.545Z",
+      "world_km": 0.0,
+      "world_mi": 0.0
     },
     {
+      "damage_pct_max": 0.0,
+      "damage_pct_min": 0.0,
       "fuel_l_max": 1034.58,
       "fuel_l_min": 1034.58,
+      "game_km": 0.69,
+      "game_mi": 0.43,
       "reverted": false,
       "speed_mph_max": 13.21,
       "speed_mph_min": 0.02,
-      "t": "2026-09-28T17:48:40.735Z"
+      "t": "2026-09-28T17:48:40.735Z",
+      "world_km": 0.0,
+      "world_mi": 0.0
     },
     {
+      "damage_pct_max": 0.0,
+      "damage_pct_min": 0.0,
       "fuel_l_max": 1034.58,
       "fuel_l_min": 1034.58,
+      "game_km": 0.75,
+      "game_mi": 0.47,
       "reverted": false,
       "speed_mph_max": 7.58,
       "speed_mph_min": 0.0,
-      "t": "2026-09-28T17:48:53.925Z"
+      "t": "2026-09-28T17:48:53.925Z",
+      "world_km": 0.0,
+      "world_mi": 0.0
     },
     {
+      "damage_pct_max": 0.0,
+      "damage_pct_min": 0.0,
       "fuel_l_max": 1034.26,
       "fuel_l_min": 1034.26,
+      "game_km": 0.82,
+      "game_mi": 0.51,
       "reverted": false,
       "speed_mph_max": 10.24,
       "speed_mph_min": 0.0,
-      "t": "2026-09-28T17:49:07.115Z"
+      "t": "2026-09-28T17:49:07.115Z",
+      "world_km": 0.025,
+      "world_mi": 0.015
     },
     {
+      "damage_pct_max": 0.0,
+      "damage_pct_min": 0.0,
       "fuel_l_max": 1034.26,
       "fuel_l_min": 1033.94,
+      "game_km": 1.11,
+      "game_mi": 0.69,
       "reverted": false,
       "speed_mph_max": 26.98,
       "speed_mph_min": 9.43,
-      "t": "2026-09-28T17:49:20.305Z"
+      "t": "2026-09-28T17:49:20.305Z",
+      "world_km": 0.12,
+      "world_mi": 0.074
     },
     {
+      "damage_pct_max": 0.0,
+      "damage_pct_min": 0.0,
       "fuel_l_max": 1033.94,
       "fuel_l_min": 1033.94,
+      "game_km": 1.29,
+      "game_mi": 0.8,
       "reverted": false,
       "speed_mph_max": 27.02,
       "speed_mph_min": 0.0,
-      "t": "2026-09-28T17:49:33.495Z"
+      "t": "2026-09-28T17:49:33.495Z",
+      "world_km": 0.18,
+      "world_mi": 0.112
     },
     {
+      "damage_pct_max": 0.0,
+      "damage_pct_min": 0.0,
       "fuel_l_max": 1033.94,
       "fuel_l_min": 1033.94,
+      "game_km": 1.38,
+      "game_mi": 0.86,
       "reverted": false,
       "speed_mph_max": 17.6,
       "speed_mph_min": 0.0,
-      "t": "2026-09-28T17:49:46.685Z"
+      "t": "2026-09-28T17:49:46.685Z",
+      "world_km": 0.211,
+      "world_mi": 0.131
     },
     {
+      "damage_pct_max": 0.0,
+      "damage_pct_min": 0.0,
       "fuel_l_max": 1033.94,
       "fuel_l_min": 1033.94,
+      "game_km": 1.86,
+      "game_mi": 1.16,
       "reverted": false,
       "speed_mph_max": 37.17,
       "speed_mph_min": 18.44,
-      "t": "2026-09-28T17:49:59.875Z"
+      "t": "2026-09-28T17:49:59.875Z",
+      "world_km": 0.371,
+      "world_mi": 0.231
     },
     {
+      "damage_pct_max": 0.0,
+      "damage_pct_min": 0.0,
       "fuel_l_max": 1033.94,
       "fuel_l_min": 1033.62,
+      "game_km": 2.32,
+      "game_mi": 1.44,
       "reverted": false,
       "speed_mph_max": 40.01,
       "speed_mph_min": 0.0,
-      "t": "2026-09-28T17:50:13.065Z"
+      "t": "2026-09-28T17:50:13.065Z",
+      "world_km": 0.523,
+      "world_mi": 0.325
     },
     {
+      "damage_pct_max": 0.0,
+      "damage_pct_min": 0.0,
       "fuel_l_max": 1033.62,
       "fuel_l_min": 1032.66,
+      "game_km": 5.07,
+      "game_mi": 3.15,
       "reverted": false,
       "speed_mph_max": 40.48,
       "speed_mph_min": 10.76,
-      "t": "2026-09-28T17:50:26.255Z"
+      "t": "2026-09-28T17:50:26.255Z",
+      "world_km": 0.661,
+      "world_mi": 0.411
     },
     {
+      "damage_pct_max": 0.0,
+      "damage_pct_min": 0.0,
       "fuel_l_max": 1032.66,
       "fuel_l_min": 1031.7,
+      "game_km": 8.28,
+      "game_mi": 5.15,
       "reverted": false,
       "speed_mph_max": 46.44,
       "speed_mph_min": 41.02,
-      "t": "2026-09-28T17:50:39.445Z"
+      "t": "2026-09-28T17:50:39.445Z",
+      "world_km": 0.922,
+      "world_mi": 0.573
     },
     {
+      "damage_pct_max": 0.0,
+      "damage_pct_min": 0.0,
       "fuel_l_max": 1031.7,
       "fuel_l_min": 1029.78,
+      "game_km": 14.4,
+      "game_mi": 8.95,
       "reverted": false,
       "speed_mph_max": 55.39,
       "speed_mph_min": 46.78,
-      "t": "2026-09-28T17:50:52.635Z"
+      "t": "2026-09-28T17:50:52.635Z",
+      "world_km": 1.228,
+      "world_mi": 0.763
     },
     {
+      "damage_pct_max": 0.0,
+      "damage_pct_min": 0.0,
       "fuel_l_max": 1029.78,
       "fuel_l_min": 1028.18,
+      "game_km": 19.74,
+      "game_mi": 12.27,
       "reverted": false,
       "speed_mph_max": 45.41,
       "speed_mph_min": 43.85,
-      "t": "2026-09-28T17:51:05.825Z"
+      "t": "2026-09-28T17:51:05.825Z",
+      "world_km": 1.495,
+      "world_mi": 0.929
     },
     {
+      "damage_pct_max": 0.0,
+      "damage_pct_min": 0.0,
       "fuel_l_max": 1028.18,
       "fuel_l_min": 1026.26,
+      "game_km": 25.19,
+      "game_mi": 15.65,
       "reverted": false,
       "speed_mph_max": 50.38,
       "speed_mph_min": 44.37,
-      "t": "2026-09-28T17:51:19.015Z"
+      "t": "2026-09-28T17:51:19.015Z",
+      "world_km": 1.767,
+      "world_mi": 1.098
     },
     {
+      "damage_pct_max": 0.0,
+      "damage_pct_min": 0.0,
       "fuel_l_max": 1026.26,
       "fuel_l_min": 1024.66,
+      "game_km": 30.54,
+      "game_mi": 18.98,
       "reverted": false,
       "speed_mph_max": 45.32,
       "speed_mph_min": 45.1,
-      "t": "2026-09-28T17:51:32.205Z"
+      "t": "2026-09-28T17:51:32.205Z",
+      "world_km": 2.035,
+      "world_mi": 1.264
     },
     {
+      "damage_pct_max": 0.0,
+      "damage_pct_min": 0.0,
       "fuel_l_max": 1024.66,
       "fuel_l_min": 1023.06,
+      "game_km": 35.86,
+      "game_mi": 22.28,
       "reverted": false,
       "speed_mph_max": 45.07,
       "speed_mph_min": 44.72,
-      "t": "2026-09-28T17:51:45.395Z"
+      "t": "2026-09-28T17:51:45.395Z",
+      "world_km": 2.301,
+      "world_mi": 1.43
     },
     {
+      "damage_pct_max": 0.0,
+      "damage_pct_min": 0.0,
       "fuel_l_max": 1023.06,
       "fuel_l_min": 1021.14,
+      "game_km": 41.1,
+      "game_mi": 25.54,
       "reverted": false,
       "speed_mph_max": 45.2,
       "speed_mph_min": 44.74,
-      "t": "2026-09-28T17:51:58.585Z"
+      "t": "2026-09-28T17:51:58.585Z",
+      "world_km": 2.563,
+      "world_mi": 1.592
     },
     {
+      "damage_pct_max": 0.0,
+      "damage_pct_min": 0.0,
       "fuel_l_max": 1021.14,
       "fuel_l_min": 1019.54,
+      "game_km": 46.43,
+      "game_mi": 28.85,
       "reverted": false,
       "speed_mph_max": 45.19,
       "speed_mph_min": 44.67,
-      "t": "2026-09-28T17:52:11.775Z"
+      "t": "2026-09-28T17:52:11.775Z",
+      "world_km": 2.829,
+      "world_mi": 1.758
     },
     {
+      "damage_pct_max": 0.0,
+      "damage_pct_min": 0.0,
       "fuel_l_max": 1019.54,
       "fuel_l_min": 1017.94,
+      "game_km": 51.6,
+      "game_mi": 32.07,
       "reverted": false,
       "speed_mph_max": 45.2,
       "speed_mph_min": 39.86,
-      "t": "2026-09-28T17:52:24.965Z"
+      "t": "2026-09-28T17:52:24.965Z",
+      "world_km": 3.088,
+      "world_mi": 1.919
     },
     {
+      "damage_pct_max": 0.0,
+      "damage_pct_min": 0.0,
       "fuel_l_max": 1017.94,
       "fuel_l_min": 1016.02,
+      "game_km": 57.33,
+      "game_mi": 35.63,
       "reverted": false,
       "speed_mph_max": 54.03,
       "speed_mph_min": 41.72,
-      "t": "2026-09-28T17:52:38.155Z"
+      "t": "2026-09-28T17:52:38.155Z",
+      "world_km": 3.374,
+      "world_mi": 2.097
     },
     {
+      "damage_pct_max": 0.0,
+      "damage_pct_min": 0.0,
       "fuel_l_max": 1016.02,
       "fuel_l_min": 1015.38,
+      "game_km": 59.86,
+      "game_mi": 37.19,
       "reverted": false,
       "speed_mph_max": 54.18,
       "speed_mph_min": 50.51,
-      "t": "2026-09-28T17:52:51.345Z"
+      "t": "2026-09-28T17:52:51.345Z",
+      "world_km": 3.501,
+      "world_mi": 2.175
     },
     {
+      "damage_pct_max": 0.0,
+      "damage_pct_min": 0.0,
       "fuel_l_max": 1015.38,
       "fuel_l_min": 1014.1,
+      "game_km": 63.84,
+      "game_mi": 39.67,
       "reverted": false,
       "speed_mph_max": 50.5,
       "speed_mph_min": 42.78,
-      "t": "2026-09-28T17:53:04.535Z"
+      "t": "2026-09-28T17:53:04.535Z",
+      "world_km": 3.7,
+      "world_mi": 2.299
     },
     {
+      "damage_pct_max": 0.0,
+      "damage_pct_min": 0.0,
       "fuel_l_max": 1014.1,
       "fuel_l_min": 1013.46,
+      "game_km": 65.04,
+      "game_mi": 40.42,
       "reverted": false,
       "speed_mph_max": 41.19,
       "speed_mph_min": 1.5,
-      "t": "2026-09-28T17:53:17.725Z"
+      "t": "2026-09-28T17:53:17.725Z",
+      "world_km": 3.788,
+      "world_mi": 2.354
     },
     {
+      "damage_pct_max": 0.0,
+      "damage_pct_min": 0.0,
       "fuel_l_max": 1013.46,
       "fuel_l_min": 1013.43,
+      "game_km": 65.04,
+      "game_mi": 40.42,
       "reverted": false,
       "speed_mph_max": 0.23,
       "speed_mph_min": 0.0,
-      "t": "2026-09-28T17:53:30.915Z"
+      "t": "2026-09-28T17:53:30.915Z",
+      "world_km": 3.788,
+      "world_mi": 2.354
     },
     {
+      "damage_pct_max": 0.0,
+      "damage_pct_min": 0.0,
       "fuel_l_max": 1013.43,
       "fuel_l_min": 1013.43,
+      "game_km": 65.1,
+      "game_mi": 40.45,
       "reverted": false,
       "speed_mph_max": 10.02,
       "speed_mph_min": 0.0,
-      "t": "2026-09-28T17:53:44.105Z"
+      "t": "2026-09-28T17:53:44.105Z",
+      "world_km": 3.808,
+      "world_mi": 2.366
     },
     {
+      "damage_pct_max": 0.0,
+      "damage_pct_min": 0.0,
       "fuel_l_max": 1013.43,
       "fuel_l_min": 1013.43,
+      "game_km": 65.44,
+      "game_mi": 40.67,
       "reverted": false,
       "speed_mph_max": 25.71,
       "speed_mph_min": 9.89,
-      "t": "2026-09-28T17:53:57.295Z"
+      "t": "2026-09-28T17:53:57.295Z",
+      "world_km": 3.921,
+      "world_mi": 2.437
     },
     {
+      "damage_pct_max": 0.0,
+      "damage_pct_min": 0.0,
       "fuel_l_max": 1013.43,
       "fuel_l_min": 1013.43,
+      "game_km": 65.56,
+      "game_mi": 40.74,
       "reverted": false,
       "speed_mph_max": 25.4,
       "speed_mph_min": 0.0,
-      "t": "2026-09-28T17:54:10.485Z"
+      "t": "2026-09-28T17:54:10.485Z",
+      "world_km": 3.961,
+      "world_mi": 2.462
     },
     {
+      "damage_pct_max": 0.0,
+      "damage_pct_min": 0.0,
       "fuel_l_max": 1013.43,
       "fuel_l_min": 1013.43,
+      "game_km": 65.72,
+      "game_mi": 40.84,
       "reverted": false,
       "speed_mph_max": 19.83,
       "speed_mph_min": 9.7,
-      "t": "2026-09-28T17:54:23.675Z"
+      "t": "2026-09-28T17:54:23.675Z",
+      "world_km": 4.015,
+      "world_mi": 2.495
     },
     {
+      "damage_pct_max": 0.0,
+      "damage_pct_min": 0.0,
       "fuel_l_max": 1013.43,
       "fuel_l_min": 1013.11,
+      "game_km": 66.32,
+      "game_mi": 41.21,
       "reverted": false,
       "speed_mph_max": 42.31,
       "speed_mph_min": 20.5,
-      "t": "2026-09-28T17:54:36.865Z"
+      "t": "2026-09-28T17:54:36.865Z",
+      "world_km": 4.213,
+      "world_mi": 2.618
     },
     {
+      "damage_pct_max": 0.0,
+      "damage_pct_min": 0.0,
       "fuel_l_max": 1013.11,
       "fuel_l_min": 1012.79,
+      "game_km": 66.99,
+      "game_mi": 41.63,
       "reverted": false,
       "speed_mph_max": 41.34,
       "speed_mph_min": 34.06,
-      "t": "2026-09-28T17:54:50.055Z"
+      "t": "2026-09-28T17:54:50.055Z",
+      "world_km": 4.438,
+      "world_mi": 2.758
     },
     {
+      "damage_pct_max": 0.0,
+      "damage_pct_min": 0.0,
       "fuel_l_max": 1012.79,
       "fuel_l_min": 1012.79,
+      "game_km": 67.75,
+      "game_mi": 42.1,
       "reverted": false,
       "speed_mph_max": 48.76,
       "speed_mph_min": 39.93,
-      "t": "2026-09-28T17:55:03.245Z"
+      "t": "2026-09-28T17:55:03.245Z",
+      "world_km": 4.691,
+      "world_mi": 2.915
     },
     {
+      "damage_pct_max": 0.0,
+      "damage_pct_min": 0.0,
       "fuel_l_max": 1012.79,
       "fuel_l_min": 1012.47,
+      "game_km": 68.54,
+      "game_mi": 42.59,
       "reverted": false,
       "speed_mph_max": 55.52,
       "speed_mph_min": 30.5,
-      "t": "2026-09-28T17:55:16.435Z"
+      "t": "2026-09-28T17:55:16.435Z",
+      "world_km": 4.955,
+      "world_mi": 3.079
     },
     {
+      "damage_pct_max": 0.0,
+      "damage_pct_min": 0.0,
       "fuel_l_max": 1012.47,
       "fuel_l_min": 1012.47,
+      "game_km": 68.68,
+      "game_mi": 42.68,
       "reverted": false,
       "speed_mph_max": 29.3,
       "speed_mph_min": 0.0,
-      "t": "2026-09-28T17:55:29.625Z"
+      "t": "2026-09-28T17:55:29.625Z",
+      "world_km": 5.001,
+      "world_mi": 3.108
     },
     {
+      "damage_pct_max": 0.0,
+      "damage_pct_min": 0.0,
       "fuel_l_max": 1012.47,
       "fuel_l_min": 1012.47,
+      "game_km": 68.96,
+      "game_mi": 42.85,
       "reverted": false,
       "speed_mph_max": 26.29,
       "speed_mph_min": 2.89,
-      "t": "2026-09-28T17:55:42.815Z"
+      "t": "2026-09-28T17:55:42.815Z",
+      "world_km": 5.095,
+      "world_mi": 3.166
     },
     {
+      "damage_pct_max": 0.0,
+      "damage_pct_min": 0.0,
       "fuel_l_max": 1012.47,
       "fuel_l_min": 1012.15,
+      "game_km": 69.28,
+      "game_mi": 43.05,
       "reverted": false,
       "speed_mph_max": 31.25,
       "speed_mph_min": 0.01,
-      "t": "2026-09-28T17:55:56.005Z"
+      "t": "2026-09-28T17:55:56.005Z",
+      "world_km": 5.201,
+      "world_mi": 3.232
     },
     {
+      "damage_pct_max": 0.0,
+      "damage_pct_min": 0.0,
       "fuel_l_max": 1012.15,
       "fuel_l_min": 1012.15,
+      "game_km": 69.5,
+      "game_mi": 43.19,
       "reverted": false,
       "speed_mph_max": 16.39,
       "speed_mph_min": 7.58,
-      "t": "2026-09-28T17:56:09.195Z"
+      "t": "2026-09-28T17:56:09.195Z",
+      "world_km": 5.275,
+      "world_mi": 3.278
     },
     {
+      "damage_pct_max": 0.0,
+      "damage_pct_min": 0.0,
       "fuel_l_max": 1012.15,
       "fuel_l_min": 1012.15,
+      "game_km": 69.88,
+      "game_mi": 43.42,
       "reverted": false,
       "speed_mph_max": 29.95,
       "speed_mph_min": 8.78,
-      "t": "2026-09-28T17:56:22.385Z"
+      "t": "2026-09-28T17:56:22.385Z",
+      "world_km": 5.401,
+      "world_mi": 3.356
     },
     {
+      "damage_pct_max": 0.0,
+      "damage_pct_min": 0.0,
       "fuel_l_max": 1012.15,
       "fuel_l_min": 1012.11,
+      "game_km": 69.96,
+      "game_mi": 43.47,
       "reverted": false,
       "speed_mph_max": 11.57,
       "speed_mph_min": 0.0,
-      "t": "2026-09-28T17:56:35.575Z"
+      "t": "2026-09-28T17:56:35.575Z",
+      "world_km": 5.428,
+      "world_mi": 3.373
     },
     {
+      "damage_pct_max": 0.0,
+      "damage_pct_min": 0.0,
       "fuel_l_max": 1012.11,
       "fuel_l_min": 1012.11,
+      "game_km": 69.97,
+      "game_mi": 43.48,
       "reverted": false,
       "speed_mph_max": 3.11,
       "speed_mph_min": 0.0,
-      "t": "2026-09-28T17:56:48.765Z"
+      "t": "2026-09-28T17:56:48.765Z",
+      "world_km": 5.429,
+      "world_mi": 3.374
     },
     {
+      "damage_pct_max": 0.0,
+      "damage_pct_min": 0.0,
       "fuel_l_max": 1012.11,
       "fuel_l_min": 1011.79,
+      "game_km": 70.23,
+      "game_mi": 43.64,
       "reverted": false,
       "speed_mph_max": 24.02,
       "speed_mph_min": 3.5,
-      "t": "2026-09-28T17:57:01.955Z"
+      "t": "2026-09-28T17:57:01.955Z",
+      "world_km": 5.518,
+      "world_mi": 3.429
     },
     {
+      "damage_pct_max": 0.0,
+      "damage_pct_min": 0.0,
       "fuel_l_max": 1011.79,
       "fuel_l_min": 1011.79,
+      "game_km": 70.33,
+      "game_mi": 43.7,
       "reverted": false,
       "speed_mph_max": 17.69,
       "speed_mph_min": 0.0,
-      "t": "2026-09-28T17:57:15.145Z"
+      "t": "2026-09-28T17:57:15.145Z",
+      "world_km": 5.551,
+      "world_mi": 3.45
     },
     {
+      "damage_pct_max": 0.0,
+      "damage_pct_min": 0.0,
       "fuel_l_max": 1011.79,
       "fuel_l_min": 1011.79,
+      "game_km": 70.64,
+      "game_mi": 43.9,
       "reverted": false,
       "speed_mph_max": 29.44,
       "speed_mph_min": 0.0,
-      "t": "2026-09-28T17:57:28.335Z"
+      "t": "2026-09-28T17:57:28.335Z",
+      "world_km": 5.655,
+      "world_mi": 3.514
     },
     {
+      "damage_pct_max": 0.0,
+      "damage_pct_min": 0.0,
       "fuel_l_max": 1011.79,
       "fuel_l_min": 1011.76,
+      "game_km": 70.71,
+      "game_mi": 43.94,
       "reverted": false,
       "speed_mph_max": 16.69,
       "speed_mph_min": 0.0,
-      "t": "2026-09-28T17:57:41.525Z"
+      "t": "2026-09-28T17:57:41.525Z",
+      "world_km": 5.678,
+      "world_mi": 3.528
     },
     {
+      "damage_pct_max": 0.0,
+      "damage_pct_min": 0.0,
       "fuel_l_max": 1011.76,
       "fuel_l_min": 1011.44,
+      "game_km": 71.14,
+      "game_mi": 44.21,
       "reverted": false,
       "speed_mph_max": 33.38,
       "speed_mph_min": 17.64,
-      "t": "2026-09-28T17:57:54.715Z"
+      "t": "2026-09-28T17:57:54.715Z",
+      "world_km": 5.821,
+      "world_mi": 3.617
     },
     {
+      "damage_pct_max": 0.0,
+      "damage_pct_min": 0.0,
       "fuel_l_max": 1011.44,
       "fuel_l_min": 1011.44,
+      "game_km": 71.47,
+      "game_mi": 44.41,
       "reverted": false,
       "speed_mph_max": 24.45,
       "speed_mph_min": 0.06,
-      "t": "2026-09-28T17:58:07.905Z"
+      "t": "2026-09-28T17:58:07.905Z",
+      "world_km": 5.929,
+      "world_mi": 3.684
     }
   ],
   "windows": [

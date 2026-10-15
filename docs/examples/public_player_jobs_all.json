@@ -5,17 +5,21 @@
         "id": null,
         "name": "Apples"
       },
-      "delivered_at": "2026-10-14T09:00:23.000Z",
+      "currency": "EUR",
+      "damage_pct": 2.0,
+      "delivered_at": "2026-10-14T09:00:26.000Z",
       "destination": {
         "city_id": null,
         "city_name": "London",
         "company_id": null,
         "company_name": "Posped"
       },
+      "fuel_used_l": 120.5,
       "game": "ets2",
       "game_km": 384.0,
       "game_mi": 238.61,
       "held_points": null,
+      "income": 15000,
       "job_id": "MHQGP65P",
       "market": null,
       "multiplayer": {
@@ -40,6 +44,8 @@
         "id": "med_equip",
         "name": "Medical Equipment"
       },
+      "currency": "EUR",
+      "damage_pct": 0.0,
       "delivered_at": "2026-10-14T09:00:01.000Z",
       "destination": {
         "city_id": "napoli",
@@ -47,10 +53,12 @@
         "company_id": "eolo_lines",
         "company_name": "Eolo Lines"
       },
+      "fuel_used_l": 0.71,
       "game": "ets2",
       "game_km": 1.0,
       "game_mi": 0.62,
       "held_points": null,
+      "income": 388,
       "job_id": "1XW08CFJ",
       "market": "quick_job",
       "multiplayer": {
@@ -78,6 +86,8 @@
         "id": "med_vaccine",
         "name": "Medical Vaccines"
       },
+      "currency": "EUR",
+      "damage_pct": 13.61,
       "delivered_at": "2026-10-14T09:00:01.000Z",
       "destination": {
         "city_id": "bergen",
@@ -85,10 +95,12 @@
         "company_id": "polarislines",
         "company_name": "Polaris Lines"
       },
+      "fuel_used_l": 0.0,
       "game": "ets2",
       "game_km": 2512.0,
       "game_mi": 1560.88,
       "held_points": null,
+      "income": 99053,
       "job_id": "2RG8X3RX",
       "market": "cargo_market",
       "multiplayer": {
@@ -112,6 +124,6 @@
       "world_mi": 90.3
     }
   ],
-  "next_cursor": "bzMudDE3OTE5Njg0Mjk",
+  "next_cursor": "bzMudDE3OTE5Njg0MzI",
   "total": 5
 }

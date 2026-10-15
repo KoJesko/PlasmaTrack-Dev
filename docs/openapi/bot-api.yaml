@@ -864,6 +864,8 @@
                       "version_id":
                         "type": "string"
                     "type": "object"
+                  "currency":
+                    "type": "string"
                   "custom_map":
                     "properties":
                       "expires_at":
@@ -874,6 +876,8 @@
                     "type":
                     - "null"
                     - "object"
+                  "damage_pct":
+                    "type": "number"
                   "delivered_at":
                     "format": "date-time"
                     "type": "string"
@@ -1006,6 +1010,8 @@
                       "used_l":
                         "type": "number"
                     "type": "object"
+                  "fuel_used_l":
+                    "type": "number"
                   "game":
                     "type": "string"
                   "game_km":
@@ -1016,6 +1022,8 @@
                     "type": "number"
                   "hide_map":
                     "type": "boolean"
+                  "income":
+                    "type": "integer"
                   "integrity":
                     "properties":
                       "config_diff":
@@ -1191,9 +1199,7 @@
                       "cargo_name":
                         "type": "string"
                       "damage_pct":
-                        "type":
-                        - "null"
-                        - "number"
+                        "type": "number"
                       "destination_city":
                         "type": "string"
                       "destination_company":
@@ -1216,9 +1222,7 @@
                           "type": "string"
                         "type": "array"
                       "profit":
-                        "type":
-                        - "null"
-                        - "number"
+                        "type": "number"
                       "source_city":
                         "type": "string"
                       "source_company":
@@ -1649,9 +1653,17 @@
                   "points":
                     "items":
                       "properties":
+                        "damage_pct_max":
+                          "type": "number"
+                        "damage_pct_min":
+                          "type": "number"
                         "fuel_l_max":
                           "type": "number"
                         "fuel_l_min":
+                          "type": "number"
+                        "game_km":
+                          "type": "number"
+                        "game_mi":
                           "type": "number"
                         "reverted":
                           "type": "boolean"
@@ -1662,6 +1674,10 @@
                         "t":
                           "format": "date-time"
                           "type": "string"
+                        "world_km":
+                          "type": "number"
+                        "world_mi":
+                          "type": "number"
                       "type": "object"
                     "type": "array"
                   "windows":
@@ -3398,6 +3414,8 @@
                       "name":
                         "type": "string"
                     "type": "object"
+                  "currency":
+                    "type": "string"
                   "custom_map":
                     "properties":
                       "expires_at":
@@ -3406,6 +3424,8 @@
                       "url":
                         "type": "string"
                     "type": "object"
+                  "damage_pct":
+                    "type": "number"
                   "delivered_at":
                     "format": "date-time"
                     "type": "string"
@@ -3478,6 +3498,8 @@
                             "type": "number"
                         "type": "object"
                     "type": "object"
+                  "fuel_used_l":
+                    "type": "number"
                   "game":
                     "type": "string"
                   "game_km":
@@ -3486,6 +3508,8 @@
                     "type": "number"
                   "held_points":
                     "type": "number"
+                  "income":
+                    "type": "integer"
                   "job_id":
                     "type": "string"
                   "market":
@@ -3718,6 +3742,8 @@
                       "name":
                         "type": "string"
                     "type": "object"
+                  "currency":
+                    "type": "string"
                   "custom_map":
                     "properties":
                       "expires_at":
@@ -3728,6 +3754,8 @@
                     "type":
                     - "null"
                     - "object"
+                  "damage_pct":
+                    "type": "number"
                   "delivered_at":
                     "format": "date-time"
                     "type": "string"
@@ -3804,6 +3832,8 @@
                             "type": "number"
                         "type": "object"
                     "type": "object"
+                  "fuel_used_l":
+                    "type": "number"
                   "game":
                     "type": "string"
                   "game_km":
@@ -3814,6 +3844,8 @@
                     "type":
                     - "null"
                     - "number"
+                  "income":
+                    "type": "integer"
                   "job_id":
                     "type": "string"
                   "market":
@@ -3990,6 +4022,96 @@
       - "readToken": []
       - "botToken": []
       "summary": "Route GeoJSON"
+      "tags":
+      - "Public"
+  "/api/v1/public/jobs/{job_id}/series":
+    "get":
+      "operationId": "public_job_series"
+      "parameters":
+      - "in": "path"
+        "name": "job_id"
+        "required": true
+        "schema":
+          "type": "string"
+      - "in": "query"
+        "name": "max_points"
+        "required": false
+        "schema":
+          "type": "string"
+      "responses":
+        "200":
+          "content":
+            "application/json":
+              "examples":
+                "public_job_series":
+                  "externalValue": "../examples/public_job_series.json"
+              "schema":
+                "properties":
+                  "bucket_s":
+                    "type": "number"
+                  "game":
+                    "type": "string"
+                  "invalid_over_mph":
+                    "type": "number"
+                  "job_id":
+                    "type": "string"
+                  "markers":
+                    "type": "array"
+                  "penalty_over_mph":
+                    "type": "number"
+                  "points":
+                    "items":
+                      "properties":
+                        "damage_pct_max":
+                          "type": "number"
+                        "damage_pct_min":
+                          "type": "number"
+                        "fuel_l_max":
+                          "type": "number"
+                        "fuel_l_min":
+                          "type": "number"
+                        "game_km":
+                          "type": "number"
+                        "game_mi":
+                          "type": "number"
+                        "reverted":
+                          "type": "boolean"
+                        "speed_mph_max":
+                          "type": "number"
+                        "speed_mph_min":
+                          "type": "number"
+                        "t":
+                          "format": "date-time"
+                          "type": "string"
+                        "world_km":
+                          "type": "number"
+                        "world_mi":
+                          "type": "number"
+                      "type": "object"
+                    "type": "array"
+                  "windows":
+                    "items":
+                      "properties":
+                        "from":
+                          "format": "date-time"
+                          "type": "string"
+                        "kind":
+                          "type": "string"
+                        "to":
+                          "format": "date-time"
+                          "type": "string"
+                      "type": "object"
+                    "type": "array"
+                "type": "object"
+          "description": "See docs/examples/public_job_series.json"
+        "4XX":
+          "$ref": "#/components/responses/Error"
+        "5XX":
+          "$ref": "#/components/responses/Error"
+      "security":
+      - "readToken": []
+      - "botToken": []
+      "summary": "Speed, fuel, damage and distance over a counted job"
       "tags":
       - "Public"
   "/api/v1/public/players/{discord_id}":
@@ -4273,6 +4395,10 @@
                             "name":
                               "type": "string"
                           "type": "object"
+                        "currency":
+                          "type": "string"
+                        "damage_pct":
+                          "type": "number"
                         "delivered_at":
                           "format": "date-time"
                           "type": "string"
@@ -4291,6 +4417,8 @@
                             "company_name":
                               "type": "string"
                           "type": "object"
+                        "fuel_used_l":
+                          "type": "number"
                         "game":
                           "type": "string"
                         "game_km":
@@ -4299,6 +4427,8 @@
                           "type": "number"
                         "held_points":
                           "type": "null"
+                        "income":
+                          "type": "integer"
                         "job_id":
                           "type": "string"
                         "market":
@@ -4367,7 +4497,7 @@
       - "Public"
   "/api/v1/public/{game}/leaderboard":
     "get":
-      "operationId": "public_leaderboard"
+      "operationId": "public_leaderboard_by_fuel"
       "parameters":
       - "in": "path"
         "name": "game"
@@ -4376,6 +4506,11 @@
           "enum":
           - "ets2"
           - "ats"
+          "type": "string"
+      - "in": "query"
+        "name": "sort"
+        "required": false
+        "schema":
           "type": "string"
       - "in": "query"
         "name": "period"
@@ -4397,11 +4532,15 @@
           "content":
             "application/json":
               "examples":
-                "public_leaderboard":
-                  "externalValue": "../examples/public_leaderboard.json"
+                "public_leaderboard_by_fuel":
+                  "externalValue": "../examples/public_leaderboard_by_fuel.json"
               "schema":
                 "properties":
                   "at":
+                    "type":
+                    - "null"
+                    - "string"
+                  "currency":
                     "type": "string"
                   "division":
                     "type": "string"
@@ -4413,14 +4552,20 @@
                   "items":
                     "items":
                       "properties":
+                        "damage_pct_avg":
+                          "type": "number"
                         "discord_user_id":
                           "type": "string"
                         "display_name":
                           "type": "string"
+                        "fuel_used_l":
+                          "type": "number"
                         "game_km":
                           "type": "number"
                         "game_mi":
                           "type": "number"
+                        "income":
+                          "type": "integer"
                         "job_count":
                           "type": "integer"
                         "points":
@@ -4437,18 +4582,26 @@
                     "type": "array"
                   "next_cursor":
                     "type": "null"
+                  "order":
+                    "type": "string"
                   "period":
                     "type": "string"
                   "period_end":
                     "format": "date-time"
-                    "type": "string"
+                    "type":
+                    - "null"
+                    - "string"
                   "period_start":
                     "format": "date-time"
+                    "type":
+                    - "null"
+                    - "string"
+                  "sort":
                     "type": "string"
                   "total":
                     "type": "integer"
                 "type": "object"
-          "description": "See docs/examples/public_leaderboard.json"
+          "description": "See docs/examples/public_leaderboard_by_fuel.json"
         "401":
           "content":
             "application/json":
@@ -4466,6 +4619,148 @@
       - "readToken": []
       - "botToken": []
       "summary": "Leaderboard"
+      "tags":
+      - "Public"
+  "/api/v1/public/{game}/players/{discord_id}/history":
+    "get":
+      "operationId": "public_player_history"
+      "parameters":
+      - "in": "path"
+        "name": "game"
+        "required": true
+        "schema":
+          "enum":
+          - "ets2"
+          - "ats"
+          "type": "string"
+      - "in": "path"
+        "name": "discord_id"
+        "required": true
+        "schema":
+          "type": "string"
+      - "in": "query"
+        "name": "bucket"
+        "required": false
+        "schema":
+          "type": "string"
+      - "in": "query"
+        "name": "from"
+        "required": false
+        "schema":
+          "type": "string"
+      - "in": "query"
+        "name": "to"
+        "required": false
+        "schema":
+          "type": "string"
+      "responses":
+        "200":
+          "content":
+            "application/json":
+              "examples":
+                "public_player_history":
+                  "externalValue": "../examples/public_player_history.json"
+              "schema":
+                "properties":
+                  "before":
+                    "properties":
+                      "damage_pct_avg":
+                        "type": "null"
+                      "fuel_used_l":
+                        "type": "number"
+                      "game_km":
+                        "type": "number"
+                      "game_mi":
+                        "type": "number"
+                      "income":
+                        "type": "integer"
+                      "job_count":
+                        "type": "integer"
+                      "points":
+                        "type": "number"
+                      "world_km":
+                        "type": "number"
+                      "world_mi":
+                        "type": "number"
+                    "type": "object"
+                  "bucket":
+                    "type": "string"
+                  "currency":
+                    "type": "string"
+                  "discord_user_id":
+                    "type": "string"
+                  "from":
+                    "format": "date-time"
+                    "type": "string"
+                  "game":
+                    "type": "string"
+                  "items":
+                    "items":
+                      "properties":
+                        "damage_pct_avg":
+                          "type":
+                          - "null"
+                          - "number"
+                        "end":
+                          "format": "date-time"
+                          "type": "string"
+                        "fuel_used_l":
+                          "type": "number"
+                        "game_km":
+                          "type": "number"
+                        "game_mi":
+                          "type": "number"
+                        "income":
+                          "type": "integer"
+                        "job_count":
+                          "type": "integer"
+                        "points":
+                          "type": "number"
+                        "running":
+                          "properties":
+                            "damage_pct_avg":
+                              "type":
+                              - "null"
+                              - "number"
+                            "fuel_used_l":
+                              "type": "number"
+                            "game_km":
+                              "type": "number"
+                            "game_mi":
+                              "type": "number"
+                            "income":
+                              "type": "integer"
+                            "job_count":
+                              "type": "integer"
+                            "points":
+                              "type": "number"
+                            "world_km":
+                              "type": "number"
+                            "world_mi":
+                              "type": "number"
+                          "type": "object"
+                        "start":
+                          "format": "date-time"
+                          "type": "string"
+                        "world_km":
+                          "type": "number"
+                        "world_mi":
+                          "type": "number"
+                      "type": "object"
+                    "type": "array"
+                  "to":
+                    "format": "date-time"
+                    "type": "string"
+                "type": "object"
+          "description": "See docs/examples/public_player_history.json"
+        "4XX":
+          "$ref": "#/components/responses/Error"
+        "5XX":
+          "$ref": "#/components/responses/Error"
+      "security":
+      - "readToken": []
+      - "botToken": []
+      "summary": "A player's totals per day, week or month, with running totals"
       "tags":
       - "Public"
   "/api/v1/public/{game}/players/{discord_id}/jobs":
@@ -4509,6 +4804,10 @@
                             "name":
                               "type": "string"
                           "type": "object"
+                        "currency":
+                          "type": "string"
+                        "damage_pct":
+                          "type": "number"
                         "delivered_at":
                           "format": "date-time"
                           "type": "string"
@@ -4523,6 +4822,8 @@
                             "company_name":
                               "type": "string"
                           "type": "object"
+                        "fuel_used_l":
+                          "type": "number"
                         "game":
                           "type": "string"
                         "game_km":
@@ -4533,6 +4834,8 @@
                           "type":
                           - "null"
                           - "number"
+                        "income":
+                          "type": "integer"
                         "job_id":
                           "type": "string"
                         "market":

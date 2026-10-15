@@ -1,6 +1,6 @@
 {
   "deleted": [],
-  "key": "d1/test-server/2026-10-14T09-00-55.000Z.sql",
+  "key": "d1/test-server/2026-10-14T09-00-58.000Z.sql",
   "rows": {
     "audit_log": 28,
     "bonuses": 1,
@@ -17,5 +17,5 @@
     "users": 6,
     "webhook_outbox": 17
   },
-  "size_bytes": 99188
+  "size_bytes": 99671
 }

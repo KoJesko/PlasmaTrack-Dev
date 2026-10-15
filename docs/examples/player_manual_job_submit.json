@@ -4,11 +4,13 @@
     "id": null,
     "name": "Apples"
   },
+  "currency": "EUR",
   "custom_map": {
-    "expires_at": "2026-10-14T10:00:23.000Z",
-    "url": "https://pt.example/dl/evidence/evd_arsm3am5s1?exp=1791972023&sig=50d87312cffdcf8519226ece2a9813c21acaf9b1d8d15f9cdc30c76052ffba4f"
+    "expires_at": "2026-10-14T10:00:26.000Z",
+    "url": "https://pt.example/dl/evidence/evd_arsm3am5s1?exp=1791972026&sig=169705a7cbe990365865582470b8f32dae1687210f1b23a933b3ca0b8e474f35"
   },
-  "delivered_at": "2026-10-14T09:00:23.000Z",
+  "damage_pct": 2.0,
+  "delivered_at": "2026-10-14T09:00:26.000Z",
   "destination": {
     "city_id": null,
     "city_name": "London",
@@ -47,10 +49,12 @@
       "world_mi": 0.0
     }
   },
+  "fuel_used_l": 120.5,
   "game": "ets2",
   "game_km": 380.0,
   "game_mi": 236.12,
   "held_points": 14.1,
+  "income": 15000,
   "job_id": "MHQGP65P",
   "market": null,
   "multiplayer": {

@@ -1,7 +1,7 @@
 {
   "items": [
     {
-      "age_s": 10,
+      "age_s": 13,
       "cargo": {
         "id": "med_vaccine",
         "name": "Medical Vaccines"
@@ -36,7 +36,7 @@
       "world_km": 145.33
     },
     {
-      "age_s": 10,
+      "age_s": 13,
       "cargo": {
         "id": "tyres",
         "name": "Tyres"

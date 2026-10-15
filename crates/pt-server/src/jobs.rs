@@ -376,6 +376,10 @@ fn build(job: &Job, r: &JobResult, cfg: &Config, facts: &Facts, integrity: &Inte
         "bonus": bonus,
         "distance_by_scale_class": by_class,
         "multiplayer": multiplayer,
+        "fuel_used_l": round2(fuel_used(job)),
+        "damage_pct": job.delivered.as_ref().and_then(|x| x.cargo_damage).map(|d| round2(d * 100.0)),
+        "income": job.delivered.as_ref().and_then(|x| x.revenue),
+        "currency": currency(job.game),
     });
 
     // Reasons: review reasons, then invalid and discard.
@@ -470,7 +474,10 @@ fn tracked_sheet(job: &Job, r: &JobResult, started: i64) -> Map<String, Value> {
     for (k, v) in [("source_city", &n.source_city), ("source_company", &n.source_company), ("destination_city", &n.destination_city), ("destination_company", &n.destination_company)] {
         m.insert(k.into(), v.clone().into());
     }
-    for k in ["damage_pct", "profit", "truck", "truck_model", "map_scale", "uk"] {
+    // Income is the game's revenue for the job; damage is cargo damage.
+    m.insert("profit".into(), json!(job.delivered.as_ref().and_then(|x| x.revenue)));
+    m.insert("damage_pct".into(), json!(job.delivered.as_ref().and_then(|x| x.cargo_damage).map(|d| d * 100.0)));
+    for k in ["truck", "truck_model", "map_scale", "uk"] {
         m.insert(k.into(), Value::Null);
     }
     m.insert("mods".into(), json!([]));
@@ -506,7 +513,11 @@ fn apply_overrides(
             s[side][field] = v.into();
         }
     }
-    built.detail["fuel"]["used_l"] = eff.get("fuel_used_l").and_then(Value::as_f64).map(round2).into();
+    let fuel: Value = eff.get("fuel_used_l").and_then(Value::as_f64).map(round2).into();
+    built.detail["fuel"]["used_l"] = fuel.clone();
+    s["fuel_used_l"] = fuel;
+    s["damage_pct"] = eff.get("damage_pct").and_then(Value::as_f64).map(round2).into();
+    s["income"] = eff.get("profit").and_then(Value::as_f64).map(|x| x.round() as i64).into();
     let started = eff.get("started_at_ms").and_then(Value::as_i64).unwrap_or(0);
     let ended = eff.get("ended_at_ms").and_then(Value::as_i64);
 
@@ -561,6 +572,14 @@ fn apply_overrides(
     built.rule_points = if built.auto_outcome == "invalid" { 0.0 } else { points };
     built.detail["distances"]["accepted_world_mi"] = util::round3(accepted).into();
     (started, ended)
+}
+
+/// The currency a game pays in: `income` is in it.
+pub fn currency(game: pt_core::Game) -> &'static str {
+    match game {
+        pt_core::Game::Ets2 => "EUR",
+        pt_core::Game::Ats => "USD",
+    }
 }
 
 pub fn apply_bonus(b: &Bonus, base: f64) -> f64 {
@@ -919,6 +938,11 @@ pub fn summary_json(row: &Row) -> Value {
     out.insert("delivered_at".into(), util::opt_rfc3339(row.opt_i("delivered_at")));
     out.insert("reported_delivered_at".into(), util::opt_rfc3339(row.opt_i("reported_delivered_at")));
     out.insert("multiplayer".into(), o.remove("multiplayer").unwrap_or(Value::Null));
+    for k in ["fuel_used_l", "damage_pct", "income"] {
+        out.insert(k.into(), o.remove(k).unwrap_or(Value::Null));
+    }
+    let game = pt_core::Game::from_api(&row.s("game")).unwrap_or(pt_core::Game::Ets2);
+    out.insert("currency".into(), o.remove("currency").unwrap_or_else(|| currency(game).into()));
     Value::Object(out)
 }
 

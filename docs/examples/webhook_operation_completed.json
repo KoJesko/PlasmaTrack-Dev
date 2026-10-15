@@ -1,12 +1,12 @@
 {
   "data": {
-    "finished_at": "2026-10-14T09:00:36.000Z",
+    "finished_at": "2026-10-14T09:00:39.000Z",
     "kind": "recalculation",
     "operation_id": "op_9rgk6m9b50",
     "requested_by": {
       "discord_user_id": "900000000000000001"
     },
-    "started_at": "2026-10-14T09:00:35.000Z",
+    "started_at": "2026-10-14T09:00:38.000Z",
     "status": "succeeded",
     "summary": {
       "changed": {},
@@ -14,7 +14,7 @@
     }
   },
   "event_id": "evt_wx7zvvc3b2",
-  "occurred_at": "2026-10-14T09:00:36.000Z",
+  "occurred_at": "2026-10-14T09:00:39.000Z",
   "payload_version": 1,
   "type": "operation.completed"
 }

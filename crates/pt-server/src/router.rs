@@ -35,8 +35,10 @@ async fn dispatch<H: Host>(h: &H, req: &Request) -> ApiResult<Response> {
         ("GET", ["api", "v1", "public", "players", d, "jobs"]) => public::player_jobs_all(h, req, d).await,
         ("GET", ["api", "v1", "public", "jobs", id]) => public::job(h, req, id).await,
         ("GET", ["api", "v1", "public", "jobs", id, "route"]) => route::public(h, req, id).await,
+        ("GET", ["api", "v1", "public", "jobs", id, "series"]) => admin::public_series(h, req, id).await,
         ("GET", ["api", "v1", "public", g, "players", d, "stats"]) => public::player_stats(h, req, g, d).await,
         ("GET", ["api", "v1", "public", g, "players", d, "jobs"]) => public::player_jobs(h, req, g, d).await,
+        ("GET", ["api", "v1", "public", g, "players", d, "history"]) => public::player_history(h, req, g, d).await,
         ("GET", ["api", "v1", "public", g, "leaderboard"]) => public::leaderboard(h, req, g).await,
 
         // Moderators.

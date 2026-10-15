@@ -1,7 +1,7 @@
 {
-  "expires_at": "2026-10-14T09:15:16.000Z",
+  "expires_at": "2026-10-14T09:15:19.000Z",
   "format": "jsonl+gzip",
   "frames": 2541,
   "size_bytes": 284352,
-  "url": "https://pt.example/dl/trace/A2NDM8HC?v=1&exp=1791969316&sig=e67c3b59ff4fa49b3c8d6cfdd2175a29fe44182d2df43e1abc8d437ac31f8ba9"
+  "url": "https://pt.example/dl/trace/A2NDM8HC?v=1&exp=1791969319&sig=c297950efbc723356a7e4570de18082c67feea49179af88e16e6870f8b638cf0"
 }

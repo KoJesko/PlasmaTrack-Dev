@@ -4,7 +4,9 @@
     "id": "med_vaccine",
     "name": "Medical Vaccines"
   },
+  "currency": "EUR",
   "custom_map": null,
+  "damage_pct": 13.61,
   "delivered_at": "2026-10-14T09:00:01.000Z",
   "destination": {
     "city_id": "bergen",
@@ -44,10 +46,12 @@
       "world_mi": 0.0
     }
   },
+  "fuel_used_l": 0.0,
   "game": "ets2",
   "game_km": 2512.0,
   "game_mi": 1560.88,
   "held_points": 90.3,
+  "income": 99053,
   "job_id": "2RG8X3RX",
   "market": "cargo_market",
   "multiplayer": {

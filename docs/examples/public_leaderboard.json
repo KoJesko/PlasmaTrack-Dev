@@ -1,14 +1,18 @@
 {
   "at": "2026-10",
+  "currency": "EUR",
   "division": "all",
   "game": "ets2",
-  "generated_at": "2026-10-14T09:00:10.000Z",
+  "generated_at": "2026-10-14T09:00:13.000Z",
   "items": [
     {
+      "damage_pct_avg": 0.0,
       "discord_user_id": "123456789012345678",
       "display_name": "Example Driver",
+      "fuel_used_l": 0.71,
       "game_km": 126.7,
       "game_mi": 78.73,
+      "income": 6767,
       "job_count": 2,
       "points": 7.2,
       "rank": 1,
@@ -18,8 +22,10 @@
     }
   ],
   "next_cursor": null,
+  "order": "desc",
   "period": "month",
   "period_end": "2026-11-01T00:00:00.000Z",
   "period_start": "2026-10-01T00:00:00.000Z",
+  "sort": "points",
   "total": 1
 }

@@ -10,7 +10,7 @@
         "evidence": 4,
         "game": "ets2"
       },
-      "at": "2026-10-14T09:00:23.000Z",
+      "at": "2026-10-14T09:00:26.000Z",
       "audit_id": "aud_10",
       "before": {},
       "reason": null,
@@ -31,11 +31,13 @@
     "integrity_hash": "37b16360fb88293742498e06351590d31df333882ff0cfd72e5852a71e689872",
     "version_id": "cfg_1"
   },
+  "currency": "EUR",
   "custom_map": {
-    "expires_at": "2026-10-14T10:00:26.000Z",
-    "url": "https://pt.example/dl/evidence/evd_arsm3am5s1?exp=1791972026&sig=169705a7cbe990365865582470b8f32dae1687210f1b23a933b3ca0b8e474f35"
+    "expires_at": "2026-10-14T10:00:29.000Z",
+    "url": "https://pt.example/dl/evidence/evd_arsm3am5s1?exp=1791972029&sig=679b2c19839c372c3a02378eb165319d5408f4fb69c15e8115375a84ec7e6418"
   },
-  "delivered_at": "2026-10-14T09:00:23.000Z",
+  "damage_pct": 2.0,
+  "delivered_at": "2026-10-14T09:00:26.000Z",
   "destination": {
     "city_id": null,
     "city_name": "London",
@@ -89,49 +91,51 @@
     {
       "content_type": "image/webp",
       "evidence_id": "evd_1rqxyeb54d",
-      "expires_at": "2026-10-14T10:00:26.000Z",
+      "expires_at": "2026-10-14T10:00:29.000Z",
       "role": "adjusted_scale",
       "section": 0,
       "size_bytes": 36,
-      "url": "https://pt.example/dl/evidence/evd_1rqxyeb54d?exp=1791972026&sig=17cb5c5f8613dd3fc8dc7fb9018918e64dc49abf301a9e48835051ac832bb910"
+      "url": "https://pt.example/dl/evidence/evd_1rqxyeb54d?exp=1791972029&sig=d82a125d5be627726efab965d70b570e7e12ba980c12416c33a63f06ebfbfa96"
     },
     {
       "content_type": "image/webp",
       "evidence_id": "evd_arsm3am5s1",
-      "expires_at": "2026-10-14T10:00:26.000Z",
+      "expires_at": "2026-10-14T10:00:29.000Z",
       "role": "custom_map",
       "section": null,
       "size_bytes": 36,
-      "url": "https://pt.example/dl/evidence/evd_arsm3am5s1?exp=1791972026&sig=169705a7cbe990365865582470b8f32dae1687210f1b23a933b3ca0b8e474f35"
+      "url": "https://pt.example/dl/evidence/evd_arsm3am5s1?exp=1791972029&sig=679b2c19839c372c3a02378eb165319d5408f4fb69c15e8115375a84ec7e6418"
     },
     {
       "content_type": "image/webp",
       "evidence_id": "evd_3a051hzcz0",
-      "expires_at": "2026-10-14T10:00:26.000Z",
+      "expires_at": "2026-10-14T10:00:29.000Z",
       "role": "main",
       "section": null,
       "size_bytes": 36,
-      "url": "https://pt.example/dl/evidence/evd_3a051hzcz0?exp=1791972026&sig=f91fffc73320129c390a347b6cbe4f50c7dc5e3c8668d5b4f2fa8ef3f03c82b3"
+      "url": "https://pt.example/dl/evidence/evd_3a051hzcz0?exp=1791972029&sig=5bbdc9d764e815e4ab712e56bbcab6209326af5de23db1499268514c62bad95d"
     },
     {
       "content_type": "image/webp",
       "evidence_id": "evd_qa7j61zpen",
-      "expires_at": "2026-10-14T10:00:26.000Z",
+      "expires_at": "2026-10-14T10:00:29.000Z",
       "role": "uk_route",
       "section": null,
       "size_bytes": 36,
-      "url": "https://pt.example/dl/evidence/evd_qa7j61zpen?exp=1791972026&sig=fe8db2f023b9f08f47c38c0915bae0d6aa22863436927470e18099b689f4b8cf"
+      "url": "https://pt.example/dl/evidence/evd_qa7j61zpen?exp=1791972029&sig=2d18838c6f87367c360978f04dff256d18428284df17442d52899fc71b2c15d8"
     }
   ],
   "fuel": {
     "refuels": [],
     "used_l": 120.5
   },
+  "fuel_used_l": 120.5,
   "game": "ets2",
   "game_km": 380.0,
   "game_mi": 236.12,
   "held_points": 14.1,
   "hide_map": false,
+  "income": 15000,
   "integrity": null,
   "job_id": "MHQGP65P",
   "market": null,
