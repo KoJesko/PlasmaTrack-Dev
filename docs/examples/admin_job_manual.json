@@ -7,7 +7,7 @@
         "display_name": null
       },
       "after": {
-        "evidence": 3,
+        "evidence": 4,
         "game": "ets2"
       },
       "at": "2026-10-14T09:00:23.000Z",
@@ -15,7 +15,7 @@
       "before": {},
       "reason": null,
       "target": {
-        "id": "1RQXYEB5",
+        "id": "MHQGP65P",
         "kind": "job"
       }
     }
@@ -44,10 +44,10 @@
   },
   "distance_by_scale_class": {
     "city": {
-      "game_km": 0.0,
-      "game_mi": 0.0,
-      "world_km": 0.0,
-      "world_mi": 0.0
+      "game_km": 6.0,
+      "game_mi": 3.73,
+      "world_km": 2.0,
+      "world_mi": 1.24
     },
     "nonstandard": {
       "game_km": 0.0,
@@ -62,10 +62,10 @@
       "world_mi": 0.0
     },
     "road": {
-      "game_km": 380.0,
-      "game_mi": 236.12,
-      "world_km": 21.07,
-      "world_mi": 13.09
+      "game_km": 374.0,
+      "game_mi": 232.39,
+      "world_km": 20.75,
+      "world_mi": 12.89
     },
     "unknown": {
       "game_km": 0.0,
@@ -75,22 +75,32 @@
     }
   },
   "distances": {
-    "accepted_world_mi": 13.09,
+    "accepted_world_mi": 14.137,
     "counted_game_km": 380.0,
     "delivered_game_km": 380.0,
     "tracked_counted_game_km": null,
     "tracked_uncounted_game_km": null,
     "tracked_whole_game_km": null,
-    "world_km": 21.067,
-    "world_mi": 13.09
+    "world_km": 22.751,
+    "world_mi": 14.137
   },
-  "etag": "\"j1RQXYEB5-v1\"",
+  "etag": "\"jMHQGP65P-v1\"",
   "evidence": [
+    {
+      "content_type": "image/webp",
+      "evidence_id": "evd_1rqxyeb54d",
+      "expires_at": "2026-10-14T10:00:26.000Z",
+      "role": "adjusted_scale",
+      "section": 0,
+      "size_bytes": 36,
+      "url": "https://pt.example/dl/evidence/evd_1rqxyeb54d?exp=1791972026&sig=17cb5c5f8613dd3fc8dc7fb9018918e64dc49abf301a9e48835051ac832bb910"
+    },
     {
       "content_type": "image/webp",
       "evidence_id": "evd_arsm3am5s1",
       "expires_at": "2026-10-14T10:00:26.000Z",
       "role": "custom_map",
+      "section": null,
       "size_bytes": 36,
       "url": "https://pt.example/dl/evidence/evd_arsm3am5s1?exp=1791972026&sig=169705a7cbe990365865582470b8f32dae1687210f1b23a933b3ca0b8e474f35"
     },
@@ -99,6 +109,7 @@
       "evidence_id": "evd_3a051hzcz0",
       "expires_at": "2026-10-14T10:00:26.000Z",
       "role": "main",
+      "section": null,
       "size_bytes": 36,
       "url": "https://pt.example/dl/evidence/evd_3a051hzcz0?exp=1791972026&sig=f91fffc73320129c390a347b6cbe4f50c7dc5e3c8668d5b4f2fa8ef3f03c82b3"
     },
@@ -107,6 +118,7 @@
       "evidence_id": "evd_qa7j61zpen",
       "expires_at": "2026-10-14T10:00:26.000Z",
       "role": "uk_route",
+      "section": null,
       "size_bytes": 36,
       "url": "https://pt.example/dl/evidence/evd_qa7j61zpen?exp=1791972026&sig=fe8db2f023b9f08f47c38c0915bae0d6aa22863436927470e18099b689f4b8cf"
     }
@@ -118,10 +130,10 @@
   "game": "ets2",
   "game_km": 380.0,
   "game_mi": 236.12,
-  "held_points": 13.0,
+  "held_points": 14.1,
   "hide_map": false,
   "integrity": null,
-  "job_id": "1RQXYEB5",
+  "job_id": "MHQGP65P",
   "market": null,
   "multiplayer": {
     "kind": "unknown",
@@ -156,6 +168,16 @@
   "rules": [],
   "segments": [],
   "sheet": {
+    "adjusted_scales": [
+      {
+        "distance_km": 6.0,
+        "distance_mi": 3.73,
+        "entry_city": "Paris",
+        "evidence_id": "evd_1rqxyeb54d",
+        "exit_city": "Paris",
+        "scale": 3.0
+      }
+    ],
     "cargo_name": "Apples",
     "damage_pct": 2.0,
     "destination_city": "London",
@@ -196,6 +218,16 @@
     "fuel_unit": "l",
     "map_scale_defaulted": true,
     "sheet": {
+      "adjusted_scales": [
+        {
+          "distance_km": 6.0,
+          "distance_mi": 3.73,
+          "entry_city": "Paris",
+          "evidence_id": "evd_1rqxyeb54d",
+          "exit_city": "Paris",
+          "scale": 3.0
+        }
+      ],
       "cargo_name": "Apples",
       "damage_pct": 2.0,
       "destination_city": "London",
@@ -225,6 +257,6 @@
     "unit": "km"
   },
   "timeline": [],
-  "world_km": 21.07,
-  "world_mi": 13.09
+  "world_km": 22.75,
+  "world_mi": 14.14
 }

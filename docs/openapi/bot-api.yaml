@@ -989,6 +989,10 @@
                           "type": "string"
                         "role":
                           "type": "string"
+                        "section":
+                          "type":
+                          - "integer"
+                          - "null"
                         "size_bytes":
                           "type": "integer"
                         "url":
@@ -1167,8 +1171,23 @@
                     "type": "array"
                   "sheet":
                     "properties":
-                      "adjusted_scale":
-                        "type": "null"
+                      "adjusted_scales":
+                        "items":
+                          "properties":
+                            "distance_km":
+                              "type": "number"
+                            "distance_mi":
+                              "type": "number"
+                            "entry_city":
+                              "type": "string"
+                            "evidence_id":
+                              "type": "string"
+                            "exit_city":
+                              "type": "string"
+                            "scale":
+                              "type": "number"
+                          "type": "object"
+                        "type": "array"
                       "cargo_name":
                         "type": "string"
                       "damage_pct":
@@ -1275,6 +1294,23 @@
                         "type": "boolean"
                       "sheet":
                         "properties":
+                          "adjusted_scales":
+                            "items":
+                              "properties":
+                                "distance_km":
+                                  "type": "number"
+                                "distance_mi":
+                                  "type": "number"
+                                "entry_city":
+                                  "type": "string"
+                                "evidence_id":
+                                  "type": "string"
+                                "exit_city":
+                                  "type": "string"
+                                "scale":
+                                  "type": "number"
+                              "type": "object"
+                            "type": "array"
                           "cargo_name":
                             "type": "string"
                           "damage_pct":
@@ -3280,6 +3316,10 @@
                           "type": "string"
                         "role":
                           "type": "string"
+                        "section":
+                          "type":
+                          - "integer"
+                          - "null"
                         "size_bytes":
                           "type": "integer"
                         "url":

@@ -2,9 +2,19 @@
   "items": [
     {
       "content_type": "image/webp",
+      "evidence_id": "evd_1rqxyeb54d",
+      "expires_at": "2026-10-14T10:00:24.000Z",
+      "role": "adjusted_scale",
+      "section": 0,
+      "size_bytes": 36,
+      "url": "https://pt.example/dl/evidence/evd_1rqxyeb54d?exp=1791972024&sig=98738eb259e953d3383db9b990c7ea8867fbbf768f9b37269a925d6f70c58868"
+    },
+    {
+      "content_type": "image/webp",
       "evidence_id": "evd_arsm3am5s1",
       "expires_at": "2026-10-14T10:00:24.000Z",
       "role": "custom_map",
+      "section": null,
       "size_bytes": 36,
       "url": "https://pt.example/dl/evidence/evd_arsm3am5s1?exp=1791972024&sig=e2a3e7a050aa94fba10cfa98ecfe91294aff571f733d5d27d5cac78fe83c69be"
     },
@@ -13,6 +23,7 @@
       "evidence_id": "evd_3a051hzcz0",
       "expires_at": "2026-10-14T10:00:24.000Z",
       "role": "main",
+      "section": null,
       "size_bytes": 36,
       "url": "https://pt.example/dl/evidence/evd_3a051hzcz0?exp=1791972024&sig=24f9ab64ec9cd12a27e6a9a884e66f8d51aff8a893e5d00983da32cd4d8c7a12"
     },
@@ -21,9 +32,10 @@
       "evidence_id": "evd_qa7j61zpen",
       "expires_at": "2026-10-14T10:00:24.000Z",
       "role": "uk_route",
+      "section": null,
       "size_bytes": 36,
       "url": "https://pt.example/dl/evidence/evd_qa7j61zpen?exp=1791972024&sig=b526eeb9f76ef2e6dc66638f8c41c6fedf2c091f10c837e70b471e51e95600cb"
     }
   ],
-  "job_id": "1RQXYEB5"
+  "job_id": "MHQGP65P"
 }

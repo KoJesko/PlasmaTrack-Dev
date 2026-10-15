@@ -18,7 +18,8 @@ use crate::{auth, config, params, sheet, webhooks};
 
 pub const MAX_IMAGE_BYTES: usize = 5 * 1024 * 1024;
 pub const MAX_MAIN_EVIDENCE: usize = 5;
-pub const MAX_IMAGES: usize = 8;
+/// 5 main images, a custom map, a UK route and one per adjusted section.
+pub const MAX_IMAGES: usize = MAX_MAIN_EVIDENCE + 2 + sheet::MAX_SECTIONS;
 /// Images not used by a submission within a day are deleted.
 pub const UNATTACHED_TTL_MS: i64 = 24 * 3_600_000;
 pub const MAX_UNATTACHED: usize = 30;
@@ -105,12 +106,12 @@ pub fn evidence_link<H: Host>(h: &H, id: &str) -> Value {
 
 /// The images of a job, each with a fresh link.
 pub async fn evidence_list<H: Host>(h: &H, job_id: &str) -> ApiResult<Vec<Value>> {
-    let rows = h.all("SELECT * FROM evidence WHERE job_id = ?1 ORDER BY role, created_at, evidence_id", params![job_id]).await?;
+    let rows = h.all("SELECT * FROM evidence WHERE job_id = ?1 ORDER BY role, section, created_at, evidence_id", params![job_id]).await?;
     Ok(rows
         .iter()
         .map(|r| {
-            let mut v = json!({"evidence_id": r.s("evidence_id"), "role": r.s("role"), "content_type": r.s("content_type"),
-                               "size_bytes": r.i("size_bytes")});
+            let mut v = json!({"evidence_id": r.s("evidence_id"), "role": r.s("role"), "section": r.opt_i("section"),
+                               "content_type": r.s("content_type"), "size_bytes": r.i("size_bytes")});
             let link = evidence_link(h, &r.s("evidence_id"));
             v["url"] = link["url"].clone();
             v["expires_at"] = link["expires_at"].clone();
@@ -188,16 +189,17 @@ pub async fn submit<H: Host>(h: &H, req: &Request, discord_id: &str) -> ApiResul
     if defaulted {
         fields.insert("map_scale".into(), json!(scoring.cfg.map.scale.vanilla(game).main_road_local_scale()));
     }
-    sheet::check(&fields)?;
+    sheet::check(&fields, game, &scoring.cfg)?;
 
     // Every referenced image: the player's own, unused, at most once.
-    let mut refs: Vec<(&str, String, String)> = Vec::new();
+    // (role, evidence id, request field, adjusted section)
+    let mut refs: Vec<(&str, String, String, Option<i64>)> = Vec::new();
     let mut errs = Map::new();
     match body.get("evidence").and_then(Value::as_array) {
         Some(a) if (1..=MAX_MAIN_EVIDENCE).contains(&a.len()) => {
             for (i, v) in a.iter().enumerate() {
                 match v.as_str() {
-                    Some(id) => refs.push(("main", id.to_string(), format!("evidence[{i}]"))),
+                    Some(id) => refs.push(("main", id.to_string(), format!("evidence[{i}]"), None)),
                     None => {
                         errs.insert(format!("evidence[{i}]"), "an evidence id".into());
                     }
@@ -210,21 +212,24 @@ pub async fn submit<H: Host>(h: &H, req: &Request, discord_id: &str) -> ApiResul
     }
     match body.get("custom_map") {
         None | Some(Value::Null) => {}
-        Some(Value::String(id)) => refs.push(("custom_map", id.clone(), "custom_map".into())),
+        Some(Value::String(id)) => refs.push(("custom_map", id.clone(), "custom_map".into(), None)),
         Some(_) => {
             errs.insert("custom_map".into(), "an evidence id".into());
         }
     }
-    for (sec, role, field) in [("uk", "uk_route", "uk.route_evidence"), ("adjusted_scale", "adjusted_scale", "adjusted_scale.evidence")] {
-        if let Some(id) = fields.get(sec).and_then(|s| s.get("evidence_id")).and_then(Value::as_str) {
-            refs.push((role, id.to_string(), field.into()));
+    if let Some(id) = fields.get("uk").and_then(|s| s.get("evidence_id")).and_then(Value::as_str) {
+        refs.push(("uk_route", id.to_string(), "uk.route_evidence".into(), None));
+    }
+    for (i, s) in sheet::sections(&fields).into_iter().enumerate() {
+        if let Some(id) = s.get("evidence_id").and_then(Value::as_str) {
+            refs.push(("adjusted_scale", id.to_string(), format!("adjusted_scales[{i}].evidence"), Some(i as i64)));
         }
     }
     if refs.len() > MAX_IMAGES {
         errs.insert("evidence".into(), format!("at most {MAX_IMAGES} images per job").into());
     }
-    for (i, (_, id, field)) in refs.iter().enumerate() {
-        if refs[..i].iter().any(|(_, x, _)| x == id) {
+    for (i, (_, id, field, _)) in refs.iter().enumerate() {
+        if refs[..i].iter().any(|(_, x, _, _)| x == id) {
             errs.insert(field.clone(), "used twice".into());
             continue;
         }
@@ -261,8 +266,8 @@ pub async fn submit<H: Host>(h: &H, req: &Request, discord_id: &str) -> ApiResul
         h.run("DELETE FROM jobs WHERE job_id = ?1", params![&job_id]).await?;
         return Err(e);
     }
-    for (role, id, _) in &refs {
-        h.run("UPDATE evidence SET job_id = ?2, role = ?3 WHERE evidence_id = ?1", params![id, &job_id, *role]).await?;
+    for (role, id, _, section) in &refs {
+        h.run("UPDATE evidence SET job_id = ?2, role = ?3, section = ?4 WHERE evidence_id = ?1", params![id, &job_id, *role, *section]).await?;
     }
     store::audit(h, Audit {
         actor: "self", action: "job.submit", target_kind: "job", target_id: &job_id, target_user: Some(&user.discord_user_id),
@@ -416,7 +421,8 @@ pub async fn write_overrides<H: Host>(h: &H, row: &Row, edit: &Value) -> ApiResu
             after.insert(k, v);
         }
     }
-    sheet::check(&sheet::merged(&base, &after))?;
+    let cfg = config::scoring(h).await?.cfg;
+    sheet::check(&sheet::merged(&base, &after), game, &cfg)?;
     h.run("UPDATE jobs SET overrides = ?2 WHERE job_id = ?1", params![row.s("job_id"), Value::Object(after.clone()).to_string()]).await?;
     Ok((Value::Object(before), Value::Object(after)))
 }

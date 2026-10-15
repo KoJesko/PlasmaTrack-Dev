@@ -10,14 +10,14 @@
       "345678901234567890",
       "456789012345678901"
     ],
-    "revocation_id": "rev_vvjf113pjn",
+    "revocation_id": "rev_9jkqk89cch",
     "target": {
       "id": "rel_0_1_0_windows",
       "kind": "release",
       "label": "PlasmaTrack 0.1.0 (Windows)"
     }
   },
-  "event_id": "evt_9jkqk89cch",
+  "event_id": "evt_ne265fzms8",
   "occurred_at": "2026-10-14T09:00:48.000Z",
   "payload_version": 1,
   "type": "version.revocation_scheduled"

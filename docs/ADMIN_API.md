@@ -493,11 +493,25 @@ Corrects any field of **any** job, tracked or manual:
 - **Fields:** the same names as a manual submission (PUBLIC_API §6):
   - places, `cargo_name`, `truck`, `truck_model`, `mod_names`;
   - `distance`, `fuel_used`, `damage`, `profit`, `started_at`, `ended_at`;
-  - `map_scale`, `uk`, `adjusted_scale`, plus `bonus_id`.
+  - `map_scale`, `uk`, `adjusted_scales`, plus `bonus_id`.
 - **Units and rules for fields:**
   - **Units:** `unit` is needed with any distance, `fuel_unit` with `fuel_used`.
-  - **`uk` and `adjusted_scale`** may be partial (`{"uk": {"entry_city": "Dover"}}`), and
-    `null` removes the section. Their images cannot be changed.
+  - **`uk`** may be partial (`{"uk": {"entry_city": "Dover"}}`), and `null` removes it.
+  - **`adjusted_scales`** is edited by section number, counting from 0 in the current list
+    (the admin detail's `sheet`):
+
+    ```json
+    {"adjusted_scales": {"0": {"distance": 12}, "2": null, "3": {"entry_city": "…", "exit_city": "…", "distance": 4, "scale": 1}}}
+    ```
+
+    - **Change a section:** give an object with any of its fields.
+    - **Remove one:** `null`.
+    - **Add one:** use the next number, here 3 for a list of three; it needs every field except
+      the image.
+    - **Replace the whole list:** send a list (no images).
+    - **Remove them all:** `null`.
+    - **Limits:** at most 5 sections, and the city-scale minimum (PUBLIC_API §6) applies.
+  - **Images** of `uk` and the sections cannot be changed.
   - **Clearing:** `null` clears `damage`, `profit`, `fuel_used`, `truck`, `truck_model`,
     `mod_names` and `map_scale` (back to the game's default); `null` on `bonus_id` means no
     bonus. Other fields cannot be cleared.
@@ -511,7 +525,7 @@ Corrects any field of **any** job, tracked or manual:
   - **Names, fuel, damage, profit, times, truck and mods:** shown values only.
   - **`distance` alone** on a tracked job: the job's own city/road mix is kept, so world
     distance scales with it.
-  - **`map_scale`, `uk` or `adjusted_scale`** on a tracked job: its world distance is worked
+  - **`map_scale`, `uk` or `adjusted_scales`** on a tracked job: its world distance is worked
     out the manual way (PUBLIC_API §6).
   - **`bonus_id`:** replaces the automatic bonus choice. It must be a bonus of the job's game,
     in any state.

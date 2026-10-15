@@ -352,7 +352,10 @@ one, as with `/link`. A disabled player gets `403`.
   "truck": "Scania", "truck_model": "S 730", "mod_names": ["Example Map Mod"],
   "map_scale": 19,
   "uk": {"distance": 76, "entry_city": "Folkestone", "end_city": "London", "route_evidence": "evd_…"},
-  "adjusted_scale": {"entry_city": "…", "exit_city": "…", "distance": 40, "scale": 1, "evidence": "evd_…"},
+  "adjusted_scales": [
+    {"entry_city": "Paris", "exit_city": "Paris", "distance": 6, "scale": 3, "evidence": "evd_…"},
+    {"entry_city": "…", "exit_city": "…", "distance": 40, "scale": 1, "evidence": "evd_…"}
+  ],
   "evidence": ["evd_…"],
   "custom_map": "evd_…"
 }
@@ -371,15 +374,24 @@ one, as with `/link`. A disabled player gets `403`.
   - **`map_scale`:** when left out, ATS 20 and ETS2 19.
   - **`uk`** (ETS2 only): the stretch driven in the UK, counted at scale 15. All four fields or
     none. Its `distance` is part of `distance`.
-  - **`adjusted_scale`:** one section at another scale, all five fields. Its `distance` is part
-    of `distance`.
+  - **`adjusted_scales`:** 0 to **5** sections driven at another scale (owner, 2026-10-15).
+    - Each section needs all five fields.
+    - Their distances, plus the UK's, are part of `distance` and cannot add up to more.
+  - **City sections need a minimum.** A section at **city scale (3)** must be at least
+    **1 mile of real distance, which is 3 mi (4.828032 km) in game**. Shorter ones are
+    rejected (`422`), not flagged for review. Moderators' edits follow the same rule.
   - **`custom_map`:** one image.
 - **Images:**
-  - `evidence` holds 1 to 5 images, plus at most one each for `custom_map`,
-    `uk.route_evidence` and `adjusted_scale.evidence`, so at most 8 per job;
+  - `evidence` holds 1 to 5 images;
+  - at most one each for `custom_map`, `uk.route_evidence` and each section's `evidence`, so at
+    most 12 per job;
   - every image must have been uploaded for this player and not used by another job.
 - **Validation:** `422 validation_failed` names every bad field, for example
   `{"damage": "a number from 0 to 100", "uk.distance": "…", "evidence[0]": "…"}`.
+  - A section's fields are named by position: `adjusted_scales[2].distance`.
+  - A city section that is too short gives
+    `adjusted_scales[i].distance: "a city-scale section counts only from 3 mi in game (1 mi real)"`.
+  - The older single `adjusted_scale` object is refused, with a pointer to `adjusted_scales`.
 - **A player never picks a bonus.** `bonus_id` is refused here; a moderator can set it.
 - **Answer:** `201` with the job detail (§3).
   - The job's `origin` is `manual`. It is always `pending_review`, with reason
@@ -388,8 +400,8 @@ one, as with `/link`. A disabled player gets `403`.
 
 **How a manual job is scored** (the server's rule, not the bot's):
 
-- **World distance:** (distance − UK − adjusted) ÷ `map_scale`, plus UK ÷ 15, plus adjusted ÷
-  its `scale`. The bot never computes this.
+- **World distance:** (distance − UK − all sections) ÷ `map_scale`, plus UK ÷ 15, plus each
+  section ÷ its own `scale`. The bot never computes this.
   - Tracked jobs also count their city streets at scale 3. So the same game distance scores
     somewhat less when submitted by hand.
 - **Points:** world miles × the usual points per mile, floored. No speed penalty, and no bonus
@@ -406,12 +418,15 @@ Only for the player who submitted the job (`404` otherwise):
 
 ```json
 {"job_id": "1RQXYEB5", "items": [
-  {"evidence_id": "evd_…", "role": "main", "content_type": "image/webp", "size_bytes": 182340,
+  {"evidence_id": "evd_…", "role": "main", "section": null, "content_type": "image/webp", "size_bytes": 182340,
    "url": "https://…/dl/evidence/evd_…?exp=…&sig=…", "expires_at": "…"}
 ]}
 ```
 
 - **`role`:** `main`, `custom_map`, `uk_route` or `adjusted_scale`.
+- **`section`:** for `adjusted_scale` images, which section they show, numbered from 0 as
+  submitted. The admin detail's `submission` keeps that order, even after moderators edit the
+  sections. `null` for every other role.
 - **`url`:** a signed link valid for **one hour**; fetching it needs no token.
 - **Who sees images:**
   - moderators, in the admin job detail (ADMIN_API §4);

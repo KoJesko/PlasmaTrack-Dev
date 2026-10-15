@@ -5,7 +5,7 @@
     "audit_log": 28,
     "bonuses": 1,
     "config_versions": 2,
-    "evidence": 3,
+    "evidence": 4,
     "jobs": 7,
     "operations": 1,
     "plugin_sessions": 4,
@@ -17,5 +17,5 @@
     "users": 6,
     "webhook_outbox": 17
   },
-  "size_bytes": 98263
+  "size_bytes": 99188
 }

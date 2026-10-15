@@ -219,3 +219,7 @@ These answer the bot's open questions "(Q)". **The project owner confirmed all o
 - 2026-10-15: evidence uploads accept AVIF (`image/avif`), the owner's preferred format, as well
   as WebP, PNG and JPEG (PUBLIC_API §6).
 - 2026-10-15: weekly database backups, plus `POST /api/v1/admin/backups` for one now (ADMIN_API §15).
+- 2026-10-15 (owner): manual jobs take `adjusted_scales`, a list of 0–5 sections, instead of
+  `adjusted_scale`. A city-scale section must be at least 3 mi in game (1 mi real), or it is
+  rejected. Up to 12 images per job; adjusted-scale images carry `section`. Moderators edit
+  sections by number (ADMIN_API §14). Migration 0003.

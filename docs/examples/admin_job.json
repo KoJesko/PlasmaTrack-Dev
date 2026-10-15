@@ -195,7 +195,7 @@
     }
   ],
   "sheet": {
-    "adjusted_scale": null,
+    "adjusted_scales": [],
     "cargo_name": "Medical Vaccines",
     "damage_pct": null,
     "destination_city": "Bergen",

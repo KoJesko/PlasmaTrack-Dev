@@ -3,12 +3,12 @@
     "created_at": "2026-10-14T09:00:40.000Z",
     "revoked_token_id": null,
     "token": "pt_live_EXAMPLE-ONLY-NEVER-A-REAL-TOKEN-000000000",
-    "token_id": "tok_qfw8m2jc7d"
+    "token_id": "tok_vvjf113pjn"
   },
   "user": {
     "created": true,
     "discord_user_id": "234567890123456789",
     "display_name": "Second Driver",
-    "user_id": "usr_wx7zvvc3b2"
+    "user_id": "usr_ja6yc17jv5"
   }
 }

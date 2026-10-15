@@ -222,3 +222,55 @@ fn avif_images_are_accepted_and_served_as_avif() {
     assert_eq!(dl.body, avif);
     assert!(dl.headers.iter().any(|(k, v)| k == "content-type" && v == "image/avif"), "{:?}", dl.headers);
 }
+
+#[test]
+fn up_to_five_sections_each_with_its_image_and_the_city_minimum() {
+    let t = TestHost::new();
+    publish(&t);
+    link(&t);
+    let (e, m, u, a0, a1) = (image(&t, PLAYER, 1), image(&t, PLAYER, 2), image(&t, PLAYER, 3), image(&t, PLAYER, 4), image(&t, PLAYER, 5));
+    let mut body = manual_body(&e, &m, &u);
+    // 380 km: 76 in the UK, 20 at 1:1 and 6 in a big city (scale 3).
+    body["adjusted_scales"] = json!([
+        {"entry_city": "Paris", "exit_city": "Paris", "distance": 6, "scale": 3, "evidence": a0},
+        {"entry_city": "Lille", "exit_city": "Arras", "distance": 20, "scale": 1, "evidence": a1},
+    ]);
+    // A city section under 3 mi in game (4.828 km) is rejected.
+    let mut small = body.clone();
+    small["adjusted_scales"][0]["distance"] = 4.8.into();
+    let r = t.call(t.bot("POST", &format!("/api/v1/players/{PLAYER}/manual-jobs")).with_header("idempotency-key", "small").with_json(&small));
+    assert_eq!(r.status, 422);
+    assert!(r.body_json()["error"]["details"]["fields"]["adjusted_scales[0].distance"].as_str().unwrap().contains("3 mi"), "{}", r.body_json());
+
+    let r = t.call(t.bot("POST", &format!("/api/v1/players/{PLAYER}/manual-jobs")).with_header("idempotency-key", "ok").with_json(&body));
+    assert_eq!(r.status, 201, "{}", r.body_json());
+    let j = r.body_json();
+    let job_id = j["job_id"].as_str().unwrap().to_string();
+    let world = (380.0 - 76.0 - 26.0) / 19.0 + 76.0 / 15.0 + 6.0 / 3.0 + 20.0;
+    assert_eq!(j["held_points"], points_for_world_km(world));
+    assert_eq!(j["distance_by_scale_class"]["city"]["game_km"], 6.0);
+    assert_eq!(j["distance_by_scale_class"]["one_to_one"]["world_km"], 20.0);
+
+    // Each section's image says which section it shows.
+    let ev = t.call(t.bot("GET", &format!("/api/v1/players/{PLAYER}/jobs/{job_id}/evidence"))).body_json();
+    let sections: Vec<(String, Value)> = ev["items"].as_array().unwrap().iter().filter(|i| i["role"] == "adjusted_scale")
+        .map(|i| (i["evidence_id"].as_str().unwrap().to_string(), i["section"].clone())).collect();
+    assert_eq!(sections, vec![(a0.clone(), json!(0)), (a1.clone(), json!(1))]);
+    assert!(ev["items"].as_array().unwrap().iter().filter(|i| i["role"] != "adjusted_scale").all(|i| i["section"].is_null()));
+
+    // A moderator removes section 0 and shortens section 1, by number.
+    let r = t.call(t.admin("PATCH", &format!("/api/v1/admin/jobs/{job_id}")).with_json(&json!({"reason": "Paris was not a big-city run",
+        "unit": "km", "adjusted_scales": {"0": null, "1": {"distance": 10}}})));
+    assert_eq!(r.status, 200, "{}", r.body_json());
+    let world2 = (380.0 - 76.0 - 10.0) / 19.0 + 76.0 / 15.0 + 10.0;
+    assert_eq!(r.body_json()["held_points"], points_for_world_km(world2));
+    let d = t.call(t.admin("GET", &format!("/api/v1/admin/jobs/{job_id}"))).body_json();
+    assert_eq!(d["sheet"]["adjusted_scales"].as_array().unwrap().len(), 1);
+    assert_eq!(d["sheet"]["adjusted_scales"][0]["entry_city"], "Lille");
+    assert_eq!(d["submission"]["sheet"]["adjusted_scales"].as_array().unwrap().len(), 2, "the submission stays as sent");
+    // The city rule holds for moderators too.
+    t.advance(1);
+    let r = t.call(t.admin("PATCH", &format!("/api/v1/admin/jobs/{job_id}")).with_json(&json!({"reason": "Add a city", "unit": "mi",
+        "adjusted_scales": {"1": {"entry_city": "Lyon", "exit_city": "Lyon", "distance": 2, "scale": 3}}})));
+    assert_eq!(r.status, 422, "{}", r.body_json());
+}

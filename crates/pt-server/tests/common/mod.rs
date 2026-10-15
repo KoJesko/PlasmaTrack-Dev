@@ -53,6 +53,7 @@ impl TestHost {
         let db = rusqlite::Connection::open_in_memory().unwrap();
         db.execute_batch(include_str!("../../migrations/0001_init.sql")).unwrap();
         db.execute_batch(include_str!("../../migrations/0002_manual_jobs.sql")).unwrap();
+        db.execute_batch(include_str!("../../migrations/0003_adjusted_sections.sql")).unwrap();
         TestHost {
             db,
             blobs: RefCell::new(BTreeMap::new()),

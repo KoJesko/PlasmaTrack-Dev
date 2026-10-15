@@ -746,7 +746,7 @@ I cannot run the games in this session, so the following steps need a real game 
 
 25. **Manual jobs and moderator edits (2026-10-15, the bot's proposal, approved by you):**
     - Players submit jobs by hand through the bot, with WebP evidence images. They always go to review.
-    - World distance = game distance ÷ map scale (ATS 20, ETS2 19 by default), with the UK stretch at 15 and one adjusted section at its own scale.
+    - World distance = game distance ÷ map scale (ATS 20, ETS2 19 by default), with the UK stretch at 15 and up to five adjusted sections at their own scales. A city-scale section counts only from 1 real mile (3 mi in game); shorter ones are rejected (2026-10-15).
     - Bonuses apply to manual jobs only when a moderator sets one.
     - Moderators may edit **every** field of any job, tracked or manual. Edits are stored as overrides and survive re-scoring and replays.
     - Contract: PUBLIC_API §6, ADMIN_API §14.

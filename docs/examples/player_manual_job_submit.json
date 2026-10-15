@@ -17,10 +17,10 @@
   },
   "distance_by_scale_class": {
     "city": {
-      "game_km": 0.0,
-      "game_mi": 0.0,
-      "world_km": 0.0,
-      "world_mi": 0.0
+      "game_km": 6.0,
+      "game_mi": 3.73,
+      "world_km": 2.0,
+      "world_mi": 1.24
     },
     "nonstandard": {
       "game_km": 0.0,
@@ -35,10 +35,10 @@
       "world_mi": 0.0
     },
     "road": {
-      "game_km": 380.0,
-      "game_mi": 236.12,
-      "world_km": 21.07,
-      "world_mi": 13.09
+      "game_km": 374.0,
+      "game_mi": 232.39,
+      "world_km": 20.75,
+      "world_mi": 12.89
     },
     "unknown": {
       "game_km": 0.0,
@@ -50,8 +50,8 @@
   "game": "ets2",
   "game_km": 380.0,
   "game_mi": 236.12,
-  "held_points": 13.0,
-  "job_id": "1RQXYEB5",
+  "held_points": 14.1,
+  "job_id": "MHQGP65P",
   "market": null,
   "multiplayer": {
     "kind": "unknown",
@@ -80,6 +80,6 @@
     "company_name": "Tradeaux"
   },
   "speed_penalty_applied": false,
-  "world_km": 21.07,
-  "world_mi": 13.09
+  "world_km": 22.75,
+  "world_mi": 14.14
 }

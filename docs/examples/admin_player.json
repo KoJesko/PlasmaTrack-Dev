@@ -60,10 +60,10 @@
     "ets2": {
       "distance_by_scale_class": {
         "city": {
-          "game_km": 34.88,
-          "game_mi": 21.67,
-          "world_km": 11.62,
-          "world_mi": 7.22
+          "game_km": 41.88,
+          "game_mi": 26.02,
+          "world_km": 13.95,
+          "world_mi": 8.67
         },
         "nonstandard": {
           "game_km": 0.0,
@@ -78,10 +78,10 @@
           "world_mi": 0.0
         },
         "road": {
-          "game_km": 1467.38,
-          "game_mi": 911.79,
-          "world_km": 79.0,
-          "world_mi": 49.09
+          "game_km": 1460.38,
+          "game_mi": 907.44,
+          "world_km": 78.63,
+          "world_mi": 48.86
         },
         "unknown": {
           "game_km": 0.0,
@@ -103,9 +103,9 @@
         "voided": 0
       },
       "pending_review_count": 0,
-      "points": 208.3,
-      "world_km": 178.37,
-      "world_mi": 110.83
+      "points": 209.5,
+      "world_km": 180.34,
+      "world_mi": 112.06
     }
   },
   "token": {

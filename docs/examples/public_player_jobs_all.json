@@ -16,7 +16,7 @@
       "game_km": 384.0,
       "game_mi": 238.61,
       "held_points": null,
-      "job_id": "1RQXYEB5",
+      "job_id": "MHQGP65P",
       "market": null,
       "multiplayer": {
         "kind": "unknown",
@@ -24,7 +24,7 @@
       },
       "origin": "manual",
       "outcome": "approved",
-      "points": 13.2,
+      "points": 14.4,
       "reported_delivered_at": "2026-10-14T08:20:00.000Z",
       "source": {
         "city_id": null,
@@ -32,8 +32,8 @@
         "company_id": null,
         "company_name": "Tradeaux"
       },
-      "world_km": 21.33,
-      "world_mi": 13.26
+      "world_km": 23.3,
+      "world_mi": 14.48
     },
     {
       "cargo": {

@@ -274,16 +274,18 @@ fn scenario(t: &TestHost) -> (Vec<(Call, Value)>, BTreeMap<String, Value>) {
 
     // Manual submissions (PUBLIC_API §6) and moderator edits (ADMIN_API §14).
     let ev = r.upload_image("player_evidence_upload", "Upload one evidence image", "/api/v1/players/{discord_id}/evidence", &format!("/api/v1/players/{p}/evidence"), 1);
-    let (map, uk) = (image(t, p, 2), image(t, p, 3));
+    let (map, uk, adj) = (image(t, p, 2), image(t, p, 3), image(t, p, 4));
+    let mut submitted = manual_body(ev["evidence_id"].as_str().unwrap(), &map, &uk);
+    submitted["adjusted_scales"] = json!([{"entry_city": "Paris", "exit_city": "Paris", "distance": 6, "scale": 3, "evidence": adj}]);
     let mut bad = manual_body(ev["evidence_id"].as_str().unwrap(), &map, &uk);
     bad["damage"] = json!(140);
     r.call("error_validation_manual", "Manual jobs", "", "POST", "/api/v1/players/{discord_id}/manual-jobs", &format!("/api/v1/players/{p}/manual-jobs"), Some(bad), Bot, 422);
-    let m = r.call("player_manual_job_submit", "Manual jobs", "Submit a job by hand (goes to review)", "POST", "/api/v1/players/{discord_id}/manual-jobs", &format!("/api/v1/players/{p}/manual-jobs"), Some(manual_body(ev["evidence_id"].as_str().unwrap(), &map, &uk)), Bot, 201);
+    let m = r.call("player_manual_job_submit", "Manual jobs", "Submit a job by hand (goes to review)", "POST", "/api/v1/players/{discord_id}/manual-jobs", &format!("/api/v1/players/{p}/manual-jobs"), Some(submitted), Bot, 201);
     let manual = m["job_id"].as_str().unwrap().to_string();
     r.call("player_job_evidence", "Manual jobs", "The submitter's own evidence images", "GET", "/api/v1/players/{discord_id}/jobs/{job_id}/evidence", &format!("/api/v1/players/{p}/jobs/{manual}/evidence"), None, Bot, 200);
     r.call("public_job_manual", "Public", "", "GET", "/api/v1/public/jobs/{job_id}", &format!("/api/v1/public/jobs/{manual}"), None, Read, 200);
     let md = r.call("admin_job_manual", "Jobs", "", "GET", "/api/v1/admin/jobs/{job_id}", &format!("/api/v1/admin/jobs/{manual}"), None, Admin, 200);
-    r.call("admin_job_approve_manual", "Decisions", "", "POST", "/api/v1/admin/jobs/{job_id}/{action}", &format!("/api/v1/admin/jobs/{manual}/approve"), Some(json!({"reason": "Screenshots match.", "expected_etag": md["etag"], "hide_map": false, "corrections": {"unit": "km", "distance": 384, "uk": {"distance": 80}}})), Admin, 200);
+    r.call("admin_job_approve_manual", "Decisions", "", "POST", "/api/v1/admin/jobs/{job_id}/{action}", &format!("/api/v1/admin/jobs/{manual}/approve"), Some(json!({"reason": "Screenshots match.", "expected_etag": md["etag"], "hide_map": false, "corrections": {"unit": "km", "distance": 384, "uk": {"distance": 80}, "adjusted_scales": {"0": {"distance": 7}}}})), Admin, 200);
     r.call("admin_job_edit", "Jobs", "Correct any field of any job", "PATCH", "/api/v1/admin/jobs/{job_id}", &format!("/api/v1/admin/jobs/{valid}"), Some(json!({"reason": "The cargo was renamed by a mod.", "cargo_name": "Corrected cargo", "damage": 3})), Admin, 200);
     r.call("public_player_jobs_all", "Public", "A player's jobs in both games, newest first", "GET", "/api/v1/public/players/{discord_id}/jobs", &format!("/api/v1/public/players/{p}/jobs?limit=3"), None, Read, 200);
 

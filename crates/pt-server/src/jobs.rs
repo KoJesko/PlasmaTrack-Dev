@@ -470,10 +470,11 @@ fn tracked_sheet(job: &Job, r: &JobResult, started: i64) -> Map<String, Value> {
     for (k, v) in [("source_city", &n.source_city), ("source_company", &n.source_company), ("destination_city", &n.destination_city), ("destination_company", &n.destination_company)] {
         m.insert(k.into(), v.clone().into());
     }
-    for k in ["damage_pct", "profit", "truck", "truck_model", "map_scale", "uk", "adjusted_scale"] {
+    for k in ["damage_pct", "profit", "truck", "truck_model", "map_scale", "uk"] {
         m.insert(k.into(), Value::Null);
     }
     m.insert("mods".into(), json!([]));
+    m.insert("adjusted_scales".into(), json!([]));
     m
 }
 
@@ -509,14 +510,14 @@ fn apply_overrides(
     let started = eff.get("started_at_ms").and_then(Value::as_i64).unwrap_or(0);
     let ended = eff.get("ended_at_ms").and_then(Value::as_i64);
 
-    let distance = ["distance_km", "map_scale", "uk", "adjusted_scale"].iter().any(|k| overrides.contains_key(*k));
+    let distance = ["distance_km", "map_scale", "uk", "adjusted_scales"].iter().any(|k| overrides.contains_key(*k));
     let bonus_set = overrides.contains_key("bonus_id");
     if !distance && !bonus_set {
         return (started, ended);
     }
     let old_game = r.distances.counted_game_km;
     let new_game = eff.get("distance_km").and_then(Value::as_f64).unwrap_or(old_game);
-    let only_distance = !["map_scale", "uk", "adjusted_scale"].iter().any(|k| overrides.contains_key(*k));
+    let only_distance = !["map_scale", "uk", "adjusted_scales"].iter().any(|k| overrides.contains_key(*k));
     let world = if !distance {
         r.distances.world_km
     } else if only_distance && old_game > 0.0 {
