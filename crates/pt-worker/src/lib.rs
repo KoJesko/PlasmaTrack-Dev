@@ -291,13 +291,15 @@ async fn queue(batch: MessageBatch<Value>, env: Env, _ctx: Context) -> Result<()
     Ok(())
 }
 
-/// The weekly backup (docs/SERVER.md); every other schedule is the cron job.
-const BACKUP_CRON: &str = "47 3 * * 0";
+/// The weekly backup, `47 3 * * SUN` in wrangler.toml (docs/SERVER.md); every
+/// other schedule is the cron job. Matched by its time, so Cloudflare's
+/// spelling of the weekday does not matter.
+const BACKUP_CRON_TIME: &str = "47 3 ";
 
 #[event(scheduled)]
 async fn scheduled(event: ScheduledEvent, env: Env, _ctx: ScheduleContext) {
     let host = CfHost::new(env, None);
-    if event.cron() == BACKUP_CRON {
+    if event.cron().starts_with(BACKUP_CRON_TIME) {
         // Sizes and row counts only, never row contents.
         match pt_server::backup::run(&host).await {
             Ok(r) => console_log!("backup written: {} ({} bytes, {} tables, deleted {:?})", r.key, r.bytes, r.tables.len(), r.deleted),

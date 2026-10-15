@@ -101,7 +101,7 @@ processes, and two local instances share one queue. Check for leftover `workerd.
 
 ## Backups (owner, 2026-10-15)
 
-Every Sunday at 03:47 UTC each server writes its whole D1 database to the private R2 bucket
+Every Sunday at 03:47 UTC (`47 3 * * SUN`; Cloudflare does not accept `0` for Sunday) each server writes its whole D1 database to the private R2 bucket
 `plasmatrack-backups`:
 
 | Server | Prefix |
@@ -111,8 +111,12 @@ Every Sunday at 03:47 UTC each server writes its whole D1 database to the privat
 | (the bot, its own D1) | `d1/plasmatrack-bot/` |
 
 - **The file** is SQL, the same format as the bot's backups. For each table it has
-  `DELETE FROM t;` and then one `INSERT` per row, one statement per line, with line breaks in
-  text written as `char(10)`.
+  `DELETE FROM t;` and then one `INSERT` per row, one statement per line.
+  - **Line breaks in text** become a marker the text does not contain, turned back with
+    `replace('…~n0~…', '~n0~', char(10))`.
+  - Not `|| char(10) ||` per line: D1 allows expressions only 100 deep, so the published
+    config's TOML would not restore.
+  - Checked by restoring a real backup into a local D1, which matched the server.
   - It holds every table except the short-lived `idempotency`.
   - It is named after the time it was made, for example `2026-10-18T03-47-00.123Z.sql`.
 - **Two are kept.** After a successful write, older files under the server's own prefix are

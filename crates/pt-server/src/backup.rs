@@ -25,17 +25,18 @@ fn literal(v: &Value) -> String {
         Value::Bool(b) => (*b as i32).to_string(),
         Value::Number(n) => n.to_string(),
         Value::String(s) => {
-            // One statement per line: line breaks are spliced in with char().
-            let mut out = String::from("'");
-            for c in s.chars() {
-                match c {
-                    '\'' => out.push_str("''"),
-                    '\n' => out.push_str("' || char(10) || '"),
-                    '\r' => out.push_str("' || char(13) || '"),
-                    c => out.push(c),
+            // One statement per line: line breaks become a marker the text does
+            // not contain, turned back by replace(). D1 allows expressions only
+            // 100 deep, so a `|| char(10) ||` per line breaks on long texts
+            // (the published config's TOML).
+            let marker = |c: &str| (0..).map(|k| format!("~{c}{k}~")).find(|m| !s.contains(m.as_str())).expect("some marker is free");
+            let mut out = format!("'{}'", s.replace('\'', "''"));
+            for (ch, name, code) in [('\n', "n", 10), ('\r', "r", 13)] {
+                if s.contains(ch) {
+                    let m = marker(name);
+                    out = format!("replace({}, '{m}', char({code}))", out.replace(ch, &m));
                 }
             }
-            out.push('\'');
             out
         }
         other => literal(&Value::String(other.to_string())),
@@ -145,7 +146,12 @@ mod tests {
         assert_eq!(literal(&json!(42)), "42");
         assert_eq!(literal(&json!(7.5)), "7.5");
         assert_eq!(literal(&json!("it's")), "'it''s'");
-        assert_eq!(literal(&json!("a\nb\r\nc")), "'a' || char(10) || 'b' || char(13) || '' || char(10) || 'c'");
+        assert_eq!(literal(&json!("a\nb\r\nc")), "replace(replace('a~n0~b~r0~~n0~c', '~n0~', char(10)), '~r0~', char(13))");
+        // A marker already in the text is skipped.
+        assert_eq!(literal(&json!("~n0~\n")), "replace('~n0~~n1~', '~n1~', char(10))");
+        // Depth stays constant however many lines (D1 allows 100).
+        let long = literal(&json!("x\n".repeat(500)));
+        assert_eq!((long.matches("replace(").count(), long.contains('\n')), (1, false));
         assert_eq!(ident("we\"ird"), "\"we\"\"ird\"");
     }
 }
