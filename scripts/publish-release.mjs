@@ -117,11 +117,15 @@ async function post(path, body) {
   return { status: res.status, json: await res.json() };
 }
 
-// A server still running code from before updates (or mid-deploy) would store the
-// release without its update.
-const probe = await fetch(`${url}/api/v1/client/update?platform=${PLATFORM}&version=0.0.0`);
-if (probe.status !== 200) {
-  console.error(`${url} does not serve client updates yet (${probe.status}); deploy it, wait a minute, and try again`);
+// A server still running older code (or mid-deploy) would store the release
+// without its update, or hand out the setup the old way. The newest endpoint
+// answers 200, or 404 for a missing release; older code says "no such endpoint".
+const probe = await fetch(`${url}/api/v1/players/${actor}/client-download?platform=${PLATFORM}`, {
+  headers: { authorization: `Bearer ${BOT_TOKEN}` },
+});
+const probed = await probe.json().catch(() => ({}));
+if (probe.status !== 200 && probed.error?.details?.resource !== "release") {
+  console.error(`${url} runs older code (${probe.status} ${probed.error?.message ?? ""}); deploy it, wait a minute, and try again`);
   process.exit(1);
 }
 
