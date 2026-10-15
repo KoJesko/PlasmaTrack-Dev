@@ -266,14 +266,13 @@ async fn release_file(env: &Env, path: &str) -> Result<Option<Response>> {
     let parts: Vec<&str> = rest.split('/').collect();
     let Some(key) = updates::release_key(&parts) else { return Ok(None) };
     let Some(obj) = env.bucket("RELEASES")?.get(&key).execute().await? else { return Ok(None) };
-    let size = obj.size();
     let Some(body) = obj.body() else { return Ok(None) };
     let h = Headers::new();
     for (k, v) in updates::file_headers(&key) {
         h.set(&k, &v)?;
     }
-    h.set("content-length", &size.to_string())?;
-    Ok(Some(Response::from_stream(body.stream()?)?.with_headers(h)))
+    // Handed to the runtime as is: no CPU time, and the length is known.
+    Ok(Some(Response::from_body(body.response_body()?)?.with_headers(h)))
 }
 
 #[event(fetch)]

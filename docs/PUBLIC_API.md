@@ -501,3 +501,33 @@ Only for the player who submitted the job (`404` otherwise):
   - moderators, in the admin job detail (ADMIN_API §4);
   - the submitter, through this call;
   - everyone else, only the `custom_map` (§3), and only unless it was hidden.
+
+## 7. Downloading PlasmaTrack (owner, 2026-10-15)
+
+### `GET /api/v1/public/client?platform=windows`: the newest release
+
+Read token or bot token.
+
+```json
+{"platform": "windows", "release_id": "rel_0_2_0_windows", "version": "0.2.0",
+ "published_at": "2026-10-15T10:24:00.000Z",
+ "notes": "PlasmaTrack now updates itself: new versions install automatically once ETS2 and ATS are closed.",
+ "installer": {"file_name": "PlasmaTrack-Setup-0.2.0.exe", "bytes": 103079567,
+               "url": "https://plasmatrack-server.jansherremway.workers.dev/dl/setup/windows"}}
+```
+
+- **Which release:** the newest one offered to clients.
+- **`404`** before any release is offered.
+- **`installer`** is `null` for a release published without a setup program.
+
+**`installer.url` stays the same across releases.** `GET /dl/setup/windows`, or just
+`/dl/setup`, needs no token. It redirects (`302`) to the newest setup program, so the bot
+can post it once and it never goes stale.
+
+**Installed clients update themselves** (docs/UPDATES.md). A player only needs the setup:
+- the first time;
+- to move from 0.1.x, which has no updater, to 0.2.0.
+
+**What clients ask:** `GET /api/v1/client/update?platform=windows&version=0.2.0`, without a
+token. It returns `{"update": null}`, or the newer release's signed manifest. The bot does not
+need it.

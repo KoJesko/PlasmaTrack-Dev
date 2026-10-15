@@ -435,6 +435,38 @@ field is optional; `reason` is required.
 - **`role`:** `plugin`, `client_binary` or `config_file`.
 - `GET /api/v1/admin/releases` lists them.
 
+**Updates** (docs/UPDATES.md). `scripts/publish-release.mjs` adds these optional fields; the bot
+does not need to send them.
+
+| Field | Meaning |
+|---|---|
+| `update` | `{"manifest": "<text>", "signature": "<hex>"}`: the release's files, signed with the release key. |
+| `installer` | File name of the setup program in the release bucket, such as `PlasmaTrack-Setup-0.2.0.exe`. |
+| `notes` | What changed, for players: at most 2000 characters. |
+| `offer` | Offer the update to clients now. Defaults to `true` when `update` is given. |
+
+`422` when:
+- the signature is not by a release key;
+- the manifest is for another version or platform;
+- a plugin or client hash of the release is missing from the update, or the update ships a
+  program that is not one of the release's files;
+- a file or the setup program is not in the release bucket, or its size differs.
+
+Each release in responses gains:
+- `update`: `{"files": 10, "bytes": 8536073}`, or `null`;
+- `installer`;
+- `notes`;
+- `offered`.
+
+### `POST /api/v1/admin/releases/{release_id}/offer`
+
+`{"offered": false, "reason": "Crashes on start"}` stops offering a release's update; `true`
+starts again.
+- **Who gets what:** clients get the newest offered release that no revocation targets. A
+  scheduled revocation counts as well.
+- **`200`:** the release. `422` when offering a release that has no update.
+- **Audit action:** `release.offer`.
+
 ### Revocations (PLAN decision 17)
 
 `POST /api/v1/admin/revocations`:

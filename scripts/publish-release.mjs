@@ -87,8 +87,10 @@ if (flag("upload")) {
   const childEnv = { ...process.env };
   delete childEnv.ELECTRON_RUN_AS_NODE;
   const put = (key, file, type) => {
-    execFileSync("npx", ["wrangler", "r2", "object", "put", `${BUCKET}/${key}`, "--file", file, "--content-type", type, "--remote"], {
-      cwd: workerDir, env: childEnv, stdio: ["ignore", "ignore", "inherit"], shell: process.platform === "win32",
+    // The wrangler that crates/pt-worker installs (npm ci there), run by this node.
+    const wrangler = join(workerDir, "node_modules", "wrangler", "bin", "wrangler.js");
+    execFileSync(process.execPath, [wrangler, "r2", "object", "put", `${BUCKET}/${key}`, "--file", file, "--content-type", type, "--remote"], {
+      cwd: workerDir, env: childEnv, stdio: ["ignore", "ignore", "inherit"],
     });
     console.log(`uploaded ${key} (${statSync(file).size} bytes)`);
   };
@@ -110,6 +112,14 @@ async function post(path, body) {
     body: JSON.stringify(body),
   });
   return { status: res.status, json: await res.json() };
+}
+
+// A server still running code from before updates (or mid-deploy) would store the
+// release without its update.
+const probe = await fetch(`${url}/api/v1/client/update?platform=${PLATFORM}&version=0.0.0`);
+if (probe.status !== 200) {
+  console.error(`${url} does not serve client updates yet (${probe.status}); deploy it, wait a minute, and try again`);
+  process.exit(1);
 }
 
 const toml = readFileSync(join(root, "config", "plasmatrack.sample.toml"), "utf8");

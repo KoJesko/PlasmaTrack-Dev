@@ -72,7 +72,12 @@ plasmatrack-client install-plugin --plugin PATH   # copy the plugin into every g
 plasmatrack-client uninstall-plugin  # remove the plugin and plasmatrack.ini again
 plasmatrack-client set-local         # stdin: {"server_url": "...", "token": "..."} (both optional)
 plasmatrack-client show-local        # [local] as JSON; the token only as token_set
+plasmatrack-client check-update      # download and verify a newer release, without installing it
 ```
+
+**Updates** (docs/UPDATES.md). The windowless client installed by Setup checks the server every
+6 hours and downloads newer releases. It installs them once ETS2 and ATS are closed, with
+`apply-update` (not meant to be run by hand). The status page shows any pending update.
 
 - `set-local` edits only `[local]` and keeps comments. It creates the config from the sample
   if it is missing. The token is read from stdin so it never appears in a process list.

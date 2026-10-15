@@ -751,6 +751,14 @@ I cannot run the games in this session, so the following steps need a real game 
     - Moderators may edit **every** field of any job, tracked or manual. Edits are stored as overrides and survive re-scoring and replays.
     - Contract: PUBLIC_API §6, ADMIN_API §14.
 
+26. **Automatic client updates (2026-10-15, you):** from 0.2.0, the installed client updates
+    itself (docs/UPDATES.md).
+    - Releases are signed with an offline Ed25519 key, and clients trust only the key built into
+      them.
+    - Files are served from the R2 bucket `plasmatrack-releases`.
+    - Updates install once no game runs, and a failed update rolls back.
+    - The bot links to `/dl/setup`, which always points to the newest setup program.
+
 ## 12. Open questions
 
 1. ~~**Route images.**~~ Settled: the bot repo renders all images; this server serves GeoJSON and series only (bot contract requirements, 2026-10-14).

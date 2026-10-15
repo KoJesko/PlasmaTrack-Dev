@@ -70,13 +70,24 @@ From `crates/pt-worker`:
 
 ## Releasing a new client or plugin
 
+Follow docs/UPDATES.md, "Publishing a release". In short:
 1. Build the release: `cargo build --release -p pt-client` and the plugin, then
    `npm run dist` in `installer/`. That writes `installer/payload/manifest.json`.
-2. Publish its hashes with `publish-release.mjs` to both servers.
+2. Publish it with `publish-release.mjs`:
+   - **Test first,** with `--upload` to put the files in R2.
+   - **Then production.**
+   - **The script publishes** the hashes (rule 0), the signed update, which installed clients
+     install by themselves, and the setup program.
    - **Without this step, every job from the new build is discarded.**
-   - A config change publishes a new config version the same way.
+   - **A config change** publishes a new config version the same way.
 3. To retire the old build, a moderator schedules a revocation through the bot (ADMIN_API §11).
    It takes effect 21 days later.
+
+**Release bucket.** `plasmatrack-releases` (binding `RELEASES`) holds update files and setup
+programs under `windows/<version>/`.
+- **Shared** by both servers. It holds nothing private: the Worker serves it publicly at
+  `/dl/releases/…`.
+- **Never changed after upload:** a fix is a new version.
 
 ## Changing the server
 
