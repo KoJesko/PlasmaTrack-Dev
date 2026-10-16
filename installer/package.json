@@ -42,5 +42,8 @@
   },
   "allowScripts": {
     "electron-winstaller": false
+  },
+  "overrides": {
+    "global-agent": "^4.1.3"
   }
 }
