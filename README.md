@@ -3,7 +3,7 @@
 Job tracker for Euro Truck Simulator 2 and American Truck Simulator with
 server-side anti-cheat validation. ETS2 and ATS jobs are kept fully separate.
 
-Status: foundation only. The design plan (`docs/PLAN.md`) is awaiting approval.
+Status: Beta relaease, README.md will be updated.
 
 ## Layout
 
