@@ -266,3 +266,5 @@ These answer the bot's open questions "(Q)". **The project owner confirmed all o
 - 2026-10-16: moderators add or remove the speed penalty with `speed_penalty` (`true`, `false`,
   `null` for the rules) in `PATCH /api/v1/admin/jobs/{job_id}` and approval corrections. The
   speed-penalty and invalid-delivery notifications quote a road trip's own limits.
+- 2026-10-16: new review reason `high_income`: over 400 per mile of the game's delivery distance, or
+  over 500,000 in all (config version 3, `review_over_income_per_game_mi` and `review_over_income`).

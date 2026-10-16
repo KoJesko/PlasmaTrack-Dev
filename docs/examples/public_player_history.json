@@ -43,26 +43,26 @@
     {
       "damage_pct_avg": 0.0,
       "end": "2026-10-19T00:00:00.000Z",
-      "fuel_used_l": 0.68,
-      "game_km": 126.7,
-      "game_mi": 78.73,
-      "income": 6767,
-      "job_count": 2,
-      "points": 7.2,
+      "fuel_used_l": 0.0,
+      "game_km": 125.7,
+      "game_mi": 78.11,
+      "income": 6379,
+      "job_count": 1,
+      "points": 7.0,
       "running": {
         "damage_pct_avg": 0.0,
-        "fuel_used_l": 0.68,
-        "game_km": 126.7,
-        "game_mi": 78.73,
-        "income": 6767,
-        "job_count": 2,
-        "points": 7.2,
-        "world_km": 11.71,
-        "world_mi": 7.28
+        "fuel_used_l": 0.0,
+        "game_km": 125.7,
+        "game_mi": 78.11,
+        "income": 6379,
+        "job_count": 1,
+        "points": 7.0,
+        "world_km": 11.38,
+        "world_mi": 7.07
       },
       "start": "2026-10-12T00:00:00.000Z",
-      "world_km": 11.71,
-      "world_mi": 7.28
+      "world_km": 11.38,
+      "world_mi": 7.07
     }
   ],
   "to": "2026-10-19T00:00:00.000Z"

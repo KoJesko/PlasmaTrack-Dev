@@ -40,6 +40,13 @@ average_pace_min_driving_s = 60.0
 review_over_average_world_km_per_game_clock_min = 5.0
 truckersmp_game_min_per_real_min = 6.0
 average_pace_min_game_min = 20.0
+# A delivery paying more than this per mile of the game's delivery distance
+# (the game's currency: USD in ATS, EUR in ETS2) is held for review (you,
+# 2026-10-16). Real jobs pay about 70-140 a mile; a road trip about 290.
+review_over_income_per_game_mi = 400.0
+# The same for the whole delivery's income. A very long job or a future game
+# version can pass it honestly, so it only sends the job to review.
+review_over_income = 500000.0
 # Rule 5: accepted distance = driven distance x this factor when penalized.
 speed_penalty_factor = 0.85
 # Rule 6: points per accepted WORLD mile (physical 1:1 distance = odometer /

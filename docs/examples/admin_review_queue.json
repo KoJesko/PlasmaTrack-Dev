@@ -3,6 +3,48 @@
     {
       "age_s": 13,
       "cargo": {
+        "id": "med_equip",
+        "name": "Medical Equipment"
+      },
+      "delivered_at": "2026-10-14T09:00:01.000Z",
+      "destination": {
+        "city_id": "napoli",
+        "city_name": "Napoli"
+      },
+      "game": "ets2",
+      "game_km": 1.0,
+      "held_points": 0.2,
+      "job_id": "1XW08CFJ",
+      "origin": "tracked",
+      "outcome": "pending_review",
+      "player": {
+        "discord_user_id": "123456789012345678",
+        "display_name": "Example Driver",
+        "user_id": "usr_cy3x405w4v"
+      },
+      "reasons": [
+        {
+          "code": "high_income",
+          "details": {
+            "currency": "EUR",
+            "game_mi": 0.62,
+            "income": 388,
+            "limit": 500000.0,
+            "limit_per_game_mi": 400.0,
+            "per_game_mi": 624.43
+          },
+          "text": "The delivery paid more than the review limit, per mile or in all."
+        }
+      ],
+      "source": {
+        "city_id": "cagliari",
+        "city_name": "Cagliari"
+      },
+      "world_km": 0.33
+    },
+    {
+      "age_s": 13,
+      "cargo": {
         "id": "med_vaccine",
         "name": "Medical Vaccines"
       },
@@ -76,5 +118,5 @@
     }
   ],
   "next_cursor": null,
-  "total": 2
+  "total": 3
 }

@@ -8,7 +8,7 @@
   },
   "config_version": {
     "current": true,
-    "integrity_hash": "fd1e0e637e0134e0a78cc489be58401d4def1c91b16a627319365ed5d71eeacf",
+    "integrity_hash": "926bdb606597732c50917e414d5ec4b49cc30bbe7efcc9903465cce3687661a5",
     "version_id": "cfg_1"
   },
   "currency": "EUR",
@@ -78,7 +78,7 @@
   "income": 99053,
   "integrity": {
     "config_diff": [],
-    "config_hash": "fd1e0e637e0134e0a78cc489be58401d4def1c91b16a627319365ed5d71eeacf",
+    "config_hash": "926bdb606597732c50917e414d5ec4b49cc30bbe7efcc9903465cce3687661a5",
     "config_matched_version": "cfg_1",
     "manifest": [
       {

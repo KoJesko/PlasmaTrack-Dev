@@ -171,7 +171,10 @@ fn ets2_truckersmp_norway_tunnel_and_profiles() {
     let quick = find(&jobs, "med_equip");
     assert_eq!(quick.job.state, JobState::Delivered);
     assert_eq!(count(&quick.job.events, |e| matches!(e, JobEvent::LoadTruncate { .. })), 1);
-    assert_eq!(quick.result.outcome, Outcome::Valid, "{:?}", quick.result.review);
+    // It paid 388 for 1 km (624 a mile): over the income limit, which applies to
+    // every job however short (owner, 2026-10-16).
+    assert_eq!(quick.result.outcome, Outcome::PendingReview);
+    assert!(matches!(quick.result.review[..], [ReviewReason::HighIncome { income: 388, .. }]), "{:?}", quick.result.review);
 
     // The other profile's quick job, accepted right after its autosave loaded
     // (no job in the save), was seen from its start; it was never delivered.

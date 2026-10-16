@@ -59,10 +59,10 @@
     "ets2": {
       "distance_by_scale_class": {
         "city": {
-          "game_km": 41.88,
-          "game_mi": 26.02,
-          "world_km": 13.95,
-          "world_mi": 8.67
+          "game_km": 40.08,
+          "game_mi": 24.9,
+          "world_km": 13.35,
+          "world_mi": 8.3
         },
         "nonstandard": {
           "game_km": 0.0,
@@ -89,22 +89,22 @@
           "world_mi": 0.0
         }
       },
-      "game_km": 3022.7,
-      "game_mi": 1878.22,
-      "job_count": 4,
+      "game_km": 3021.7,
+      "game_mi": 1877.6,
+      "job_count": 3,
       "outcomes": {
         "approved": 2,
         "discarded": 0,
         "invalid": 0,
-        "pending_review": 0,
+        "pending_review": 1,
         "rejected": 0,
-        "valid": 2,
+        "valid": 1,
         "voided": 0
       },
-      "pending_review_count": 0,
-      "points": 209.5,
-      "world_km": 180.34,
-      "world_mi": 112.06
+      "pending_review_count": 1,
+      "points": 209.1,
+      "world_km": 180.01,
+      "world_mi": 111.85
     }
   },
   "truckersmp_accounts": [

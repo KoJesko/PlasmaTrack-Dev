@@ -18,7 +18,7 @@
       "game": "ets2",
       "game_km": 1.0,
       "game_mi": 0.62,
-      "held_points": null,
+      "held_points": 0.2,
       "income": 388,
       "job_id": "1XW08CFJ",
       "job_type": "freight",
@@ -31,8 +31,8 @@
         }
       },
       "origin": "tracked",
-      "outcome": "valid",
-      "points": 0.2,
+      "outcome": "pending_review",
+      "points": null,
       "reported_delivered_at": "2026-10-14T01:29:53.859Z",
       "source": {
         "city_id": "cagliari",

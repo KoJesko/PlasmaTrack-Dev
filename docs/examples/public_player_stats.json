@@ -1,10 +1,10 @@
 {
   "distance_by_scale_class": {
     "city": {
-      "game_km": 16.45,
-      "game_mi": 10.22,
-      "world_km": 5.48,
-      "world_mi": 3.41
+      "game_km": 14.65,
+      "game_mi": 9.1,
+      "world_km": 4.88,
+      "world_mi": 3.03
     },
     "nonstandard": {
       "game_km": 0.0,
@@ -32,20 +32,20 @@
     }
   },
   "game": "ets2",
-  "game_km": 126.7,
-  "game_mi": 78.73,
-  "job_count": 2,
+  "game_km": 125.7,
+  "game_mi": 78.11,
+  "job_count": 1,
   "outcomes": {
     "approved": 0,
     "discarded": 0,
     "invalid": 0,
-    "pending_review": 1,
+    "pending_review": 2,
     "rejected": 0,
-    "valid": 2,
+    "valid": 1,
     "voided": 0
   },
-  "pending_review_count": 1,
-  "points": 7.2,
-  "world_km": 11.71,
-  "world_mi": 7.28
+  "pending_review_count": 2,
+  "points": 7.0,
+  "world_km": 11.38,
+  "world_mi": 7.07
 }

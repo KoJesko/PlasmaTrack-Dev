@@ -344,10 +344,16 @@ impl Sim {
 
     /// `job.delivered` with the game's distance, then the job config empties.
     pub fn deliver(&mut self, distance_km: f64) {
+        // About 80 a mile, like real jobs (the income review is over 400).
+        self.deliver_paid(distance_km, (distance_km * 50.0).round().max(1.0) as i64);
+    }
+
+    /// `job.delivered` paying `revenue`.
+    pub fn deliver_paid(&mut self, distance_km: f64, revenue: i64) {
         self.pause();
         let a = |n: &str, t: &str, v: Value| json!({"name": n, "index": null, "type": t, "value": v});
         let attrs = json!([
-            a("revenue", "s64", json!(4314)),
+            a("revenue", "s64", json!(revenue)),
             a("distance.km", "float", json!(distance_km)),
             a("delivery.time", "u32", json!(124)),
             a("auto.park.used", "bool", json!(true)),

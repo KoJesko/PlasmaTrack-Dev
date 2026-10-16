@@ -49,6 +49,16 @@ pub struct Rules {
     pub truckersmp_game_min_per_real_min: f64,
     /// Jobs with fewer in-game minutes of driving than this are not averaged.
     pub average_pace_min_game_min: f64,
+    /// A delivery paying more than this per mile of the game's delivery
+    /// distance (in the game's currency: USD in ATS, EUR in ETS2) is held for
+    /// review (you, 2026-10-16: 400). Absent: not checked.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub review_over_income_per_game_mi: Option<f64>,
+    /// A delivery paying more than this in all is held for review (you,
+    /// 2026-10-16: 500,000). A very long job or a future game version can
+    /// pass it honestly, so it is a review, never invalid. Absent: not checked.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub review_over_income: Option<f64>,
     pub speed_penalty_factor: f64,
     pub points_per_world_mi: f64,
     pub points_decimals: u32,
@@ -373,6 +383,8 @@ impl Config {
         for (name, v) in [
             ("rules.manual_review_over_world_km", r.manual_review_over_world_km),
             ("rules.review_over_average_world_km_per_min", r.review_over_average_world_km_per_min),
+            ("rules.review_over_income_per_game_mi", r.review_over_income_per_game_mi.unwrap_or(1.0)),
+            ("rules.review_over_income", r.review_over_income.unwrap_or(1.0)),
             ("rules.average_pace_min_driving_s", r.average_pace_min_driving_s),
             ("rules.review_over_average_world_km_per_game_clock_min", r.review_over_average_world_km_per_game_clock_min),
             ("rules.truckersmp_game_min_per_real_min", r.truckersmp_game_min_per_real_min),

@@ -2,9 +2,10 @@
   "by_reason": {
     "distance_mismatch": 0,
     "fuel_jump": 0,
+    "high_income": 1,
     "late_start": 1,
     "long_job": 0
   },
   "invalid": 1,
-  "pending_review": 1
+  "pending_review": 2
 }

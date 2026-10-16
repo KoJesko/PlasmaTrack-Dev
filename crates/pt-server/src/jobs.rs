@@ -260,6 +260,7 @@ fn reason_text(code: &str) -> &'static str {
         "distance_mismatch" => "The game's delivery distance disagrees with the tracked distance.",
         "no_delivered_distance" => "The delivery carried no distance.",
         "time_warp" => "The game ran faster than real time (the warp command).",
+        "high_income" => "The delivery paid more than the review limit, per mile or in all.",
         "trace_check" => "The trace does not match the configured sample rate.",
         "overspeed_invalid" => "Sustained speed over the invalid limit.",
         "integrity" => "The tracker's files or settings were not recognised.",
@@ -302,6 +303,11 @@ fn review_details(r: &ReviewReason, job: &Job, cfg: &Config) -> Value {
         ReviewReason::DistanceMismatch { delivered_km, tracked_km, tolerance_km } => {
             json!({"delivered_km": round2(*delivered_km), "tracked_km": round2(*tracked_km), "tolerance_km": round2(*tolerance_km)})
         }
+        ReviewReason::HighIncome { income, game_mi, per_game_mi } => json!({
+            "income": income, "game_mi": round2(*game_mi), "per_game_mi": round2(*per_game_mi),
+            "limit_per_game_mi": cfg.rules.review_over_income_per_game_mi, "limit": cfg.rules.review_over_income,
+            "currency": currency(job.game),
+        }),
         ReviewReason::TimeWarp { max_factor, gained_s } => {
             json!({"max_factor": round2(*max_factor), "gained_s": round2(*gained_s)})
         }

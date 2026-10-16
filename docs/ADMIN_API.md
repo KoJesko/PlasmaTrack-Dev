@@ -60,6 +60,7 @@ Oldest first, with `total`. Each item:
 | `distance_mismatch` | The game's delivery distance disagrees with the trace | `delivered_km`, `tracked_km`, `tolerance_km` |
 | `no_delivered_distance` | The delivery carried no distance | |
 | `time_warp` | The game ran faster than real time: the `warp` console command. Any 30 s of real driving with game time over 1.15× real time (honest play stays within 1.05) | `max_factor`, `gained_s` (game seconds gained) |
+| `high_income` | The delivery paid more than `review_over_income_per_game_mi` (400) per mile of the game's delivery distance, or more than `review_over_income` (500,000) in all, in the game's currency. Every job, however short | `income`, `game_mi`, `per_game_mi`, `limit_per_game_mi`, `limit`, `currency` |
 | `trace_check` | Sample rate, sequence or `hello` inconsistency (PLAN §6a) | `checks[]` |
 | `odometer_jump`, `impossible_delivery_time` | Optional heuristics, off by default | rule specific |
 | `manual_submission` | Submitted by hand through the bot (PUBLIC_API §6): every manual job has it | |

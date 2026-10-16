@@ -95,6 +95,9 @@ pub enum ReviewReason {
     /// The game's delivery distance disagrees with the trace.
     DistanceMismatch { delivered_km: f64, tracked_km: f64, tolerance_km: f64 },
     NoDeliveredDistance,
+    /// The delivery paid more per mile of the game's delivery distance than
+    /// `review_over_income_per_game_mi`, or more in all than `review_over_income`.
+    HighIncome { income: i64, game_mi: f64, per_game_mi: f64 },
     /// The game ran faster than real time (the `warp` console command): the
     /// fastest 30 s of real time, and the game seconds gained over all of them.
     TimeWarp { max_factor: f64, gained_s: f64 },
@@ -115,6 +118,7 @@ impl ReviewReason {
             ReviewReason::DistanceMismatch { .. } => "distance_mismatch",
             ReviewReason::NoDeliveredDistance => "no_delivered_distance",
             ReviewReason::TimeWarp { .. } => "time_warp",
+            ReviewReason::HighIncome { .. } => "high_income",
         }
     }
 }
@@ -528,6 +532,15 @@ pub fn evaluate(job: &Job, cfg: &Config, ctx: &Context) -> JobResult {
     if exceeds(d.world_km, r.manual_review_over_world_km, r.distance.compare_precision_km) {
         review.push(ReviewReason::LongJob { world_km: d.world_km });
     }
+    if let Some(income) = job.delivered.as_ref().and_then(|x| x.revenue) {
+        let game_mi = km_to_mi(d.delivered_game_km.unwrap_or(d.tracked_whole_game_km));
+        let per_game_mi = if game_mi > 0.0 { income as f64 / game_mi } else { 0.0 };
+        let per_mile = r.review_over_income_per_game_mi.is_some_and(|limit| game_mi > 0.0 && per_game_mi > limit);
+        let total = r.review_over_income.is_some_and(|limit| income as f64 > limit);
+        if per_mile || total {
+            review.push(ReviewReason::HighIncome { income, game_mi, per_game_mi });
+        }
+    }
     if d.driven_s >= r.average_pace_min_driving_s {
         let minutes = d.driven_s / 60.0;
         let pace = d.driven_whole_world_km / minutes;
@@ -635,6 +648,7 @@ mod tests {
             ReviewReason::DistanceMismatch { delivered_km: 1.0, tracked_km: 1.0, tolerance_km: 1.0 },
             ReviewReason::NoDeliveredDistance,
             ReviewReason::TimeWarp { max_factor: 2.0, gained_s: 30.0 },
+            ReviewReason::HighIncome { income: 1, game_mi: 1.0, per_game_mi: 1.0 },
         ];
         for r in all {
             assert_eq!(serde_json::to_value(&r).unwrap()["reason"], r.code());

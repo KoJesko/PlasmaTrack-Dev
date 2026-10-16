@@ -76,6 +76,8 @@
       },
       "review_over_average_world_km_per_game_clock_min": 5.0,
       "review_over_average_world_km_per_min": 5.0,
+      "review_over_income": 500000.0,
+      "review_over_income_per_game_mi": 400.0,
       "speed": {
         "ats": {
           "invalid_over_mph": 125.0,
@@ -111,5 +113,5 @@
       "teleport_min_distance_world_m": 500.0
     }
   },
-  "hash": "fd1e0e637e0134e0a78cc489be58401d4def1c91b16a627319365ed5d71eeacf"
+  "hash": "926bdb606597732c50917e414d5ec4b49cc30bbe7efcc9903465cce3687661a5"
 }

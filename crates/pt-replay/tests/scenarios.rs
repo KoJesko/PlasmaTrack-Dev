@@ -720,6 +720,27 @@ fn a_freight_delivery_never_ends_a_road_trip() {
 }
 
 #[test]
+fn income_over_the_limits_is_held_for_review() {
+    // Owner, 2026-10-16: over 400 a mile of the game's delivery distance, or
+    // over 500,000 in all (possible on a very long job: a review, not invalid).
+    let pays = |km: f64, revenue: i64| {
+        let mut s = Sim::new("ats");
+        s.accept(JobSpec::new("tyres"));
+        s.drive_km(km);
+        s.deliver_paid(km, revenue);
+        s.job("tyres").1
+    };
+    let ok = pays(100.0, 100 * 400 * 62 / 100); // 400 a mile on the dot
+    assert!(!ok.review.iter().any(|r| matches!(r, ReviewReason::HighIncome { .. })), "{:?}", ok.review);
+    let r = pays(100.0, 30_000); // 483 a mile
+    assert_eq!(r.outcome, Outcome::PendingReview);
+    assert!(matches!(r.review[..], [ReviewReason::HighIncome { income: 30_000, .. }]), "{:?}", r.review);
+    // A long job at a normal rate, but over 500,000 in all.
+    let r = pays(4000.0, 600_000); // 241 a mile
+    assert!(r.review.iter().any(|x| matches!(x, ReviewReason::HighIncome { income: 600_000, .. })), "{:?}", r.review);
+}
+
+#[test]
 fn the_warp_command_is_held_for_review() {
     // The owner's ATS test (2026-10-16): under `warp 2` every game clock runs
     // twice as fast as the PC's; the truck's speed looks normal.
