@@ -232,6 +232,9 @@ async fn run(args: Args, hooks: Hooks) -> Result<(), RunError> {
     }
     let can_update = ucfg.is_configured();
     tokio::spawn(uploader::run(ucfg, db.clone(), status.clone(), manifest.clone()));
+    // The live view reads back the reopen window; a day more stays on the PC.
+    let keep_ms = ((cfg.timeline.reopen_window_wall_h + 24.0) * 3_600_000.0) as i64;
+    tokio::spawn(maintenance_loop(db.clone(), status.clone(), keep_ms));
     if let (true, Some(bin)) = (hooks.auto_update, updater::installed_bin(&args.data_dir)) {
         if !can_update {
             log!("updates paused until [local] server_url and token are set");
@@ -308,6 +311,43 @@ fn launch(exe: &std::path::Path, args: &[&std::ffi::OsStr]) -> std::io::Result<(
 
 fn path_args(args: &Args) -> [&std::ffi::OsStr; 4] {
     ["--config".as_ref(), args.config.as_os_str(), "--data-dir".as_ref(), args.data_dir.as_os_str()]
+}
+
+/// Every hour while no game runs (from two minutes after start): deletes the
+/// uploaded sessions older than `keep_ms` (the server keeps them) and gives
+/// the space back; the first, full vacuum of an older file can take a while.
+async fn maintenance_loop(db: Arc<Mutex<Db>>, status: SharedStatus, keep_ms: i64) {
+    tokio::time::sleep(Duration::from_secs(120)).await;
+    loop {
+        let connected = status.lock().map(|s| s.plugin_connections > 0).unwrap_or(true);
+        let quiet = !connected && !tokio::task::spawn_blocking(updater::games_running).await.unwrap_or(true);
+        // A first cleanup can take a while with the database locked: never
+        // while a game is recording.
+        if !quiet {
+            tokio::time::sleep(Duration::from_secs(600)).await;
+            continue;
+        }
+        let db2 = db.clone();
+        let done = tokio::task::spawn_blocking(move || -> rusqlite::Result<(usize, usize, i64, bool)> {
+            let mut db = db2.lock().expect("db");
+            let (sessions, frames) = db.prune(crate::now_ms() - keep_ms)?;
+            let free = db.free_bytes()?;
+            let reclaimed = free >= 64 << 20 && db.reclaim(true)?;
+            Ok((sessions, frames, free, reclaimed))
+        })
+        .await;
+        match done {
+            Ok(Ok((sessions, frames, free, reclaimed))) if sessions > 0 || reclaimed => log!(
+                "removed {sessions} uploaded session(s) ({frames} frames) older than {} h; {} MB {}",
+                keep_ms / 3_600_000,
+                free >> 20,
+                if reclaimed { "given back to the disk" } else { "free inside the file" }
+            ),
+            Ok(Err(e)) => log!("cleaning the local data failed: {e}"),
+            _ => {}
+        }
+        tokio::time::sleep(Duration::from_secs(3600)).await;
+    }
 }
 
 /// Checks for updates, downloads them and, once no game runs, hands over to

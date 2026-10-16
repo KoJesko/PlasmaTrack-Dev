@@ -46,6 +46,10 @@ server published. Otherwise the server discards the job (rule 0, PLAN §6a).
      and a game event (a delivery, a cancellation) go at once.
    - A failed upload is retried every `[sync] retry_interval_wall_s` (20 s), forever.
    - Unsent data survives restarts.
+   - Sessions fully uploaded and last seen more than 72 h ago (the live window plus a day) are
+     deleted from `client.sqlite` every hour while no game runs; the server keeps them (0.2.3). The space goes back to
+     the disk; on a file from before 0.2.3 that first needs a full vacuum, run when no game is
+     running.
    - The full list of DLLs in the game process never leaves the PC; only TruckersMP matches
      are uploaded.
    - Each upload carries the config hash and the install manifest (SHA-256 of the client, the

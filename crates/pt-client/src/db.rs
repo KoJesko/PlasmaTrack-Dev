@@ -106,8 +106,60 @@ impl Db {
     }
 
     fn init(conn: Connection) -> Result<Db> {
+        // Takes effect on a new file only; an older one switches in `reclaim`.
+        conn.pragma_update(None, "auto_vacuum", "INCREMENTAL")?;
         conn.execute_batch(SCHEMA)?;
         Ok(Db { conn })
+    }
+
+    /// Deletes the sessions last seen before `cutoff_ms` whose frames and
+    /// notes are all uploaded: the server has them (owner, 2026-10-16: the
+    /// file had grown to 2.4 GB). Returns (sessions, frames) deleted.
+    pub fn prune(&mut self, cutoff_ms: i64) -> Result<(usize, usize)> {
+        let tx = self.conn.transaction()?;
+        let sessions: Vec<String> = {
+            let mut st = tx.prepare(
+                "SELECT s.sess FROM sessions s WHERE s.last_seen_ms < ?1
+                   AND NOT EXISTS (SELECT 1 FROM frames f WHERE f.uploaded = 0 AND f.sess = s.sess)
+                   AND NOT EXISTS (SELECT 1 FROM notes n WHERE n.uploaded = 0 AND n.sess = s.sess)",
+            )?;
+            let rows = st.query_map(params![cutoff_ms], |r| r.get(0))?;
+            rows.collect::<Result<_>>()?
+        };
+        let mut frames = 0;
+        for s in &sessions {
+            frames += tx.execute("DELETE FROM frames WHERE sess = ?1", params![s])?;
+            tx.execute("DELETE FROM notes WHERE sess = ?1", params![s])?;
+            tx.execute("DELETE FROM snapshots WHERE sess = ?1", params![s])?;
+            tx.execute("DELETE FROM sessions WHERE sess = ?1", params![s])?;
+        }
+        tx.execute("DELETE FROM uploads WHERE at_ms < ?1", params![cutoff_ms])?;
+        tx.commit()?;
+        Ok((sessions.len(), frames))
+    }
+
+    /// Bytes of free pages inside the file.
+    pub fn free_bytes(&self) -> Result<i64> {
+        let pages: i64 = self.conn.query_row("PRAGMA freelist_count", [], |r| r.get(0))?;
+        let size: i64 = self.conn.query_row("PRAGMA page_size", [], |r| r.get(0))?;
+        Ok(pages * size)
+    }
+
+    /// Gives free pages back to the disk. A file made before 0.2.3 first needs a
+    /// full VACUUM, which locks it for a while: only when `allow_full` (no game
+    /// running). After that the file vacuums incrementally, which is quick.
+    /// Returns whether space was given back.
+    pub fn reclaim(&mut self, allow_full: bool) -> Result<bool> {
+        let mode: i64 = self.conn.query_row("PRAGMA auto_vacuum", [], |r| r.get(0))?;
+        if mode == 2 {
+            self.conn.execute_batch("PRAGMA incremental_vacuum;")?;
+        } else if allow_full {
+            self.conn.execute_batch("PRAGMA auto_vacuum = INCREMENTAL; VACUUM;")?;
+        } else {
+            return Ok(false);
+        }
+        self.conn.query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |_| Ok(()))?;
+        Ok(true)
     }
 
     /// Persists a batch in one transaction and returns, per session, the highest
@@ -342,6 +394,40 @@ mod tests {
             None => format!("{{\"v\":1,\"kind\":\"{kind}\",\"sess\":\"{sess}\"{extra}}}"),
         };
         Incoming { env: Envelope::parse(&raw).unwrap(), raw }
+    }
+
+    #[test]
+    fn prune_deletes_old_uploaded_sessions_only_and_gives_the_space_back() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("client.sqlite");
+        let mut db = Db::open(&path).unwrap();
+        // Switch to the pre-0.2.3 layout, as on players' PCs.
+        db.conn.execute_batch("PRAGMA auto_vacuum = NONE; VACUUM;").unwrap();
+        let pad = format!(",\"pad\":\"{}\"", "x".repeat(2000));
+        let old: Vec<Incoming> = (1..=2000).map(|i| msg(S1, "sample", Some(i), &pad)).collect();
+        db.store(&old, 1_000).unwrap();
+        db.mark_uploaded(S1, 2000).unwrap();
+        // An old session not fully uploaded, and a recent one.
+        db.store(&[msg(S2, "sample", Some(1), ""), msg(S2, "sample", Some(2), "")], 1_000).unwrap();
+        db.mark_uploaded(S2, 1).unwrap();
+        db.store(&[msg("33333333333333333333333333333333", "sample", Some(1), "")], 900_000).unwrap();
+        db.mark_uploaded("33333333333333333333333333333333", 1).unwrap();
+
+        assert_eq!(db.prune(500_000).unwrap(), (1, 2000));
+        assert!(db.frame_seqs(S1).unwrap().is_empty());
+        assert_eq!(db.frame_seqs(S2).unwrap(), vec![1, 2], "a frame still to upload keeps its session");
+        assert_eq!(db.frame_seqs("33333333333333333333333333333333").unwrap(), vec![1]);
+
+        let before = std::fs::metadata(&path).unwrap().len();
+        assert!(db.free_bytes().unwrap() > 3_000_000);
+        assert!(!db.reclaim(false).unwrap(), "the first full vacuum waits for a quiet moment");
+        assert!(db.reclaim(true).unwrap());
+        let after = std::fs::metadata(&path).unwrap().len();
+        assert!(after * 4 < before, "{before} -> {after}");
+        // From now on it is incremental.
+        let mode: i64 = db.conn.query_row("PRAGMA auto_vacuum", [], |r| r.get(0)).unwrap();
+        assert_eq!(mode, 2);
+        assert!(db.reclaim(false).unwrap());
     }
 
     #[test]
