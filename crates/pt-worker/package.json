@@ -9,6 +9,6 @@
     "deploy:test": "wrangler deploy --env test"
   },
   "devDependencies": {
-    "wrangler": "4.145.0"
+    "wrangler": "4.151.1"
   }
 }
