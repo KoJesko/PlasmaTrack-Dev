@@ -52,7 +52,7 @@ Oldest first, with `total`. Each item:
 | `long_job` | Rule 3: loaded world distance over the threshold (150 km) | `world_km`, `threshold_world_km` |
 | `fast_average` | The whole job averaged over 5 1:1 km per real (unpaused) minute, i.e. 300 km/h | `world_km`, `driving_min`, `world_km_per_min` |
 | `fast_average_game` | The same, timed by the game's clock: in-game minutes turned back into real minutes at the map scale (singleplayer) or 6 per minute (TruckersMP) | `world_km`, `game_clock_min`, `world_km_per_min` |
-| `negative_fuel` | Rule 4: fuel used below −tolerance in a run | `run`, `used_l` |
+| `negative_fuel` | Rule 4: the tank gained more fuel in a run than its refuels explain (fuel used below −tolerance) | `run`, `used_l` |
 | `fuel_jump` | Rule 4: fuel rose outside a detected refuel | `at`, `litres` |
 | `gap` | Data missing mid-job (crash, client offline) | `count` |
 | `late_start` | Tracking began after the job was accepted | |

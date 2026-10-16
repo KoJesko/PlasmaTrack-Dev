@@ -251,7 +251,7 @@ fn reason_text(code: &str) -> &'static str {
         "long_job" => "The loaded 1:1 distance is over the review threshold.",
         "fast_average" => "The whole job averaged over the allowed 1:1 pace per real minute.",
         "fast_average_game" => "The whole job averaged over the allowed pace by the game's clock.",
-        "negative_fuel" => "Fuel was used up faster than possible in a run.",
+        "negative_fuel" => "The tank gained fuel with no refuel seen.",
         "fuel_jump" => "Fuel rose outside a detected refuel.",
         "gap" => "Data is missing mid-job.",
         "late_start" => "Tracking started after the job was accepted.",

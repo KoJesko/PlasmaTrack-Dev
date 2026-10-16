@@ -254,3 +254,5 @@ These answer the bot's open questions "(Q)". **The project owner confirmed all o
 - 2026-10-15: a rebuild (a refresh, or a deploy) that takes several passes no longer stores jobs
   part-way through: a delivered job no longer goes back to `tracking`, and sends no `job.scored`
   for those steps, until the rebuild has caught up.
+- 2026-10-15: the `negative_fuel` reason text now reads "The tank gained fuel with no refuel seen."
+  The old text described the opposite of what the check finds.
