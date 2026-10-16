@@ -1231,6 +1231,8 @@
                         "type": "string"
                       "source_company":
                         "type": "string"
+                      "speed_penalty":
+                        "type": "boolean"
                       "started_at":
                         "format": "date-time"
                         "type": "string"

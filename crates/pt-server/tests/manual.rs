@@ -167,6 +167,82 @@ fn moderators_edit_tracked_jobs_and_edits_survive_rescoring() {
 }
 
 #[test]
+fn moderators_add_and_remove_the_speed_penalty() {
+    // Owner, 2026-10-16: a mod command to add or remove the speed penalty.
+    let t = TestHost::new();
+    let job_id = chicago(&t);
+    let path = format!("/api/v1/admin/jobs/{job_id}");
+    let d = t.call(t.admin("GET", &path)).body_json();
+    assert_eq!(d["points"], 3.6);
+    assert_eq!(d["sheet"]["speed_penalty"], false);
+    let world_mi = d["distances"]["world_km"].as_f64().unwrap() / 1.609344;
+    let penalised = (world_mi * 0.85 * 10.0).floor() / 10.0;
+
+    // Add it: the distance counts at 0.85, and the public notes say so.
+    t.advance(1);
+    let r = t.call(t.admin("PATCH", &path).with_json(&json!({"reason": "Speeding on the video", "speed_penalty": true})));
+    assert_eq!(r.status, 200, "{}", r.body_json());
+    assert_eq!(r.body_json()["points"], penalised);
+    assert_eq!(r.body_json()["overrides"]["speed_penalty"], true);
+    let p = t.call(t.bot("GET", &format!("/api/v1/public/jobs/{job_id}"))).body_json();
+    assert!(p["public_notes"].as_array().unwrap().iter().any(|n| n["code"] == "speed_penalty"), "{p}");
+
+    // It survives a full replay from the raw frames.
+    let mut s = Scorer::new(&user_id(&t), Game::Ats);
+    block_on(s.reset(&t)).unwrap();
+    block_on(s.process(&t)).unwrap();
+    assert_eq!(t.call(t.bot("GET", &format!("/api/v1/public/jobs/{job_id}"))).body_json()["points"], penalised);
+
+    // null: the rules decide again.
+    t.advance(1);
+    let r = t.call(t.admin("PATCH", &path).with_json(&json!({"reason": "Wrong job", "speed_penalty": null})));
+    assert_eq!(r.body_json()["points"], 3.6);
+    assert!(r.body_json()["overrides"].get("speed_penalty").is_none(), "{}", r.body_json());
+
+    // Anything else is refused.
+    t.advance(1);
+    let r = t.call(t.admin("PATCH", &path).with_json(&json!({"reason": "Typo", "speed_penalty": "yes"})));
+    assert_eq!(r.status, 422, "{}", r.body_json());
+    assert_eq!(r.body_json()["error"]["details"]["fields"]["speed_penalty"], "true, false or null");
+}
+
+#[test]
+fn a_moderator_removes_an_automatic_speed_penalty() {
+    let t = TestHost::new();
+    publish(&t);
+    let token = link(&t);
+    // 110 mph for 60 s: over the ATS penalty limit (105 mph).
+    upload(&t, &token, &synthetic_job("0123456789abcdef0123456789abcdef", 110.0, 60.0), 200);
+    score(&t, Game::Ats);
+    let job_id = t.q("SELECT job_id FROM jobs")[0]["job_id"].as_str().unwrap().to_string();
+    let path = format!("/api/v1/admin/jobs/{job_id}");
+    let d = t.call(t.admin("GET", &path)).body_json();
+    assert_eq!(d["sheet"]["speed_penalty"], true, "{}", d["sheet"]);
+    let before = t.call(t.bot("GET", &format!("/api/v1/public/jobs/{job_id}"))).body_json();
+    assert_eq!(before["speed_penalty_applied"], true);
+
+    let r = t.call(t.admin("PATCH", &path).with_json(&json!({"reason": "Downhill glitch", "speed_penalty": false})));
+    assert_eq!(r.status, 200, "{}", r.body_json());
+    let after = t.call(t.bot("GET", &format!("/api/v1/public/jobs/{job_id}"))).body_json();
+    assert_eq!(after["speed_penalty_applied"], false);
+    assert!(after["world_mi"].as_f64().unwrap() > 0.0);
+    let mi = after["world_mi"].as_f64().unwrap();
+    assert!(after["points"].as_f64().unwrap() > before["points"].as_f64().unwrap() || mi < 1.0, "{before} -> {after}");
+}
+
+#[test]
+fn players_cannot_set_the_speed_penalty_but_moderators_can_on_manual_jobs() {
+    let t = TestHost::new();
+    let job_id = manual_job(&t);
+    let path = format!("/api/v1/admin/jobs/{job_id}");
+    let before = t.call(t.admin("GET", &path)).body_json();
+    let r = t.call(t.admin("PATCH", &path).with_json(&json!({"reason": "Admitted speeding", "speed_penalty": true})));
+    assert_eq!(r.status, 200, "{}", r.body_json());
+    let held = |v: &Value| v["held_points"].as_f64().or(v["points"].as_f64()).unwrap();
+    assert!(held(&r.body_json()) < held(&before), "{} -> {}", before, r.body_json());
+}
+
+#[test]
 fn history_spans_both_games_and_stats_break_down() {
     let t = TestHost::new();
     chicago(&t);

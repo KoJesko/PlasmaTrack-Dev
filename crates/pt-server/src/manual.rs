@@ -313,7 +313,10 @@ async fn store_scored<H: Host>(h: &H, cfg: &Config, user: &User, row: &Row, trig
     let bonus_rows = jobs::bonuses(h, game).await?;
     let bonus = eff.get("bonus_id").and_then(Value::as_str).and_then(|id| bonus_rows.iter().find(|(b, _)| b.id == id));
     let world_mi = pt_core::units::km_to_mi(world);
-    let base_points = world_mi * cfg.rules.points_per_world_mi;
+    // Only a moderator puts a speed penalty on a manual job.
+    let penalty = eff.get("speed_penalty").and_then(Value::as_bool).unwrap_or(false);
+    let accepted = if penalty { world_mi * cfg.rules.speed_penalty_factor } else { world_mi };
+    let base_points = accepted * cfg.rules.points_per_world_mi;
     let raw = bonus.map_or(base_points, |(b, _)| jobs::apply_bonus(b, base_points));
     let computed = cfg.rules.floor_points(raw);
 
@@ -331,7 +334,7 @@ async fn store_scored<H: Host>(h: &H, cfg: &Config, user: &User, row: &Row, trig
         "job_type": null,
         "world_km": round2(world), "world_mi": mi(world), "game_km": round2(game_km), "game_mi": mi(game_km),
         "planned_distance_km": null,
-        "speed_penalty_applied": false,
+        "speed_penalty_applied": penalty,
         "bonus": bonus.map_or(Value::Null, |(b, l)| jobs::bonus_json(b, l)),
         "distance_by_scale_class": jobs::by_class_json(&classes),
         "multiplayer": {"kind": "unknown", "truckersmp": null},
@@ -420,7 +423,8 @@ pub async fn write_overrides<H: Host>(h: &H, row: &Row, edit: &Value) -> ApiResu
     let mut after = before.clone();
     for (k, v) in patch {
         // Back to the recording's or the submission's value: drop the override.
-        if base.get(&k) == Some(&v) {
+        // A null speed penalty means the rules decide again.
+        if base.get(&k) == Some(&v) || (k == "speed_penalty" && v.is_null()) {
             after.remove(&k);
         } else {
             after.insert(k, v);

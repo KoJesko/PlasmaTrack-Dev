@@ -263,3 +263,6 @@ These answer the bot's open questions "(Q)". **The project owner confirmed all o
   rebuilds once from raw data, so past road trips appear.
 - 2026-10-16: road trips have their own ATS speed limits, `[rules.speed.ats.road_trip]` (penalty over
   155 mph, invalid over 200 mph), in config version 2.
+- 2026-10-16: moderators add or remove the speed penalty with `speed_penalty` (`true`, `false`,
+  `null` for the rules) in `PATCH /api/v1/admin/jobs/{job_id}` and approval corrections. The
+  speed-penalty and invalid-delivery notifications quote a road trip's own limits.

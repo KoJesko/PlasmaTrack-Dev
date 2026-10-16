@@ -31,9 +31,10 @@ const TEXT: [(&str, &str); 8] = [
 ];
 
 /// Every request key a sheet accepts (PATCH, approval corrections).
-pub const EDIT_KEYS: [&str; 18] = [
+pub const EDIT_KEYS: [&str; 19] = [
     "start_city", "start_company", "end_city", "end_company", "cargo_name", "truck", "truck_model", "bonus_id",
     "distance", "fuel_used", "damage", "profit", "started_at", "ended_at", "mod_names", "map_scale", "uk", "adjusted_scales",
+    "speed_penalty",
 ];
 
 pub const MAX_TEXT: usize = 100;
@@ -167,6 +168,19 @@ pub fn parse(body: &Value, game: Game, full: bool, base: &Map<String, Value>) ->
             e.add("bonus_id", "set by moderators only");
         }
         out.remove("bonus_id");
+        if has("speed_penalty") {
+            e.add("speed_penalty", "set by moderators only");
+        }
+    } else {
+        // Moderators add or remove the speed penalty; null: back to the rules
+        // (owner, 2026-10-16).
+        match body.get("speed_penalty") {
+            None => {}
+            Some(v @ (Value::Bool(_) | Value::Null)) => {
+                out.insert("speed_penalty".into(), v.clone());
+            }
+            Some(_) => e.add("speed_penalty", "true, false or null"),
+        }
     }
 
     let nullable = |k: &str| !full && body.get(k).is_some_and(Value::is_null);

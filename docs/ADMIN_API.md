@@ -535,7 +535,7 @@ Corrects any field of **any** job, tracked or manual:
 - **Fields:** the same names as a manual submission (PUBLIC_API §6):
   - places, `cargo_name`, `truck`, `truck_model`, `mod_names`;
   - `distance`, `fuel_used`, `damage`, `profit`, `started_at`, `ended_at`;
-  - `map_scale`, `uk`, `adjusted_scales`, plus `bonus_id`.
+  - `map_scale`, `uk`, `adjusted_scales`, plus `bonus_id` and `speed_penalty`.
 - **Units and rules for fields:**
   - **Units:** `unit` is needed with any distance, `fuel_unit` with `fuel_used`.
   - **`uk`** may be partial (`{"uk": {"entry_city": "Dover"}}`), and `null` removes it.
@@ -571,7 +571,11 @@ Corrects any field of **any** job, tracked or manual:
     out the manual way (PUBLIC_API §6).
   - **`bonus_id`:** replaces the automatic bonus choice. It must be a bonus of the job's game,
     in any state.
-  - **The speed penalty** of a tracked job still applies.
+  - **`speed_penalty`** (owner, 2026-10-16): `true` adds the speed penalty (the distance counts at
+    `rules.speed_penalty_factor`, 0.85), `false` removes it, and `null` lets the rules decide
+    again. It works on tracked and manual jobs; players cannot set it. The admin detail's
+    `sheet.speed_penalty` shows what the rules decided, and `speed_penalty_applied` the result.
+  - **Otherwise the speed penalty** of a tracked job still applies.
 - **The outcome does not change.** A moderator decided outcome stays.
 - **Answer `200`:**
 

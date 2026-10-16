@@ -344,7 +344,7 @@ impl Scorer {
                     )
                     .await?
                     .map(|r| r.s("job_id"));
-                    jobs::notify(h, &scoring.cfg, &user, "speed_penalty_activated", job_id.as_deref(), self.game, wall_ms, &j.info.cargo_name, &r)
+                    jobs::notify(h, &scoring.cfg, &user, "speed_penalty_activated", job_id.as_deref(), self.game, j.info.fingerprint.route.job_type, wall_ms, &j.info.cargo_name, &r)
                         .await?;
                 }
             }

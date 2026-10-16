@@ -3,6 +3,7 @@
 
 use pt_core::config::ScaleClass;
 use pt_core::rules::{evaluate, Bonus, BonusKind, Context, DiscardReason, JobResult, Outcome, ReviewReason};
+use pt_core::job::JobType;
 use pt_core::timeline::{Job, JobEvent};
 use pt_core::{Config, Game};
 use serde::{Deserialize, Serialize};
@@ -514,6 +515,7 @@ fn tracked_sheet(job: &Job, r: &JobResult, started: i64) -> Map<String, Value> {
     }
     m.insert("mods".into(), json!([]));
     m.insert("adjusted_scales".into(), json!([]));
+    m.insert("speed_penalty".into(), json!(r.speed.penalty));
     m
 }
 
@@ -555,9 +557,13 @@ fn apply_overrides(
 
     let distance = ["distance_km", "map_scale", "uk", "adjusted_scales"].iter().any(|k| overrides.contains_key(*k));
     let bonus_set = overrides.contains_key("bonus_id");
-    if !distance && !bonus_set {
+    // A moderator's call on the speed penalty (owner, 2026-10-16).
+    let penalty_set = overrides.get("speed_penalty").and_then(Value::as_bool);
+    if !distance && !bonus_set && penalty_set.is_none() {
         return (started, ended);
     }
+    let penalty = penalty_set.unwrap_or(r.speed.penalty);
+    s["speed_penalty_applied"] = penalty.into();
     let old_game = r.distances.counted_game_km;
     let new_game = eff.get("distance_km").and_then(Value::as_f64).unwrap_or(old_game);
     let only_distance = !["map_scale", "uk", "adjusted_scales"].iter().any(|k| overrides.contains_key(*k));
@@ -590,7 +596,7 @@ fn apply_overrides(
         d["edited"] = true.into();
     }
     let world_mi = pt_core::units::km_to_mi(world);
-    let accepted = if r.speed.penalty { world_mi * cfg.rules.speed_penalty_factor } else { world_mi };
+    let accepted = if penalty { world_mi * cfg.rules.speed_penalty_factor } else { world_mi };
     let base_points = accepted * cfg.rules.points_per_world_mi;
     let bonus = if bonus_set {
         overrides.get("bonus_id").and_then(Value::as_str).and_then(|id| bonus_rows.iter().find(|(b, _)| b.id == id)).cloned()
@@ -897,7 +903,9 @@ pub async fn persist<H: Host>(
     // random 5-30 s delay.
     let was_invalid = existing.as_ref().is_some_and(|e| e.s("auto_outcome") == "invalid");
     if trigger == Trigger::Upload && built.auto_outcome == "invalid" && !was_invalid {
-        notify(h, cfg, user, "invalid_delivery", Some(&job_id), game, job.delivered_wall_ms.unwrap_or(now), &job.info.cargo_name, &r).await?;
+        let job_type = job.info.fingerprint.route.job_type;
+        notify(h, cfg, user, "invalid_delivery", Some(&job_id), game, job_type, job.delivered_wall_ms.unwrap_or(now), &job.info.cargo_name, &r)
+            .await?;
     }
     Ok(Some(job_id))
 }
@@ -911,6 +919,7 @@ pub async fn notify<H: Host>(
     kind: &str,
     job_id: Option<&str>,
     game: Game,
+    job_type: JobType,
     happened_ms: i64,
     cargo: &str,
     r: &JobResult,
@@ -918,20 +927,20 @@ pub async fn notify<H: Host>(
     if !cfg.notifications.enabled {
         return Ok(());
     }
-    let limits = cfg.rules.speed.limits(game);
+    let (penalty_mph, invalid_mph) = cfg.rules.speed.limits_for(game, job_type);
     let (title, text) = match kind {
         "invalid_delivery" => (
             "Invalid delivery".to_string(),
             format!(
                 "{cargo}: you drove over {} mph (peak {:.0} mph), so this delivery scores no points. Moderators can still approve it.",
-                limits.invalid_over_mph, r.speed.peak_mph
+                invalid_mph, r.speed.peak_mph
             ),
         ),
         _ => (
             "Speed penalty".to_string(),
             format!(
                 "{cargo}: you drove over {} mph for too long. This job's distance now counts at {}×.",
-                limits.penalty_over_mph, cfg.rules.speed_penalty_factor
+                penalty_mph, cfg.rules.speed_penalty_factor
             ),
         ),
     };

@@ -214,6 +214,7 @@
     "profit": 99053,
     "source_city": "Honningsvåg",
     "source_company": "Renar Logistik",
+    "speed_penalty": false,
     "started_at": "2026-10-14T00:21:06.342Z",
     "truck": null,
     "truck_model": null,
