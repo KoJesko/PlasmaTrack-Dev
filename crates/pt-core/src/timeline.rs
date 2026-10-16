@@ -172,6 +172,15 @@ pub struct Job {
     pub delivered_wall_ms: Option<i64>,
     /// Deliveries undone by a load (Invalid deliveries reopened).
     pub reverted_deliveries: Vec<Delivered>,
+    /// The points before `kept[0]` live only on the server's disk (owner,
+    /// 2026-10-16: finished jobs are not held in memory). `kept` keeps the
+    /// last point, so a job brought back by a load continues from it with a gap.
+    #[serde(default)]
+    pub offloaded: bool,
+    /// The delivery was over the invalid speed when it was offloaded, so a load
+    /// into it reopens it (its points are no longer here to tell).
+    #[serde(default)]
+    pub offloaded_invalid: bool,
 }
 
 impl Job {
@@ -586,6 +595,8 @@ impl Timeline {
             delivered: None,
             delivered_wall_ms: None,
             reverted_deliveries: Vec::new(),
+            offloaded: false,
+            offloaded_invalid: false,
         });
         self.watch.push(OverspeedWatch::default());
         self.notices.push(Notice::JobStarted { job: id });
@@ -785,7 +796,9 @@ impl Timeline {
         }
         match self.jobs[k].state {
             JobState::Delivered => {
-                let invalid = crate::rules::evaluate(&self.jobs[k], &self.cfg, &Default::default()).speed.invalid;
+                let job = &self.jobs[k];
+                let invalid = job.offloaded_invalid
+                    || (!job.offloaded && crate::rules::evaluate(job, &self.cfg, &Default::default()).speed.invalid);
                 if invalid {
                     let job = &mut self.jobs[k];
                     if let Some(d) = job.delivered.take() {
@@ -1020,6 +1033,19 @@ impl Profiles {
                 }
             }
         }
+    }
+
+    /// Drops a finished job's points from memory but its last one (the
+    /// server keeps them on disk). `speed_invalid`: the delivery was over the
+    /// invalid speed, so a load into it still reopens it.
+    pub fn offload(&mut self, profile: &str, id: u32, speed_invalid: bool) {
+        let Some((_, t)) = self.timelines.iter_mut().find(|(k, _)| k == profile) else { return };
+        let Some(job) = t.jobs.iter_mut().find(|j| j.id == id) else { return };
+        let last = job.kept.pop();
+        job.kept = last.into_iter().collect();
+        job.reverted = Vec::new();
+        job.offloaded = true;
+        job.offloaded_invalid = speed_invalid;
     }
 
     /// Jobs evicted from any profile timeline since the last call.

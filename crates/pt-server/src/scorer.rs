@@ -5,7 +5,7 @@
 
 use std::collections::BTreeMap;
 
-use pt_core::timeline::{Job, Notice, Profiles};
+use pt_core::timeline::{Job, JobState, Notice, Profiles};
 use pt_core::trace::{parse_frame, Body};
 use pt_core::Game;
 use serde::{Deserialize, Serialize};
@@ -264,7 +264,7 @@ impl Scorer {
         // Store what changed: evicted jobs (final), then the live ones.
         let snap = self.snap.as_mut().expect("loaded");
         let mut finished: Vec<(Job, Facts)> = std::mem::take(&mut snap.unstored);
-        let mut changed: Vec<(String, Facts)> = Vec::new();
+        let mut changed: Vec<String> = Vec::new();
         let facts = |snap: &Snapshot, j: &Job| -> Facts {
             let sessions = snap.profiles.sessions_of(j);
             let mut idx: Vec<u32> = j.kept.iter().chain(j.reverted.iter().flat_map(|b| b.points.iter())).map(|p| p.sess).collect();
@@ -277,14 +277,36 @@ impl Scorer {
             Facts { delivered_at: snap.jobs.get(&memo_key(j)).and_then(|m| m.delivered_at), sessions, sess_ids, truckersmp }
         };
         for j in evicted {
+            let key = memo_key(&j);
+            let stored = snap.jobs.get(&key).is_some_and(|m| m.fingerprint == fingerprint(&j));
+            snap.jobs.remove(&key);
+            // Offloaded and unchanged since it was stored: the server's copy is final.
+            if j.offloaded && stored {
+                continue;
+            }
             let f = facts(snap, &j);
-            snap.jobs.remove(&memo_key(&j));
             finished.push((j, f));
         }
         // Finished jobs exist only here now: one that cannot be stored is kept
         // (in the snapshot) for the next pass.
         let mut finished = finished.into_iter();
         while let Some((job, f)) = finished.next() {
+            let (job, f) = if job.offloaded {
+                match Self::hydrate(h, &self.user_id, self.game, &job).await {
+                    Ok(full) => {
+                        let f = facts(snap, &full);
+                        (full, f)
+                    }
+                    Err(e) => {
+                        snap.unstored.push((job, f));
+                        snap.unstored.extend(finished);
+                        self.dirty = true;
+                        return Err(e);
+                    }
+                }
+            } else {
+                (job, f)
+            };
             match jobs::persist(h, &scoring.cfg, scoring.version_id.as_deref(), &user, &job, &f, trigger, None).await {
                 Ok(stored) => report.jobs_stored += stored.is_some() as usize,
                 Err(e) => {
@@ -297,8 +319,10 @@ impl Scorer {
         }
         let now = h.now_ms();
         // Behind on the raw data: the jobs still in the timelines are stored
-        // once a pass reaches the end of it.
-        for j in snap.profiles.jobs().filter(|_| !report.more) {
+        // once a pass reaches the end of it, but delivered ones at once, so a
+        // rebuild does not hold them all in memory.
+        let finished_state = |j: &Job| matches!(j.state, JobState::Delivered | JobState::Stopped);
+        for j in snap.profiles.jobs().filter(|j| !report.more || finished_state(j)) {
             let m = snap.jobs.get(&memo_key(j)).cloned().unwrap_or_default();
             if m.fingerprint == fingerprint(j) {
                 continue;
@@ -308,22 +332,53 @@ impl Scorer {
             if growing && now - m.stored_ms < LIVE_STORE_EVERY_MS {
                 continue;
             }
-            changed.push((memo_key(j), facts(snap, j)));
+            changed.push(memo_key(j));
         }
         // Stored straight from the timelines, one at a time: a copy of every
         // job at the end of a rebuild took a Durable Object past its 128 MB
         // (the owner's ETS2 rebuild, 2026-10-16). The memo moves on only once
         // a job is stored, so a failed store is tried again on the next pass.
-        for (key, f) in changed {
+        for key in changed {
             let Some(job) = snap.profiles.jobs().find(|j| memo_key(j) == key) else { continue };
-            if jobs::persist(h, &scoring.cfg, scoring.version_id.as_deref(), &user, job, &f, trigger, None).await?.is_some() {
+            let (fp, sh) = (fingerprint(job), shape(job));
+            let stored = if job.offloaded {
+                let full = Self::hydrate(h, &self.user_id, self.game, job).await?;
+                let f = facts(snap, &full);
+                jobs::persist(h, &scoring.cfg, scoring.version_id.as_deref(), &user, &full, &f, trigger, None).await?
+            } else {
+                let f = facts(snap, job);
+                jobs::persist(h, &scoring.cfg, scoring.version_id.as_deref(), &user, job, &f, trigger, None).await?
+            };
+            if stored.is_some() {
                 report.jobs_stored += 1;
             }
-            let (fp, sh) = (fingerprint(job), shape(job));
             let m = snap.jobs.entry(key).or_default();
             m.fingerprint = fp;
             m.shape = sh;
             m.stored_ms = now;
+            self.dirty = true;
+        }
+        // Finished jobs leave memory once stored (owner, 2026-10-16): only
+        // their last point stays, for a gap if a load brings one back.
+        let done: Vec<(String, u32, bool)> = snap
+            .profiles
+            .jobs()
+            .filter(|j| matches!(j.state, JobState::Delivered | JobState::Stopped | JobState::Cancelled))
+            .filter(|j| !j.offloaded || j.kept.len() > 1 || !j.reverted.is_empty())
+            .filter(|j| snap.jobs.get(&memo_key(j)).is_some_and(|m| m.fingerprint == fingerprint(j)))
+            .map(|j| {
+                let invalid = j.state != JobState::Cancelled
+                    && (j.offloaded_invalid || pt_core::rules::evaluate(j, &scoring.cfg, &Default::default()).speed.invalid);
+                (j.profile.clone(), j.id, invalid)
+            })
+            .collect();
+        for (profile, id, invalid) in done {
+            snap.profiles.offload(&profile, id, invalid);
+            let Some(j) = snap.profiles.jobs().find(|j| j.profile == profile && j.id == id) else { continue };
+            let (key, fp, sh) = (memo_key(j), fingerprint(j), shape(j));
+            let m = snap.jobs.entry(key).or_default();
+            m.fingerprint = fp;
+            m.shape = sh;
             self.dirty = true;
         }
         if !report.more && snap.rebuilding {
@@ -355,7 +410,36 @@ impl Scorer {
         Ok(report)
     }
 
-    /// Re-scores every stored job of this player from its own points, with the
+    /// A job whose earlier points are on disk only (`Job::offloaded`): the stored
+/// points and the ones since, together, for storing it again.
+async fn hydrate<H: Host>(h: &H, user_id: &str, game: Game, job: &Job) -> ApiResult<Job> {
+    let mut full = job.clone();
+    full.offloaded = false;
+    let row = store::one(
+        h,
+        "SELECT job_id FROM jobs WHERE user_id = ?1 AND game = ?2 AND profile_key = ?3 AND local_id = ?4",
+        params![user_id, game.as_str(), &job.profile, job.id],
+    )
+    .await?;
+    let Some(row) = row else { return Ok(full) };
+    let Some(z) = h.blob_get(&jobs::blob_key(&row.s("job_id"))).await? else { return Ok(full) };
+    let (stored, _) = jobs::decode_blob(&z)?;
+    // `kept[0]` is the last point the stored copy has.
+    let at = job.kept.first().and_then(|p| stored.kept.iter().position(|q| q.sess == p.sess && q.seq == p.seq));
+    let mut kept = stored.kept;
+    match at {
+        Some(i) => {
+            kept.truncate(i + 1);
+            kept.extend(job.kept.iter().skip(1).cloned());
+        }
+        None => kept.extend(job.kept.iter().cloned()),
+    }
+    full.kept = kept;
+    full.reverted = stored.reverted.into_iter().chain(job.reverted.iter().cloned()).collect();
+    Ok(full)
+}
+
+/// Re-scores every stored job of this player from its own points, with the
     /// current config and bonuses (ADMIN_API §8). A change to the timeline's
     /// own settings needs the raw frames instead: [`Scorer::reset`] first.
     pub async fn rescore_job<H: Host>(h: &H, job_id: &str, trigger: Trigger, moderator: Option<jobs::Moderator<'_>>) -> ApiResult<()> {
