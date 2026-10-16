@@ -264,7 +264,7 @@ impl Scorer {
         // Store what changed: evicted jobs (final), then the live ones.
         let snap = self.snap.as_mut().expect("loaded");
         let mut finished: Vec<(Job, Facts)> = std::mem::take(&mut snap.unstored);
-        let mut changed: Vec<(Job, Facts)> = Vec::new();
+        let mut changed: Vec<(String, Facts)> = Vec::new();
         let facts = |snap: &Snapshot, j: &Job| -> Facts {
             let sessions = snap.profiles.sessions_of(j);
             let mut idx: Vec<u32> = j.kept.iter().chain(j.reverted.iter().flat_map(|b| b.points.iter())).map(|p| p.sess).collect();
@@ -308,25 +308,22 @@ impl Scorer {
             if growing && now - m.stored_ms < LIVE_STORE_EVERY_MS {
                 continue;
             }
-            let f = facts(snap, j);
-            changed.push((j.clone(), f));
+            changed.push((memo_key(j), facts(snap, j)));
         }
-        // The memo moves on only once a job is stored, so a failed store is
-        // tried again on the next pass.
-        for (job, f) in &changed {
-            if jobs::persist(h, &scoring.cfg, scoring.version_id.as_deref(), &user, job, f, trigger, None).await?.is_some() {
+        // Stored straight from the timelines, one at a time: a copy of every
+        // job at the end of a rebuild took a Durable Object past its 128 MB
+        // (the owner's ETS2 rebuild, 2026-10-16). The memo moves on only once
+        // a job is stored, so a failed store is tried again on the next pass.
+        for (key, f) in changed {
+            let Some(job) = snap.profiles.jobs().find(|j| memo_key(j) == key) else { continue };
+            if jobs::persist(h, &scoring.cfg, scoring.version_id.as_deref(), &user, job, &f, trigger, None).await?.is_some() {
                 report.jobs_stored += 1;
             }
-            if let Some(m) = snap.jobs.get_mut(&memo_key(job)) {
-                m.fingerprint = fingerprint(job);
-                m.shape = shape(job);
-                m.stored_ms = now;
-            } else if snap.profiles.jobs().any(|j| memo_key(j) == memo_key(job)) {
-                let m = snap.jobs.entry(memo_key(job)).or_default();
-                m.fingerprint = fingerprint(job);
-                m.shape = shape(job);
-                m.stored_ms = now;
-            }
+            let (fp, sh) = (fingerprint(job), shape(job));
+            let m = snap.jobs.entry(key).or_default();
+            m.fingerprint = fp;
+            m.shape = sh;
+            m.stored_ms = now;
             self.dirty = true;
         }
         if !report.more && snap.rebuilding {
@@ -348,6 +345,9 @@ impl Scorer {
                         .await?;
                 }
             }
+        }
+        if report.chunks > 0 {
+            self.snap.as_mut().expect("loaded").profiles.shrink_to_fit();
         }
         if self.dirty && h.now_ms() - self.saved_at >= SNAPSHOT_EVERY_MS {
             self.save(h).await?;

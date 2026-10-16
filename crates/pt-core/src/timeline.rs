@@ -1008,6 +1008,20 @@ impl Profiles {
         self.timelines.iter().flat_map(|(_, t)| t.jobs())
     }
 
+    /// Gives back the spare capacity of every job's point lists. Lists grow by
+    /// doubling, which left a third of a large rebuild's memory unused
+    /// (2026-10-16); the server calls this after each pass.
+    pub fn shrink_to_fit(&mut self) {
+        for (_, t) in &mut self.timelines {
+            for job in &mut t.jobs {
+                job.kept.shrink_to_fit();
+                for b in &mut job.reverted {
+                    b.points.shrink_to_fit();
+                }
+            }
+        }
+    }
+
     /// Jobs evicted from any profile timeline since the last call.
     pub fn take_evicted(&mut self) -> Vec<Job> {
         self.timelines.iter_mut().flat_map(|(_, t)| t.take_evicted()).collect()
