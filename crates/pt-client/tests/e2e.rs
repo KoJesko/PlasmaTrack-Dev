@@ -27,6 +27,7 @@ const FAIL_FIRST: usize = 2;
 
 #[derive(Default)]
 struct FakeServer {
+    fail_first: usize,
     requests: Vec<Instant>,
     stored: BTreeMap<(String, u64), String>,
     chunks: Vec<(String, u64, u64, String, usize)>, // sess, from, to, config_hash, manifest entries
@@ -35,7 +36,7 @@ struct FakeServer {
 async fn chunks(State(srv): State<Arc<Mutex<FakeServer>>>, headers: HeaderMap, body: Bytes) -> (StatusCode, String) {
     let mut s = srv.lock().unwrap();
     s.requests.push(Instant::now());
-    if s.requests.len() <= FAIL_FIRST {
+    if s.requests.len() <= s.fail_first {
         return (StatusCode::SERVICE_UNAVAILABLE, "try later".into());
     }
     assert_eq!(headers["authorization"], format!("Bearer {TOKEN}"));
@@ -101,7 +102,7 @@ async fn plugin_to_client_to_server() {
     tokio::spawn(pt_client::listener::serve(plugin_listener, db.clone(), status.clone(), None));
 
     // Fake server.
-    let srv = Arc::new(Mutex::new(FakeServer::default()));
+    let srv = Arc::new(Mutex::new(FakeServer { fail_first: FAIL_FIRST, ..Default::default() }));
     let app = Router::new().route("/api/v1/chunks", post(chunks)).with_state(srv.clone());
     let server_listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let server_url = format!("http://{}", server_listener.local_addr().unwrap());
@@ -114,6 +115,7 @@ async fn plugin_to_client_to_server() {
         token: TOKEN.into(),
         retry_interval: RETRY,
         idle_poll: Duration::from_millis(50),
+        batch_interval: Duration::ZERO,
         max_frames: 25,
         max_bytes: 1 << 20,
         truckersmp_module_names: vec!["core_atsmp.dll".into()],
@@ -197,4 +199,78 @@ async fn plugin_to_client_to_server() {
     let st = status.lock().unwrap();
     assert!(st.last_upload_ok_ms.is_some());
     assert!(st.frames_received >= 70);
+}
+
+/// Frames wait for the batch interval and go together; a game event (a
+/// delivery) goes at once (owner, 2026-10-16).
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn uploads_are_batched_but_deliveries_go_at_once() {
+    const BATCH: Duration = Duration::from_millis(1500);
+    let dir = tempfile::tempdir().unwrap();
+    let db = Arc::new(Mutex::new(Db::open(&dir.path().join("client.sqlite")).unwrap()));
+    let status = Arc::new(Mutex::new(Status::default()));
+    let plugin_listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let plugin_addr = plugin_listener.local_addr().unwrap();
+    tokio::spawn(pt_client::listener::serve(plugin_listener, db.clone(), status.clone(), None));
+    let srv = Arc::new(Mutex::new(FakeServer::default()));
+    let app = Router::new().route("/api/v1/chunks", post(chunks)).with_state(srv.clone());
+    let server_listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let server_url = format!("http://{}", server_listener.local_addr().unwrap());
+    tokio::spawn(async move { axum::serve(server_listener, app).await.unwrap() });
+    let cfg = pt_core::Config::from_toml_str(pt_client::paths::SAMPLE_CONFIG).unwrap();
+    let ucfg = UploaderConfig {
+        server_url,
+        token: TOKEN.into(),
+        retry_interval: RETRY,
+        idle_poll: Duration::from_millis(50),
+        batch_interval: BATCH,
+        max_frames: 5000,
+        max_bytes: 4 << 20,
+        truckersmp_module_names: vec![],
+        config_hash: cfg.integrity_hash(),
+        config_canonical_json: cfg.integrity_canonical_json(),
+    };
+    let manifest = Arc::new(Mutex::new(vec![]));
+    tokio::spawn(pt_client::uploader::run(ucfg, db.clone(), status.clone(), manifest));
+
+    let mut conn = TcpStream::connect(plugin_addr).await.unwrap();
+    let mut acks = Acks::default();
+    let start = Instant::now();
+    let mut out = Vec::new();
+    out.extend(frame(S1, "hello", None, ",\"last_seq\":0"));
+    out.extend(frame(S1, "init", Some(1), ",\"game_id\":\"ats\""));
+    // Samples trickling in, as while driving.
+    for s in 2..=11 {
+        out.extend(frame(S1, "sample", Some(s), ",\"ch\":{\"truck.speed\":20.5}"));
+    }
+    conn.write_all(&out).await.unwrap();
+    wait_ack(&mut conn, &mut acks, S1, 11).await;
+    for s in 12..=21 {
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        conn.write_all(&frame(S1, "sample", Some(s), ",\"ch\":{\"truck.speed\":20.5}")).await.unwrap();
+    }
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    assert!(srv.lock().unwrap().chunks.is_empty(), "sent before the batch interval");
+
+    // Then one upload with all of them, about BATCH after the first.
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while srv.lock().unwrap().chunks.is_empty() {
+        assert!(Instant::now() < deadline, "the batch never went");
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    assert!(start.elapsed() >= BATCH - Duration::from_millis(100), "{:?}", start.elapsed());
+    {
+        let s = srv.lock().unwrap();
+        assert_eq!(s.chunks.len(), 1, "{:?}", s.chunks);
+        assert_eq!((s.chunks[0].1, s.chunks[0].2), (1, 21));
+    }
+
+    // A delivery does not wait.
+    let sent = Instant::now();
+    conn.write_all(&frame(S1, "gameplay", Some(22), ",\"id\":\"job.delivered\",\"attrs\":[]")).await.unwrap();
+    while srv.lock().unwrap().chunks.len() < 2 {
+        assert!(sent.elapsed() < BATCH / 2, "the delivery waited for the batch");
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    assert_eq!(srv.lock().unwrap().chunks[1].2, 22);
 }

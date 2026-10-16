@@ -42,6 +42,8 @@ server published. Otherwise the server discards the job (rule 0, PLAN §6a).
      drops anything the client has not stored.
    - Replays are de-duplicated by (session, seq).
 4. **Uploads** unsent frames to `[local] server_url` in chunks (`docs/UPLOAD_API.md`).
+   - Frames are sent in batches about every 10 s (0.2.2; before, every few frames). A full chunk
+     and a game event (a delivery, a cancellation) go at once.
    - A failed upload is retried every `[sync] retry_interval_wall_s` (20 s), forever.
    - Unsent data survives restarts.
    - The full list of DLLs in the game process never leaves the PC; only TruckersMP matches

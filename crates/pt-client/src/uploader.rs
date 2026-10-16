@@ -24,6 +24,11 @@ pub struct UploaderConfig {
     pub retry_interval: Duration,
     /// How often to look for new frames when the queue is empty.
     pub idle_poll: Duration,
+    /// Frames wait this long to be sent together, unless a chunk is full or
+    /// carries a game event (owner, 2026-10-16: sending every few frames made
+    /// 60-145 requests a minute per driver, which capped the server at about
+    /// 50-100 drivers at once).
+    pub batch_interval: Duration,
     pub max_frames: usize,
     pub max_bytes: usize,
     pub truckersmp_module_names: Vec<String>,
@@ -113,7 +118,15 @@ pub async fn run(cfg: UploaderConfig, db: Arc<Mutex<Db>>, status: SharedStatus, 
             .await
         };
         let pending = match next {
-            Ok(Ok(Some(p))) => p,
+            Ok(Ok(Some(p))) if p.full || p.urgent => p,
+            Ok(Ok(Some(p))) => {
+                let wait = cfg.batch_interval.as_millis() as i64 - (crate::now_ms() - p.oldest_ms);
+                if wait > 0 {
+                    tokio::time::sleep(Duration::from_millis(wait as u64).min(cfg.idle_poll)).await;
+                    continue;
+                }
+                p
+            }
             Ok(Ok(None)) => {
                 tokio::time::sleep(cfg.idle_poll).await;
                 continue;

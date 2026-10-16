@@ -220,6 +220,7 @@ async fn run(args: Args, hooks: Hooks) -> Result<(), RunError> {
         token: cfg.local.token.clone(),
         retry_interval: Duration::from_secs_f64(cfg.sync.retry_interval_wall_s),
         idle_poll: Duration::from_secs(2),
+        batch_interval: Duration::from_secs(10),
         max_frames: 5000,
         max_bytes: 4 << 20,
         truckersmp_module_names: cfg.multiplayer.truckersmp_module_names.clone(),

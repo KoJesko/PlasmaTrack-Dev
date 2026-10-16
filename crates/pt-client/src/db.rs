@@ -27,6 +27,12 @@ pub struct PendingChunk {
     pub hello: Option<String>,
     /// Client notes placed among `frames`; marked uploaded with the chunk.
     pub note_ids: Vec<i64>,
+    /// When the oldest of these frames arrived (the client's clock).
+    pub oldest_ms: i64,
+    /// It reached `max_frames` or `max_bytes`: more is waiting.
+    pub full: bool,
+    /// It carries a game event (a delivery, a cancellation), which is sent at once.
+    pub urgent: bool,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize)]
@@ -175,20 +181,25 @@ impl Db {
     /// `max_frames` and (approximately) `max_bytes`.
     pub fn next_chunk(&self, sess: &str, max_frames: usize, max_bytes: usize) -> Result<Option<PendingChunk>> {
         let mut st = self.conn.prepare_cached(
-            "SELECT seq, json FROM frames WHERE sess = ?1 AND uploaded = 0 ORDER BY seq LIMIT ?2",
+            "SELECT seq, json, kind, received_ms FROM frames WHERE sess = ?1 AND uploaded = 0 ORDER BY seq LIMIT ?2",
         )?;
         let mut rows = st.query(params![sess, max_frames as i64])?;
         let mut plugin: Vec<(u64, String)> = Vec::new();
         let mut bytes = 0usize;
+        let (mut oldest_ms, mut urgent, mut full) = (i64::MAX, false, false);
         while let Some(r) = rows.next()? {
             let seq: i64 = r.get(0)?;
             let json: String = r.get(1)?;
             if !plugin.is_empty() && bytes + json.len() > max_bytes {
+                full = true;
                 break;
             }
             bytes += json.len();
+            urgent |= r.get::<_, String>(2)? == "gameplay";
+            oldest_ms = oldest_ms.min(r.get(3)?);
             plugin.push((seq as u64, json));
         }
+        full |= plugin.len() >= max_frames;
         let (Some(&(from, _)), Some(&(to, _))) = (plugin.first(), plugin.last()) else {
             return Ok(None);
         };
@@ -219,7 +230,7 @@ impl Db {
             .query_row("SELECT hello FROM sessions WHERE sess = ?1", params![sess], |r| r.get(0))
             .optional()?
             .flatten();
-        Ok(Some(PendingChunk { sess: sess.to_owned(), seq_from: from, seq_to: to, frames, hello, note_ids }))
+        Ok(Some(PendingChunk { sess: sess.to_owned(), seq_from: from, seq_to: to, frames, hello, note_ids, oldest_ms, full, urgent }))
     }
 
     /// Records a client note (e.g. a profile change) at the current end of
