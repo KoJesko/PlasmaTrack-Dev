@@ -79,7 +79,11 @@
       "speed": {
         "ats": {
           "invalid_over_mph": 125.0,
-          "penalty_over_mph": 105.0
+          "penalty_over_mph": 105.0,
+          "road_trip": {
+            "invalid_over_mph": 200.0,
+            "penalty_over_mph": 155.0
+          }
         },
         "compare_precision_mph": 0.001,
         "ets2": {
@@ -107,5 +111,5 @@
       "teleport_min_distance_world_m": 500.0
     }
   },
-  "hash": "37b16360fb88293742498e06351590d31df333882ff0cfd72e5852a71e689872"
+  "hash": "fd1e0e637e0134e0a78cc489be58401d4def1c91b16a627319365ed5d71eeacf"
 }

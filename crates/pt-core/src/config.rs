@@ -4,6 +4,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::game::Game;
+use crate::job::JobType;
 
 #[derive(Debug, thiserror::Error)]
 pub enum ConfigError {
@@ -73,11 +74,32 @@ impl SpeedRules {
             Game::Ets2 => &self.ets2,
         }
     }
+
+    /// (penalty, invalid) mph for a job: a road trip's own limits when the
+    /// game has them, else the game's.
+    pub fn limits_for(&self, game: Game, job_type: JobType) -> (f64, f64) {
+        let l = self.limits(game);
+        match (&l.road_trip, job_type) {
+            (Some(r), JobType::Car) => (r.penalty_over_mph, r.invalid_over_mph),
+            _ => (l.penalty_over_mph, l.invalid_over_mph),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct SpeedLimits {
+    pub penalty_over_mph: f64,
+    pub invalid_over_mph: f64,
+    /// Road trips (`car_job`, a car or pickup) drive faster than trucks.
+    /// Absent: they use the limits above.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub road_trip: Option<RoadTripSpeed>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RoadTripSpeed {
     pub penalty_over_mph: f64,
     pub invalid_over_mph: f64,
 }
@@ -372,12 +394,14 @@ impl Config {
             positive(&mut errs, name, v);
         }
         for (g, l) in [("ats", &r.speed.ats), ("ets2", &r.speed.ets2)] {
-            positive(&mut errs, &format!("rules.speed.{g}.penalty_over_mph"), l.penalty_over_mph);
-            if l.invalid_over_mph <= l.penalty_over_mph {
-                errs.push(format!(
-                    "rules.speed.{g}: invalid_over_mph ({}) must be above penalty_over_mph ({})",
-                    l.invalid_over_mph, l.penalty_over_mph
-                ));
+            let road_trip = l.road_trip.as_ref().map(|t| (format!("{g}.road_trip"), t.penalty_over_mph, t.invalid_over_mph));
+            for (name, penalty, invalid) in std::iter::once((g.to_string(), l.penalty_over_mph, l.invalid_over_mph)).chain(road_trip) {
+                positive(&mut errs, &format!("rules.speed.{name}.penalty_over_mph"), penalty);
+                if invalid <= penalty {
+                    errs.push(format!(
+                        "rules.speed.{name}: invalid_over_mph ({invalid}) must be above penalty_over_mph ({penalty})"
+                    ));
+                }
             }
         }
         if !(r.speed_penalty_factor > 0.0 && r.speed_penalty_factor <= 1.0) {
@@ -432,6 +456,9 @@ mod tests {
         assert_eq!(c.rules.speed.limits(Game::Ats).invalid_over_mph, 125.0);
         assert_eq!(c.rules.speed.limits(Game::Ets2).penalty_over_mph, 100.0);
         assert_eq!(c.rules.speed.limits(Game::Ets2).invalid_over_mph, 150.0);
+        assert_eq!(c.rules.speed.limits_for(Game::Ats, JobType::Car), (155.0, 200.0));
+        assert_eq!(c.rules.speed.limits_for(Game::Ats, JobType::Freight), (105.0, 125.0));
+        assert_eq!(c.rules.speed.limits_for(Game::Ets2, JobType::Car), (100.0, 150.0));
         assert_eq!(c.rules.manual_review_over_world_km, 150.0);
         assert_eq!(c.rules.speed_penalty_factor, 0.85);
         assert_eq!(c.rules.speed.sustained_window_s, 3.0);

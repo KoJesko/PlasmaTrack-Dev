@@ -47,8 +47,12 @@ fn ats_road_trip_across_loads() {
     assert_eq!(r.job.delivered.as_ref().and_then(|d| d.distance_km), Some(34.0));
     // The untracked end of the trip is a gap, so a moderator sees it.
     assert!(r.result.review.iter().any(|x| matches!(x, ReviewReason::Gap { .. })), "{:?}", r.result.review);
-    // 163 mph for 22 s in the pickup: the speed rule applies to road trips too.
-    assert_eq!(r.result.outcome, Outcome::Invalid);
+    // Up to 163 mph in the pickup: over the road-trip penalty limit (155 mph)
+    // for more than 3 s, under its invalid limit (200 mph). 3.41 mi x 0.85.
+    assert_eq!(r.result.speed.over_invalid_s, 0.0);
+    assert!(r.result.speed.penalty && !r.result.speed.invalid, "{:?}", r.result.speed);
+    assert_eq!(r.result.outcome, Outcome::PendingReview);
+    assert_eq!(r.result.points, 2.8);
     // No warp while on the trip.
     assert!(!r.result.review.iter().any(|x| matches!(x, ReviewReason::TimeWarp { .. })));
 }

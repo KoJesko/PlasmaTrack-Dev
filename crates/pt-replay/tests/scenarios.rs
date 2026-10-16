@@ -673,6 +673,31 @@ fn a_road_trip_is_tracked_like_freight() {
 }
 
 #[test]
+fn road_trips_have_their_own_speed_limits() {
+    // ATS road trips (owner, 2026-10-16): penalty over 155 mph, invalid over 200.
+    let trip = |mph: f64, road_trip: bool| {
+        let mut s = Sim::new("ats");
+        let spec = JobSpec::new("xfer_seals");
+        s.accept(if road_trip { spec.road_trip() } else { spec });
+        s.drive_secs(60.0, 60.0);
+        s.drive_secs(10.0, mph);
+        s.drive_secs(60.0, 60.0);
+        s.deliver(30.0);
+        s.job("xfer_seals").1
+    };
+    let r = trip(150.0, true);
+    assert!(!r.speed.penalty && !r.speed.invalid, "{:?}", r.speed);
+    let r = trip(160.0, true);
+    assert!(r.speed.penalty && !r.speed.invalid, "{:?}", r.speed);
+    let r = trip(205.0, true);
+    assert!(r.speed.invalid, "{:?}", r.speed);
+    assert_eq!(r.outcome, Outcome::Invalid);
+    // A truck at 150 mph is still invalid (ATS: over 125).
+    let r = trip(150.0, false);
+    assert!(r.speed.invalid, "{:?}", r.speed);
+}
+
+#[test]
 fn a_cancelled_road_trip_is_cancelled() {
     let mut s = Sim::new("ats");
     s.accept(JobSpec::new("xfer_seals").road_trip());

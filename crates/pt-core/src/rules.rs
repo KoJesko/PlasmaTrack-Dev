@@ -306,7 +306,7 @@ fn distances(job: &Job, cfg: &Config) -> Distances {
 }
 
 fn speed(job: &Job, cfg: &Config) -> SpeedStats {
-    let limits = cfg.rules.speed.limits(job.game);
+    let (penalty_mph, invalid_mph) = cfg.rules.speed.limits_for(job.game, job.info.fingerprint.route.job_type);
     let prec = cfg.rules.speed.compare_precision_mph;
     let window = cfg.rules.speed.sustained_window_s;
     let mut s = SpeedStats::default();
@@ -323,16 +323,16 @@ fn speed(job: &Job, cfg: &Config) -> SpeedStats {
         }
         if let Some(q) = prev.filter(|q| q.run == p.run && !p.after_teleport) {
             let dt = p.sim_us.saturating_sub(q.sim_us) as f64 / 1e6;
-            if exceeds(q.mph(), limits.penalty_over_mph, prec) && exceeds(p.mph(), limits.penalty_over_mph, prec) {
+            if exceeds(q.mph(), penalty_mph, prec) && exceeds(p.mph(), penalty_mph, prec) {
                 s.over_penalty_s += dt;
             }
-            if exceeds(q.mph(), limits.invalid_over_mph, prec) && exceeds(p.mph(), limits.invalid_over_mph, prec) {
+            if exceeds(q.mph(), invalid_mph, prec) && exceeds(p.mph(), invalid_mph, prec) {
                 s.over_invalid_s += dt;
             }
         }
         for (limit, ep, flag) in [
-            (limits.penalty_over_mph, &mut ep_pen, &mut s.penalty),
-            (limits.invalid_over_mph, &mut ep_inv, &mut s.invalid),
+            (penalty_mph, &mut ep_pen, &mut s.penalty),
+            (invalid_mph, &mut ep_inv, &mut s.invalid),
         ] {
             if exceeds(p.mph(), limit, prec) {
                 let since = *ep.get_or_insert(p.sim_us);

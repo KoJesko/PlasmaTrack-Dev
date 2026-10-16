@@ -926,7 +926,7 @@ impl Timeline {
 
     fn watch_overspeed(&mut self, i: usize, p: &Point) {
         let Some(game) = self.game else { return };
-        let limits = self.cfg.rules.speed.limits(game);
+        let (penalty_mph, _) = self.cfg.rules.speed.limits_for(game, self.jobs[i].info.fingerprint.route.job_type);
         let window_us = (self.cfg.rules.speed.sustained_window_s * 1e6) as u64;
         let prec = self.cfg.rules.speed.compare_precision_mph;
         let w = &mut self.watch[i];
@@ -934,7 +934,7 @@ impl Timeline {
             w.run = p.run;
             w.since_us = None;
         }
-        if crate::units::exceeds(p.mph(), limits.penalty_over_mph, prec) {
+        if crate::units::exceeds(p.mph(), penalty_mph, prec) {
             let since = *w.since_us.get_or_insert(p.sim_us);
             if !w.notified && p.sim_us.saturating_sub(since) > window_us {
                 w.notified = true;

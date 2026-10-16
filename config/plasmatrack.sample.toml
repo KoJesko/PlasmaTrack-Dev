@@ -62,6 +62,11 @@ compare_precision_mph = 0.001
 penalty_over_mph = 105.0   # rule 5
 invalid_over_mph = 125.0   # rule 2
 
+# Road trips (car_job: a car or pickup) drive faster than trucks (you, 2026-10-16).
+[rules.speed.ats.road_trip]
+penalty_over_mph = 155.0
+invalid_over_mph = 200.0
+
 [rules.speed.ets2]
 penalty_over_mph = 100.0   # rule 5
 invalid_over_mph = 150.0   # rule 2

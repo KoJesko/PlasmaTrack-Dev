@@ -261,3 +261,5 @@ These answer the bot's open questions "(Q)". **The project owner confirmed all o
 - 2026-10-16: ATS road trips (`car_job`) are tracked and scored like freight. Jobs carry
   `job_type` (`freight` or `car`); a road trip's `market` comes from `car_job.market`. Every scorer
   rebuilds once from raw data, so past road trips appear.
+- 2026-10-16: road trips have their own ATS speed limits, `[rules.speed.ats.road_trip]` (penalty over
+  155 mph, invalid over 200 mph), in config version 2.
