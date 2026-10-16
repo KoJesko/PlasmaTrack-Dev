@@ -53,6 +53,7 @@
   "held_points": null,
   "income": 4314,
   "job_id": "A2NDM8HC",
+  "job_type": "freight",
   "market": "cargo_market",
   "multiplayer": {
     "kind": "singleplayer",

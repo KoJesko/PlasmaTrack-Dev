@@ -6,6 +6,7 @@
 
 use std::path::Path;
 
+use pt_core::job::JobType;
 use pt_core::rules::{Context, Outcome, ReviewReason};
 use pt_core::timeline::{GapKind, JobEvent, JobState, StartKind};
 use pt_replay::{order_sessions, parse_lines, read_lines, replay, sample_config, Replayed};
@@ -29,6 +30,27 @@ fn count(events: &[JobEvent], f: impl Fn(&JobEvent) -> bool) -> usize {
 
 fn close(a: f64, b: f64, tol: f64) -> bool {
     (a - b).abs() <= tol
+}
+
+/// The owner's ATS session of 2026-10-16: warp tests in free roam (no job),
+/// then a road trip (`car_job`) in an F-150 across New Orleans, 34 km, with
+/// three loads. After the first the game sent the trip back with its deadline
+/// a minute later; after the second it never sent it again, yet delivered it.
+#[test]
+fn ats_road_trip_across_loads() {
+    let jobs = run("ats-road-trip-car-job-loads.jsonl.gz");
+    assert_eq!(jobs.len(), 1, "one road trip, not split at the loads");
+    let r = &jobs[0];
+    assert_eq!(r.job.info.fingerprint.route.job_type, JobType::Car);
+    assert_eq!(r.job.info.fingerprint.cargo.cargo_id, "xfer_seals");
+    assert_eq!(r.job.state, JobState::Delivered);
+    assert_eq!(r.job.delivered.as_ref().and_then(|d| d.distance_km), Some(34.0));
+    // The untracked end of the trip is a gap, so a moderator sees it.
+    assert!(r.result.review.iter().any(|x| matches!(x, ReviewReason::Gap { .. })), "{:?}", r.result.review);
+    // 163 mph for 22 s in the pickup: the speed rule applies to road trips too.
+    assert_eq!(r.result.outcome, Outcome::Invalid);
+    // No warp while on the trip.
+    assert!(!r.result.review.iter().any(|x| matches!(x, ReviewReason::TimeWarp { .. })));
 }
 
 /// Chicago → Chicago, planned 70 km: the game reported 71 km (game scale).

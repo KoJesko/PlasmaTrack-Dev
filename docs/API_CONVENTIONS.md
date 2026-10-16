@@ -258,3 +258,6 @@ These answer the bot's open questions "(Q)". **The project owner confirmed all o
   The old text described the opposite of what the check finds.
 - 2026-10-16: new review reason `time_warp` (details `max_factor`, `gained_s`): the game ran faster
   than real time, the `warp` console command. It follows `review_policy.trace_checks`.
+- 2026-10-16: ATS road trips (`car_job`) are tracked and scored like freight. Jobs carry
+  `job_type` (`freight` or `car`); a road trip's `market` comes from `car_job.market`. Every scorer
+  rebuilds once from raw data, so past road trips appear.

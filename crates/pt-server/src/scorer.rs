@@ -22,8 +22,9 @@ use crate::util;
 pub const SNAPSHOT_EVERY_MS: i64 = 10 * 60_000;
 /// Part of the snapshot key: a snapshot of another format is not loaded, so
 /// every scorer rebuilds once from the raw data. 2 (2026-10-15): job memos
-/// know when a job was stored, and finished jobs wait in `unstored`.
-pub const SNAPSHOT_FORMAT: u32 = 2;
+/// know when a job was stored, and finished jobs wait in `unstored`. 3
+/// (2026-10-16): road trips (`car_job`) are tracked, so past ones appear.
+pub const SNAPSHOT_FORMAT: u32 = 3;
 /// At most this many chunks per pass. A catch-up after hours offline (or a
 /// capture-mode session: three times the frames, in small live chunks) is
 /// worked through in several passes, so one never runs out of memory or

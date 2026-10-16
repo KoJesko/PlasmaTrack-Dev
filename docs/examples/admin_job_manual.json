@@ -138,6 +138,7 @@
   "income": 15000,
   "integrity": null,
   "job_id": "MHQGP65P",
+  "job_type": null,
   "market": null,
   "multiplayer": {
     "kind": "unknown",

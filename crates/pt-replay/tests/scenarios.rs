@@ -6,6 +6,7 @@ mod sim;
 
 use pt_core::rules::{Bonus, BonusKind, Context, DiscardReason, Outcome, ReviewReason};
 use pt_core::timeline::{GapKind, JobEvent, JobState, StartKind};
+use pt_core::job::JobType;
 use pt_core::Game;
 use sim::{rescore, JobSpec, Sim};
 
@@ -654,6 +655,43 @@ fn teleports_add_no_distance_and_are_never_reviewed() {
     assert_eq!(job.events.iter().filter(|e| matches!(e, JobEvent::Teleport { .. })).count(), 2);
     assert!(close(r.distances.tracked_whole_game_km, 30.0, 0.05));
     assert_eq!(r.outcome, Outcome::Valid, "{:?}", r.review);
+}
+
+#[test]
+fn a_road_trip_is_tracked_like_freight() {
+    // ATS road trips (2026-10-16): `car_job` instead of `job`.
+    let mut s = Sim::new("ats");
+    s.accept(JobSpec::new("xfer_seals").road_trip());
+    s.drive_km(30.0);
+    s.deliver(30.0);
+    let (job, r) = s.job("xfer_seals");
+    assert_eq!(job.info.fingerprint.route.job_type, JobType::Car);
+    assert_eq!(job.info.fingerprint.route.job_market, "dispatch_job");
+    assert_eq!(job.state, JobState::Delivered);
+    assert_eq!(r.outcome, Outcome::Valid, "{:?}", r.review);
+    assert!(r.points > 0.0);
+}
+
+#[test]
+fn a_cancelled_road_trip_is_cancelled() {
+    let mut s = Sim::new("ats");
+    s.accept(JobSpec::new("xfer_seals").road_trip());
+    s.drive_km(5.0);
+    s.cancel();
+    assert_eq!(s.job("xfer_seals").0.state, JobState::Cancelled);
+}
+
+#[test]
+fn a_freight_delivery_never_ends_a_road_trip() {
+    // The road trip's own event ends it; a stray freight event does not.
+    let mut s = Sim::new("ats");
+    s.accept(JobSpec::new("xfer_seals").road_trip());
+    s.drive_km(5.0);
+    let (job, _) = s.job("xfer_seals");
+    assert_eq!(job.state, JobState::Tracking);
+    s.drive_km(5.0);
+    s.deliver(10.0);
+    assert_eq!(s.job("xfer_seals").0.state, JobState::Delivered);
 }
 
 #[test]

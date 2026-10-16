@@ -138,6 +138,7 @@ comma-separated outcomes. Each item is a **job summary**:
   "source": {"city_id": "dover", "city_name": "Dover", "company_id": "euroacres", "company_name": "EuroAcres"},
   "destination": {"city_id": "calais", "city_name": "Calais", "company_id": "lkwlog", "company_name": "LKW Log"},
   "market": "cargo_market",
+  "job_type": "freight",
   "delivered_at": "2026-10-13T21:25:03.512Z",
   "reported_delivered_at": "2026-10-13T21:25:00.070Z",
   "multiplayer": {"kind": "truckersmp", "truckersmp": {"server_id": 4, "account_id": 1234567}},
@@ -174,7 +175,10 @@ comma-separated outcomes. Each item is a **job summary**:
   **`reported_delivered_at`** is the player's PC clock at the delivery, for display only. They
   differ by the upload delay, which can be hours if the client was offline.
 - **`market`** is the game's `job.market`, for example `cargo_market`, `freight_market`,
-  `quick_job` or `external_contracts` (World of Trucks). `null` for a manual job.
+  `quick_job` or `external_contracts` (World of Trucks). `null` for a manual job. A road trip
+  carries its own market (`car_job.market`), for example `dispatch_job`.
+- **`job_type`** is `freight` (a truck job) or `car` (an ATS road trip in a car or pickup, scored
+  the same way). `null` for a manual job, and for jobs scored before 2026-10-16 until re-scored.
 - **`origin`** is `tracked` (recorded by the tracker) or `manual` (submitted through the bot,
   §6). A manual job has:
   - `cargo.id`, `city_id` and `company_id` set to `null`, because only names were typed;

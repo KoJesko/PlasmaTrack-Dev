@@ -20,6 +20,8 @@ pub struct JobSpec {
     pub market: String,
     pub loaded: bool,
     pub deadline: u64,
+    /// A road trip (`car_job`) instead of freight.
+    pub car: bool,
 }
 
 impl JobSpec {
@@ -32,7 +34,14 @@ impl JobSpec {
             market: "cargo_market".into(),
             loaded: true,
             deadline: 10_402_602,
+            car: false,
         }
+    }
+    /// A road trip in a car or pickup: `car_job`, with its own market key.
+    pub fn road_trip(mut self) -> JobSpec {
+        self.car = true;
+        self.market = "dispatch_job".into();
+        self
     }
     pub fn to(mut self, dest: &str) -> JobSpec {
         self.destination = dest.into();
@@ -80,6 +89,8 @@ pub struct Sim {
     pub time_rate: Option<f64>,
     pub job: Option<JobSpec>,
     pub lines: Vec<String>,
+    /// The last job was a road trip: its config id empties, and its events fire.
+    last_car: bool,
     /// The `warp` console command: game time per real time while driving.
     pub warp: f64,
     paused: bool,
@@ -111,6 +122,7 @@ impl Sim {
             time_rate: None,
             job,
             lines: Vec::new(),
+            last_car: false,
             warp: 1.0,
             paused: true,
         };
@@ -146,9 +158,19 @@ impl Sim {
             a("delivery.time", "u32", json!(j.deadline)),
             a("planned_distance.km", "u32", json!(j.planned_km)),
             a("cargo.loaded", "bool", json!(j.loaded)),
-            a("job.market", "string", json!(j.market)),
+            a(if j.car { "car_job.market" } else { "job.market" }, "string", json!(j.market)),
             a("is.special.job", "bool", json!(false)),
         ])
+    }
+
+    /// `job` or `car_job`: the config id and the gameplay event prefix.
+    fn job_id(&mut self) -> &'static str {
+        self.last_car = self.job.as_ref().map_or(self.last_car, |j| j.car);
+        if self.last_car {
+            "car_job"
+        } else {
+            "job"
+        }
     }
 
     fn cfg_job(&mut self) {
@@ -156,7 +178,8 @@ impl Sim {
             Some(j) => self.job_attrs(&j),
             None => json!([]),
         };
-        self.emit("config", json!({"id": "job", "attrs": attrs}));
+        let id = self.job_id();
+        self.emit("config", json!({"id": id, "attrs": attrs}));
     }
 
     fn cfg_truck(&mut self, empty: bool) {
@@ -329,7 +352,8 @@ impl Sim {
             a("delivery.time", "u32", json!(124)),
             a("auto.park.used", "bool", json!(true)),
         ]);
-        self.emit("gameplay", json!({"id": "job.delivered", "attrs": attrs}));
+        let id = format!("{}.delivered", self.job_id());
+        self.emit("gameplay", json!({"id": id, "attrs": attrs}));
         self.job = None;
         self.cfg_job();
         self.start();
@@ -341,7 +365,8 @@ impl Sim {
         self.job = None;
         self.cfg_job();
         let attrs = json!([{"name": "cancel.penalty", "index": null, "type": "s64", "value": 12000}]);
-        self.emit("gameplay", json!({"id": "job.cancelled", "attrs": attrs}));
+        let id = format!("{}.cancelled", self.job_id());
+        self.emit("gameplay", json!({"id": id, "attrs": attrs}));
         self.start();
     }
 

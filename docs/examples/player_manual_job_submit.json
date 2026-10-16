@@ -56,6 +56,7 @@
   "held_points": 14.1,
   "income": 15000,
   "job_id": "MHQGP65P",
+  "job_type": null,
   "market": null,
   "multiplayer": {
     "kind": "unknown",

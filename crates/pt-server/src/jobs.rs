@@ -400,6 +400,7 @@ fn build(job: &Job, r: &JobResult, cfg: &Config, facts: &Facts, integrity: &Inte
         "source": place(&route.source_city, &names.source_city, &route.source_company, &names.source_company),
         "destination": place(&route.destination_city, &names.destination_city, &route.destination_company, &names.destination_company),
         "market": route.job_market,
+        "job_type": route.job_type,
         "world_km": round2(world_km), "world_mi": mi(world_km),
         "game_km": round2(game_km), "game_mi": mi(game_km),
         "planned_distance_km": route.planned_distance_km,
@@ -964,7 +965,7 @@ pub fn summary_json(row: &Row) -> Value {
     out.insert("outcome".into(), outcome.clone().into());
     out.insert("points".into(), row.opt_f("points").map_or(Value::Null, Value::from));
     out.insert("held_points".into(), row.opt_f("held_points").map_or(Value::Null, Value::from));
-    for k in ["world_km", "world_mi", "game_km", "game_mi", "cargo", "source", "destination", "market"] {
+    for k in ["world_km", "world_mi", "game_km", "game_mi", "cargo", "source", "destination", "market", "job_type"] {
         out.insert(k.into(), o.remove(k).unwrap_or(Value::Null));
     }
     if matches!(outcome.as_str(), "discarded") {

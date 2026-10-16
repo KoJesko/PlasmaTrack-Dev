@@ -2,12 +2,45 @@
 //!
 //! Attribute names: common/scssdk_telemetry_common_configs.h (job config) and
 //! common/scssdk_telemetry_common_gameplay_events.h (job.delivered).
+//!
+//! Road trips (a car or pickup, ATS 2026-10-16) arrive as a `car_job` config
+//! and `car_job.delivered` / `car_job.cancelled`, with the same attributes
+//! except the market (`car_job.market`); they are tracked like freight.
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::game::Game;
 use crate::trace::{attr, Attr};
+
+/// Which kind of job the game reported. One job is active at a time.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum JobType {
+    /// `job`: truck freight.
+    #[default]
+    Freight,
+    /// `car_job`: a road trip in a car or pickup.
+    Car,
+}
+
+impl JobType {
+    /// The config id, which also prefixes the gameplay events.
+    pub fn config_id(self) -> &'static str {
+        match self {
+            JobType::Freight => "job",
+            JobType::Car => "car_job",
+        }
+    }
+
+    pub fn from_config_id(id: &str) -> Option<JobType> {
+        match id {
+            "job" => Some(JobType::Freight),
+            "car_job" => Some(JobType::Car),
+            _ => None,
+        }
+    }
+}
 
 /// Where the job leads and when it is due. Stays the same for a job's whole
 /// life, across save loads (verified byte-identical over six loads, PLAN §3).
@@ -23,6 +56,8 @@ pub struct RouteKey {
     pub planned_distance_km: Option<u64>,
     pub job_market: String,
     pub is_special_job: Option<bool>,
+    #[serde(default)]
+    pub job_type: JobType,
 }
 
 /// What is hauled. A different cargo key on the same route is a `cargo_switch`.
@@ -70,6 +105,11 @@ pub fn is_world_of_trucks_market(market: &str) -> bool {
 impl JobInfo {
     /// `None` for an empty job config ("no job", configs.h:125).
     pub fn from_config(game: Game, attrs: &[Attr]) -> Option<JobInfo> {
+        JobInfo::from_config_of(game, JobType::Freight, attrs)
+    }
+
+    /// The same for a `job_type` config (`job` or `car_job`).
+    pub fn from_config_of(game: Game, job_type: JobType, attrs: &[Attr]) -> Option<JobInfo> {
         if attrs.is_empty() {
             return None;
         }
@@ -84,10 +124,13 @@ impl JobInfo {
                     source_company: s("source.company.id"),
                     destination_city: s("destination.city.id"),
                     destination_company: s("destination.company.id"),
-                    delivery_time: u("delivery.time"),
+                    // A road trip's deadline moved by a minute across a load
+                    // (2026-10-16), so it is not part of its identity.
+                    delivery_time: if job_type == JobType::Car { None } else { u("delivery.time") },
                     planned_distance_km: u("planned_distance.km"),
-                    job_market: s("job.market"),
+                    job_market: s(&format!("{}.market", job_type.config_id())),
                     is_special_job: attr(attrs, "is.special.job").and_then(Value::as_bool),
+                    job_type,
                 },
                 cargo: CargoKey {
                     cargo_id: s("cargo.id"),
@@ -177,6 +220,25 @@ mod tests {
         assert!(!before.cargo_loaded && after.cargo_loaded);
         assert_eq!(before.fingerprint, after.fingerprint);
         assert!(JobInfo::from_config(Game::Ats, &[]).is_none());
+    }
+
+    #[test]
+    fn a_road_trip_is_its_own_kind_of_job() {
+        // The owner's ATS road trip (2026-10-16): no cargo.loaded, its own market key.
+        let attrs = vec![
+            a("cargo.id", json!("xfer_seals")),
+            a("cargo", json!("Intermodal Transfer Seals")),
+            a("source.city.id", json!("new_orleans")),
+            a("destination.city.id", json!("new_orleans")),
+            a("planned_distance.km", json!(34)),
+            a("car_job.market", json!("dispatch_job")),
+        ];
+        let car = JobInfo::from_config_of(Game::Ats, JobType::Car, &attrs).unwrap();
+        assert_eq!(car.fingerprint.route.job_type, JobType::Car);
+        assert_eq!(car.fingerprint.route.job_market, "dispatch_job");
+        assert!(car.cargo_loaded);
+        let freight = JobInfo::from_config(Game::Ats, &attrs).unwrap();
+        assert_ne!(freight.fingerprint.route, car.fingerprint.route);
     }
 
     #[test]

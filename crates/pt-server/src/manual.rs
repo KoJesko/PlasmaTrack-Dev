@@ -328,6 +328,7 @@ async fn store_scored<H: Host>(h: &H, cfg: &Config, user: &User, row: &Row, trig
         "source": place(s("source_city"), s("source_company")),
         "destination": place(s("destination_city"), s("destination_company")),
         "market": null,
+        "job_type": null,
         "world_km": round2(world), "world_mi": mi(world), "game_km": round2(game_km), "game_mi": mi(game_km),
         "planned_distance_km": null,
         "speed_penalty_applied": false,

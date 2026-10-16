@@ -21,6 +21,7 @@
       "held_points": null,
       "income": 15000,
       "job_id": "MHQGP65P",
+      "job_type": null,
       "market": null,
       "multiplayer": {
         "kind": "unknown",
@@ -60,6 +61,7 @@
       "held_points": null,
       "income": 388,
       "job_id": "1XW08CFJ",
+      "job_type": "freight",
       "market": "quick_job",
       "multiplayer": {
         "kind": "truckersmp",
@@ -102,6 +104,7 @@
       "held_points": null,
       "income": 99053,
       "job_id": "2RG8X3RX",
+      "job_type": "freight",
       "market": "cargo_market",
       "multiplayer": {
         "kind": "truckersmp",

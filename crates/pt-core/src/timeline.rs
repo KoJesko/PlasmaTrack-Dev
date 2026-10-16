@@ -18,7 +18,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::config::Config;
 use crate::game::Game;
-use crate::job::{Delivered, Fingerprint, JobInfo};
+use crate::job::{Delivered, Fingerprint, JobInfo, JobType};
 use crate::trace::{attr, Body, Frame, Sample};
 use crate::units::mps_to_mph;
 
@@ -235,7 +235,12 @@ pub struct Timeline {
     sess: Option<u32>,
     last_seq: u64,
     bracket: Bracket,
+    /// The current job: freight, else a road trip.
     job_cfg: Option<JobInfo>,
+    #[serde(default)]
+    freight_cfg: Option<JobInfo>,
+    #[serde(default)]
+    car_cfg: Option<JobInfo>,
     truck_ids: Vec<String>,
     truck: u32,
     /// Loaded-module heuristic (fallback for plugins without the TruckersMP SDK side).
@@ -266,6 +271,8 @@ impl Timeline {
             last_seq: 0,
             bracket: Bracket::default(),
             job_cfg: None,
+            freight_cfg: None,
+            car_cfg: None,
             truck_ids: Vec::new(),
             truck: 0,
             truckersmp_module: false,
@@ -372,12 +379,18 @@ impl Timeline {
                 self.bracket.session_change = true;
             }
             Body::TimerRestart => self.bracket.timer_restart = true,
-            Body::Config { id, attrs } if id == "job" => {
+            Body::Config { id, attrs } if JobType::from_config_id(id).is_some() => {
                 let Some(game) = self.game else { return };
-                self.job_cfg = JobInfo::from_config(game, attrs);
+                let job_type = JobType::from_config_id(id).expect("matched");
+                let info = JobInfo::from_config_of(game, job_type, attrs);
+                match job_type {
+                    JobType::Freight => self.freight_cfg = info,
+                    JobType::Car => self.car_cfg = info,
+                }
+                self.job_cfg = self.freight_cfg.clone().or_else(|| self.car_cfg.clone());
                 if self.job_cfg.is_none() {
                     self.bracket.job_emptied = true;
-                } else if self.bracket.no_job_state {
+                } else if !attrs.is_empty() && self.bracket.no_job_state {
                     self.bracket.job_after_no_job = true;
                 }
             }
@@ -410,7 +423,15 @@ impl Timeline {
                 // stop before another sample arrives (captured deliveries). Both belong
                 // to the job that was current (PLAN §5).
                 "job.delivered" => self.deliver(Delivered::from_attrs(attrs), f.wall_ms),
-                "job.cancelled" => self.cancel(attr(attrs, "cancel.penalty").and_then(|v| v.as_i64()), f.wall_ms),
+                "car_job.delivered" => {
+                    if self.current.is_none() {
+                        self.resume_lost_road_trip(f.wall_ms);
+                    }
+                    self.deliver(Delivered::from_attrs(attrs), f.wall_ms)
+                }
+                "job.cancelled" | "car_job.cancelled" => {
+                    self.cancel(attr(attrs, "cancel.penalty").and_then(|v| v.as_i64()), f.wall_ms)
+                }
                 "player.use.ferry" | "player.use.train" => {
                     self.bracket.transfer = true;
                     self.bracket.transfer_kind = id.strip_prefix("player.use.").map(str::to_string);
@@ -605,6 +626,36 @@ impl Timeline {
             _ => {}
         }
         self.current = None;
+    }
+
+    /// The game can drop a road trip's config at a load and never send it
+    /// again, then still deliver the trip (the owner's ATS road trip,
+    /// 2026-10-16: three loads, the config back after the first only). The
+    /// delivery belongs to the road trip suspended at that load, if nothing
+    /// has replaced it: it resumes, and the stretch it was not tracked becomes
+    /// a gap from its last point, so the job goes to review instead of being lost.
+    fn resume_lost_road_trip(&mut self, wall: i64) {
+        let Some(k) = self.jobs.len().checked_sub(1) else { return };
+        let job = &self.jobs[k];
+        if job.state != JobState::Suspended || job.info.fingerprint.route.job_type != JobType::Car || self.job_cfg.is_some() {
+            return;
+        }
+        let Some(mut p) = self.last.clone() else { return };
+        p.cargo_loaded = job.info.cargo_loaded;
+        let since = job.kept.last().map(|q| q.wall_ms);
+        self.jobs[k].state = JobState::Tracking;
+        self.jobs[k].events.push(JobEvent::Resumed { wall_ms: wall });
+        self.current = Some(k);
+        self.rebase(k, &p, false, wall);
+        // The stretch always counts as a gap: after loads its distance can be
+        // near zero and the simulation clock restarts, so time it by the PC clock.
+        let job = &mut self.jobs[k];
+        if let (Some(g), Some(since)) = (job.gaps.last_mut(), since) {
+            if g.to_seq == p.seq && g.to_sess == p.sess {
+                g.duration_s = g.duration_s.max((p.wall_ms - since).max(0) as f64 / 1000.0);
+            }
+        }
+        job.kept.push(p);
     }
 
     /// Applies a config (cargo loaded, cargo switch) to a job about to track.
