@@ -217,6 +217,31 @@ fn resent_chunks_are_stored_once() {
 }
 
 #[test]
+fn clients_below_the_minimum_version_are_refused_until_they_update() {
+    let mut t = TestHost::new();
+    t.settings.min_client_version = Some((0, 2, 4));
+    publish(&t);
+    let token = link(&t);
+    let lines = fixture("ats-chicago-clean-delivery.jsonl.gz");
+    let sess = serde_json::from_str::<Value>(&lines[0]).unwrap()["sess"].as_str().unwrap().to_string();
+    let c: Vec<&String> = lines[..250].iter().collect();
+    let (cfg, m) = (pt_server::config::sample(), manifest());
+    for old in ["0.2.3", "0.1.0", "garbage"] {
+        let (r, _) = post_chunk(&t, &token, &sess, &c, old, &cfg, &m);
+        assert_eq!(r.status, 426, "{old}");
+        assert_eq!(r.body_json()["error"]["code"], "client_too_old");
+        assert_eq!(r.body_json()["error"]["details"]["min_client_version"], "0.2.4");
+    }
+    assert_eq!(t.q("SELECT COUNT(*) AS n FROM raw_chunks")[0]["n"], 0);
+    // Updated, the same data goes in (the client kept it).
+    for new in ["0.2.4", "0.3.0"] {
+        let (r, _) = post_chunk(&t, &token, &sess, &c, new, &cfg, &m);
+        assert_eq!(r.status, 200, "{new}: {}", r.body_json());
+    }
+    assert_eq!(t.q("SELECT SUM(frames) AS n FROM raw_chunks")[0]["n"], 250);
+}
+
+#[test]
 fn bonuses_apply_on_recalculation_and_are_listed() {
     let t = TestHost::new();
     let job_id = chicago(&t);

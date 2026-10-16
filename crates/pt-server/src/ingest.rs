@@ -45,6 +45,12 @@ pub async fn upload<H: Host>(h: &H, req: &Request) -> ApiResult<Response> {
     if chunk.protocol != UPLOAD_PROTOCOL {
         return Err(ApiError::bad_request("unsupported upload protocol").details(json!({"protocol": chunk.protocol})));
     }
+    if let Some(min) = h.settings().min_client_version {
+        if pt_core::update::parse_version(&chunk.client_version).map_or(true, |v| v < min) {
+            return Err(ApiError::new(426, "client_too_old", "this PlasmaTrack client is too old; it uploads again once it has updated")
+                .details(json!({"client_version": chunk.client_version, "min_client_version": format!("{}.{}.{}", min.0, min.1, min.2)})));
+        }
+    }
     if chunk.sess.len() != 32 || !chunk.sess.bytes().all(|b| b.is_ascii_hexdigit()) {
         return Err(ApiError::bad_request("sess must be 32 hex digits"));
     }

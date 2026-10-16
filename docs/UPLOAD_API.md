@@ -39,4 +39,7 @@ the client may resend any chunk at any time.
 
 Rule 0 and every other scoring decision is made by the server after storing. An upload is
 never rejected *because of* its content, so evidence is always kept. Only authentication and
-malformed-request failures are rejected.
+malformed-request failures are rejected, and uploads from a client older than the server's
+`MIN_CLIENT_VERSION` (Worker variable): `426 client_too_old`, details
+`{client_version, min_client_version}`. Like any non-2xx it is retried, so the data waits on
+the PC until the client has updated (`GET /api/v1/client/update` is not gated).

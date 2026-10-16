@@ -5,7 +5,7 @@ use std::path::Path;
 
 use pt_core::upload::{ManifestEntry, UploadChunk, UPLOAD_PROTOCOL};
 use pt_core::Game;
-use pt_server::http::Request;
+use pt_server::http::{Request, Response};
 use pt_server::scorer::Scorer;
 use pt_server::{config, util};
 use serde_json::json;
@@ -72,30 +72,38 @@ pub fn upload_with(t: &TestHost, token: &str, lines: &[String], per_chunk: usize
     }
     for (sess, frames) in sessions {
         for c in frames.chunks(per_chunk) {
-            let seq = |l: &String| serde_json::from_str::<Value>(l).unwrap()["seq"].as_u64().unwrap_or(0);
-            let chunk = UploadChunk {
-                protocol: UPLOAD_PROTOCOL,
-                client_version: "0.1.0".into(),
-                sess: sess.clone(),
-                hello: None,
-                seq_from: c.iter().map(|l| seq(l)).filter(|s| *s > 0).min().unwrap_or(0),
-                seq_to: c.iter().map(|l| seq(l)).max().unwrap_or(0),
-                frames: c.iter().map(|l| RawValue::from_string(l.to_string()).unwrap()).collect(),
-                config_hash: cfg.integrity_hash(),
-                config: RawValue::from_string(cfg.integrity_canonical_json()).unwrap(),
-                manifest: manifest.clone(),
-            };
-            let body = util::gzip(&serde_json::to_vec(&chunk).unwrap());
-            let mut req = Request::new("POST", "/api/v1/chunks")
-                .with_header("authorization", &format!("Bearer {token}"))
-                .with_header("content-type", "application/json")
-                .with_header("content-encoding", "gzip");
-            req.body = body;
-            let r = t.call(req);
+            let (r, seq_to) = post_chunk(t, token, &sess, c, "0.1.0", &cfg, &manifest);
             assert_eq!(r.status, 200, "{}", r.body_json());
-            assert!(r.body_json()["accepted_through"].as_u64().unwrap() >= chunk.seq_to);
+            assert!(r.body_json()["accepted_through"].as_u64().unwrap() >= seq_to);
         }
     }
+}
+
+/// Posts one chunk of session `sess` as client `client_version`; the response
+/// and the chunk's `seq_to`.
+pub fn post_chunk(
+    t: &TestHost, token: &str, sess: &str, c: &[&String], client_version: &str, cfg: &pt_core::config::Config,
+    manifest: &[ManifestEntry],
+) -> (Response, u64) {
+    let seq = |l: &String| serde_json::from_str::<Value>(l).unwrap()["seq"].as_u64().unwrap_or(0);
+    let chunk = UploadChunk {
+        protocol: UPLOAD_PROTOCOL,
+        client_version: client_version.into(),
+        sess: sess.to_string(),
+        hello: None,
+        seq_from: c.iter().map(|l| seq(l)).filter(|s| *s > 0).min().unwrap_or(0),
+        seq_to: c.iter().map(|l| seq(l)).max().unwrap_or(0),
+        frames: c.iter().map(|l| RawValue::from_string(l.to_string()).unwrap()).collect(),
+        config_hash: cfg.integrity_hash(),
+        config: RawValue::from_string(cfg.integrity_canonical_json()).unwrap(),
+        manifest: manifest.to_vec(),
+    };
+    let mut req = Request::new("POST", "/api/v1/chunks")
+        .with_header("authorization", &format!("Bearer {token}"))
+        .with_header("content-type", "application/json")
+        .with_header("content-encoding", "gzip");
+    req.body = util::gzip(&serde_json::to_vec(&chunk).unwrap());
+    (t.call(req), chunk.seq_to)
 }
 
 pub fn user_id(t: &TestHost) -> String {

@@ -104,6 +104,9 @@ pub struct Settings {
     /// Keys whose signed updates may be published; empty means the release
     /// keys built into every client (`pt_core::update::UPDATE_KEYS`).
     pub update_keys: Vec<[u8; 32]>,
+    /// Uploads from clients older than this are refused (426) until they
+    /// update; the client keeps the data and retries. None: any version.
+    pub min_client_version: Option<(u64, u64, u64)>,
 }
 
 #[allow(async_fn_in_trait)]

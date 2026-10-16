@@ -77,6 +77,7 @@ impl TestHost {
                 download_secret: "dl-secret".into(),
                 backup_prefix: "d1/test-server/".into(),
                 update_keys: vec![update_signing_key().verifying_key().to_bytes()],
+                min_client_version: None,
             },
             pokes: RefCell::new(Vec::new()),
             webhooks_queued: RefCell::new(Vec::new()),

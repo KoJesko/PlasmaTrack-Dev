@@ -46,6 +46,7 @@ fn settings(env: &Env) -> Settings {
         download_secret: list(env, "DOWNLOAD_SECRET", true).into_iter().next().unwrap_or_default(),
         backup_prefix: list(env, "BACKUP_PREFIX", false).into_iter().next().unwrap_or_default(),
         update_keys: Vec::new(),
+        min_client_version: list(env, "MIN_CLIENT_VERSION", false).first().and_then(|v| pt_core::update::parse_version(v)),
     }
 }
 

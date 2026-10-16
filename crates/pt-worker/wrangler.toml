@@ -56,6 +56,8 @@ bucket_name = "plasmatrack-releases"
 
 [vars]
 BACKUP_PREFIX = "d1/plasmatrack-server/"
+# Uploads from older clients are refused until they update (docs/UPLOAD_API.md).
+MIN_CLIENT_VERSION = "0.2.4"
 
 [[queues.producers]]
 binding = "WEBHOOKS"
@@ -119,6 +121,7 @@ bucket_name = "plasmatrack-releases"
 
 [env.test.vars]
 BACKUP_PREFIX = "d1/plasmatrack-server-test/"
+MIN_CLIENT_VERSION = "0.2.4"
 
 [[env.test.queues.producers]]
 binding = "WEBHOOKS"

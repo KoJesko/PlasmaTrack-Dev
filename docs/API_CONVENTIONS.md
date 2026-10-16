@@ -96,6 +96,7 @@ Every non-2xx response has this body:
 | 409 | `idempotency_mismatch` | the key was reused with a different body |
 | 413 | `payload_too_large` | over the stated size limit (`details.max_bytes`) |
 | 422 | `validation_failed` | per-field problems: `details.fields = {"reason": "required"}` |
+| 426 | `client_too_old` | upload from a client below the server's minimum (`details.client_version`, `details.min_client_version`); it updates, then retries |
 | 429 | `rate_limited` | `Retry-After` header (seconds) and `details.retry_after_s` |
 | 500 / 503 | `internal` / `unavailable` | retry with backoff; `Retry-After` on 503 |
 
@@ -268,3 +269,5 @@ These answer the bot's open questions "(Q)". **The project owner confirmed all o
   speed-penalty and invalid-delivery notifications quote a road trip's own limits.
 - 2026-10-16: new review reason `high_income`: over 400 per mile of the game's delivery distance, or
   over 500,000 in all (config version 3, `review_over_income_per_game_mi` and `review_over_income`).
+- 2026-10-16: uploads from clients below `MIN_CLIENT_VERSION` (0.2.4) are refused with
+  `426 client_too_old`; the client keeps the data and retries after updating.
