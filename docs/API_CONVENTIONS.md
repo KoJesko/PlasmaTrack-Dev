@@ -256,3 +256,5 @@ These answer the bot's open questions "(Q)". **The project owner confirmed all o
   for those steps, until the rebuild has caught up.
 - 2026-10-15: the `negative_fuel` reason text now reads "The tank gained fuel with no refuel seen."
   The old text described the opposite of what the check finds.
+- 2026-10-16: new review reason `time_warp` (details `max_factor`, `gained_s`): the game ran faster
+  than real time, the `warp` console command. It follows `review_policy.trace_checks`.

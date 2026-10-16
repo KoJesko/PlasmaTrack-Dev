@@ -95,6 +95,9 @@ pub enum ReviewReason {
     /// The game's delivery distance disagrees with the trace.
     DistanceMismatch { delivered_km: f64, tracked_km: f64, tolerance_km: f64 },
     NoDeliveredDistance,
+    /// The game ran faster than real time (the `warp` console command): the
+    /// fastest 30 s of real time, and the game seconds gained over all of them.
+    TimeWarp { max_factor: f64, gained_s: f64 },
 }
 
 impl ReviewReason {
@@ -111,6 +114,7 @@ impl ReviewReason {
             ReviewReason::CargoSwitch => "cargo_switch",
             ReviewReason::DistanceMismatch { .. } => "distance_mismatch",
             ReviewReason::NoDeliveredDistance => "no_delivered_distance",
+            ReviewReason::TimeWarp { .. } => "time_warp",
         }
     }
 }
@@ -201,6 +205,43 @@ fn glob(pat: &str, s: &str) -> bool {
             (0..=tail.len()).any(|i| tail.is_char_boundary(i) && glob(rest, &tail[i..]))
         }
     }
+}
+
+/// The `warp` console command (0.0001-60) runs every game clock faster than
+/// real time: simulation, paused simulation, render and the in-game clock (the
+/// owner's ATS test, 2026-10-16). The truck's speed and the pace checks look
+/// normal, so only the player's PC clock (`wall_ms`) shows it. Game time is
+/// compared with real time over windows of this much real driving.
+pub const TIME_WARP_WINDOW_S: f64 = 30.0;
+/// A window whose game time ran more than this much faster than real time is
+/// warped. Honest play stays within 1.047 (38 sessions, both games, capture
+/// mode included); `warp 2` reads 2.0.
+pub const TIME_WARP_OVER: f64 = 1.15;
+/// Pairs further apart in real time are a pause or a stall, and are left out
+/// (they would only lower the ratio, so pausing cannot hide a warp).
+const TIME_WARP_MAX_STEP_S: f64 = 5.0;
+
+/// The fastest warped window and the game seconds gained in all of them.
+fn time_warp(kept: &[Point]) -> Option<(f64, f64)> {
+    let (mut sim, mut wall, mut max, mut gained) = (0.0, 0.0, 0.0f64, 0.0);
+    for (a, b) in pairs(kept) {
+        let ds = b.sim_us.saturating_sub(a.sim_us) as f64 / 1e6;
+        let dw = (b.wall_ms - a.wall_ms) as f64 / 1000.0;
+        if ds <= 0.0 || ds > 60.0 || dw <= 0.0 || dw >= TIME_WARP_MAX_STEP_S {
+            continue;
+        }
+        sim += ds;
+        wall += dw;
+        if wall >= TIME_WARP_WINDOW_S {
+            let factor = sim / wall;
+            if factor > TIME_WARP_OVER {
+                max = max.max(factor);
+                gained += sim - wall;
+            }
+            (sim, wall) = (0.0, 0.0);
+        }
+    }
+    (max > 0.0).then_some((max, gained))
 }
 
 /// Neighbouring kept points of the same run: the only pairs that accumulate.
@@ -508,6 +549,11 @@ pub fn evaluate(job: &Job, cfg: &Config, ctx: &Context) -> JobResult {
             });
         }
     }
+    if policy.trace_checks == ReviewAction::Review {
+        if let Some((max_factor, gained_s)) = time_warp(&job.kept) {
+            review.push(ReviewReason::TimeWarp { max_factor, gained_s });
+        }
+    }
 
     // Points: rules 5, 6, 7 (bonus on the cargo first tracked after a switch).
     let accepted = if speed.penalty { d.world_mi * r.speed_penalty_factor } else { d.world_mi };
@@ -588,6 +634,7 @@ mod tests {
             ReviewReason::CargoSwitch,
             ReviewReason::DistanceMismatch { delivered_km: 1.0, tracked_km: 1.0, tolerance_km: 1.0 },
             ReviewReason::NoDeliveredDistance,
+            ReviewReason::TimeWarp { max_factor: 2.0, gained_s: 30.0 },
         ];
         for r in all {
             assert_eq!(serde_json::to_value(&r).unwrap()["reason"], r.code());

@@ -258,6 +258,7 @@ fn reason_text(code: &str) -> &'static str {
         "cargo_switch" => "The cargo changed on the same route mid-job.",
         "distance_mismatch" => "The game's delivery distance disagrees with the tracked distance.",
         "no_delivered_distance" => "The delivery carried no distance.",
+        "time_warp" => "The game ran faster than real time (the warp command).",
         "trace_check" => "The trace does not match the configured sample rate.",
         "overspeed_invalid" => "Sustained speed over the invalid limit.",
         "integrity" => "The tracker's files or settings were not recognised.",
@@ -299,6 +300,9 @@ fn review_details(r: &ReviewReason, job: &Job, cfg: &Config) -> Value {
         }
         ReviewReason::DistanceMismatch { delivered_km, tracked_km, tolerance_km } => {
             json!({"delivered_km": round2(*delivered_km), "tracked_km": round2(*tracked_km), "tolerance_km": round2(*tolerance_km)})
+        }
+        ReviewReason::TimeWarp { max_factor, gained_s } => {
+            json!({"max_factor": round2(*max_factor), "gained_s": round2(*gained_s)})
         }
         ReviewReason::LateStart | ReviewReason::NoDeliveredDistance => json!({}),
     }

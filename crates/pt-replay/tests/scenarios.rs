@@ -657,6 +657,57 @@ fn teleports_add_no_distance_and_are_never_reviewed() {
 }
 
 #[test]
+fn the_warp_command_is_held_for_review() {
+    // The owner's ATS test (2026-10-16): under `warp 2` every game clock runs
+    // twice as fast as the PC's; the truck's speed looks normal.
+    let mut s = Sim::new("ats");
+    s.accept(JobSpec::new("tyres"));
+    s.drive_secs(120.0, 60.0);
+    s.warp = 2.0;
+    s.drive_secs(120.0, 60.0);
+    s.warp = 1.0;
+    s.drive_secs(60.0, 60.0);
+    s.deliver(21.0);
+    let (_, r) = s.job("tyres");
+    assert_eq!(r.outcome, Outcome::PendingReview);
+    let warp = r.review.iter().find_map(|x| match x {
+        ReviewReason::TimeWarp { max_factor, gained_s } => Some((*max_factor, *gained_s)),
+        _ => None,
+    });
+    let (factor, gained) = warp.expect("time_warp raised");
+    assert!(factor > 1.5, "{factor}");
+    assert!(gained > 40.0, "{gained}");
+    assert!(!r.review.iter().any(|x| matches!(x, ReviewReason::FastAverage { .. })), "the pace looks normal: {:?}", r.review);
+}
+
+#[test]
+fn a_pause_does_not_hide_a_warp() {
+    let mut s = Sim::new("ats");
+    s.accept(JobSpec::new("tyres"));
+    for _ in 0..6 {
+        s.warp = 2.0;
+        s.drive_secs(25.0, 60.0);
+        s.warp = 1.0;
+        s.pause();
+        s.wall_ms += 25_000;
+        s.start();
+    }
+    s.deliver(21.0);
+    let (_, r) = s.job("tyres");
+    assert!(r.review.iter().any(|x| matches!(x, ReviewReason::TimeWarp { .. })), "{:?}", r.review);
+}
+
+#[test]
+fn normal_driving_is_not_warp() {
+    let mut s = Sim::new("ats");
+    s.accept(JobSpec::new("tyres"));
+    s.drive_secs(600.0, 60.0);
+    s.deliver(21.0);
+    let (_, r) = s.job("tyres");
+    assert!(!r.review.iter().any(|x| matches!(x, ReviewReason::TimeWarp { .. })), "{:?}", r.review);
+}
+
+#[test]
 fn a_portal_that_fills_the_tank_raises_no_fuel_flag() {
     // World of Trucks event portals (Brackenreach, 2026-10-15): the truck is
     // moved 258 km and the tank is full on arrival.

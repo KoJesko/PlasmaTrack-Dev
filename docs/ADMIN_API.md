@@ -59,6 +59,7 @@ Oldest first, with `total`. Each item:
 | `cargo_switch` | Same route, different cargo mid-job (a save edit) | `from_cargo`, `to_cargo` |
 | `distance_mismatch` | The game's delivery distance disagrees with the trace | `delivered_km`, `tracked_km`, `tolerance_km` |
 | `no_delivered_distance` | The delivery carried no distance | |
+| `time_warp` | The game ran faster than real time: the `warp` console command. Any 30 s of real driving with game time over 1.15× real time (honest play stays within 1.05) | `max_factor`, `gained_s` (game seconds gained) |
 | `trace_check` | Sample rate, sequence or `hello` inconsistency (PLAN §6a) | `checks[]` |
 | `odometer_jump`, `impossible_delivery_time` | Optional heuristics, off by default | rule specific |
 | `manual_submission` | Submitted by hand through the bot (PUBLIC_API §6): every manual job has it | |

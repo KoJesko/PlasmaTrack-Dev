@@ -80,6 +80,8 @@ pub struct Sim {
     pub time_rate: Option<f64>,
     pub job: Option<JobSpec>,
     pub lines: Vec<String>,
+    /// The `warp` console command: game time per real time while driving.
+    pub warp: f64,
     paused: bool,
 }
 
@@ -109,6 +111,7 @@ impl Sim {
             time_rate: None,
             job,
             lines: Vec::new(),
+            warp: 1.0,
             paused: true,
         };
         s.boot(true);
@@ -222,7 +225,7 @@ impl Sim {
         let steps = (secs * 20.0).round() as u64;
         for _ in 0..steps {
             self.sim_us += 50_000;
-            self.wall_ms += 50;
+            self.wall_ms += (50.0 / self.warp).round() as i64;
             let world_m = v * 0.05;
             self.pos[0] += world_m;
             self.odo += world_m * self.scale / 1000.0;
