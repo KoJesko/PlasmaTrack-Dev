@@ -7,7 +7,7 @@ use serde_json::{json, Value};
 use crate::env::{Host, Row, RowExt};
 use crate::http::{self, ApiError, ApiResult, Request, Response};
 use crate::jobs::Trigger;
-use crate::scorer::Scorer;
+
 use crate::store::{self, Audit, User};
 use crate::util::{self, rfc3339};
 use crate::{admin, auth, config, params, public, webhooks};
@@ -132,7 +132,7 @@ async fn recalculation_step<H: Host>(h: &H, op: &str) -> ApiResult<Option<Value>
     for j in &rows {
         let id = j.s("job_id");
         let before = j.s("outcome");
-        if Scorer::rescore_job(h, &id, Trigger::Recalculation, None).await.is_err() {
+        if crate::scorer::rescore_job(h, &id, Trigger::Recalculation, None).await.is_err() {
             continue;
         }
         let after = store::one(h, "SELECT outcome FROM jobs WHERE job_id = ?1", params![&id]).await?.map(|x| x.s("outcome")).unwrap_or_default();
@@ -169,7 +169,27 @@ async fn recalculation_step<H: Host>(h: &H, op: &str) -> ApiResult<Option<Value>
 /// submission used.
 pub async fn cron<H: Host>(h: &H) -> ApiResult<()> {
     h.run("DELETE FROM idempotency WHERE created_at < ?1", params![h.now_ms() - store::IDEMPOTENCY_TTL_MS]).await?;
+    wake_scorers_after_format_change(h).await?;
     crate::manual::sweep(h).await
+}
+
+/// After a deploy that changes the scorer's stored format, every scorer is
+/// woken once to rebuild, instead of each waiting for its player's next upload
+/// (2026-10-20: a scorer stuck on the old format held a delivered job back).
+/// The marker is an `operations` row per format.
+pub async fn wake_scorers_after_format_change<H: Host>(h: &H) -> ApiResult<()> {
+    let marker = format!("op_scorer_format_{}", crate::scorer::SNAPSHOT_FORMAT);
+    let added = h
+        .run(
+            "INSERT OR IGNORE INTO operations (operation_id, kind, status, total, done, requested_by, reason, started_at, finished_at)
+             VALUES (?1, 'scorer_format', 'succeeded', 0, 0, 'system', 'Scorer format changed: every scorer rebuilds', ?2, ?2)",
+            params![&marker, h.now_ms()],
+        )
+        .await?;
+    if added > 0 {
+        h.queue_op(json!({"kind": "poke_all"})).await?;
+    }
+    Ok(())
 }
 
 // ---- bonuses (§9) ----------------------------------------------------------------

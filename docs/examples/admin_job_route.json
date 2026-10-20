@@ -848,6 +848,7 @@
     "includes_reverted": true,
     "job_id": "A2NDM8HC",
     "max_vertices": 5000,
+    "projection": "basemap",
     "simplification_tolerance_world_m": 0.05,
     "vertex_count": 169
   },

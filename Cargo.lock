@@ -1009,6 +1009,7 @@ dependencies = [
  "pt-core",
  "serde",
  "serde_json",
+ "sha2",
 ]
 
 [[package]]
@@ -1017,6 +1018,7 @@ version = "0.1.0"
 dependencies = [
  "ed25519-dalek",
  "flate2",
+ "futures-util",
  "pt-core",
  "pt-replay",
  "rusqlite",

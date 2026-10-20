@@ -8,7 +8,6 @@ use common::seed::*;
 use common::{block_on, TestHost, ADMIN, BOT_TOKEN, READ_TOKEN, WEBHOOK_SECRET};
 use pt_core::Game;
 use pt_server::http::Request;
-use pt_server::scorer::Scorer;
 use pt_server::{util, webhooks};
 use serde_json::{json, Value};
 
@@ -186,17 +185,17 @@ fn scoring_in_pieces_with_a_restart_matches_one_pass() {
     let one: Value = a.q("SELECT summary, points FROM jobs")[0].clone();
 
     // The same upload, scored after every chunk; the scorer is restarted from its
-    // R2 snapshot half way (a Durable Object eviction).
+    // own database half way (a Durable Object eviction: no save step, every
+    // chunk is committed as it is processed).
     let b = TestHost::new();
     publish(&b);
     let token = link(&b);
     let lines = fixture("ats-chicago-clean-delivery.jsonl.gz");
     let mid = lines.len() / 2;
     upload(&b, &token, &lines[..mid], 300);
-    let mut s = Scorer::new(&user_id(&b), Game::Ats);
+    let mut s = b.scorer(&user_id(&b), Game::Ats);
     block_on(s.process(&b)).unwrap();
-    block_on(s.save(&b)).unwrap();
-    let mut s = Scorer::new(&user_id(&b), Game::Ats);
+    let mut s = b.scorer(&user_id(&b), Game::Ats);
     upload(&b, &token, &lines[mid..], 300);
     let report = block_on(s.process(&b)).unwrap();
     assert!(!report.rebuilt);

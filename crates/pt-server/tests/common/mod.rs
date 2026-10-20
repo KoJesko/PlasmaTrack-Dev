@@ -7,7 +7,7 @@
 use std::cell::{Cell, RefCell};
 use std::collections::BTreeMap;
 
-use pt_server::env::{Host, HostError, HostResult, Row, Settings, Stmt, P};
+use pt_server::env::{Host, HostError, HostResult, LocalSql, Row, Settings, SqlVal, Stmt, P};
 use pt_server::http::{Request, Response};
 use pt_server::util;
 use rusqlite::types::ValueRef;
@@ -38,6 +38,8 @@ pub struct TestHost {
     /// The next this many writes of job data (`jobs/…`) fail, like a Worker
     /// that ran out of memory or subrequests.
     pub fail_job_puts: Cell<u32>,
+    /// Each scorer's own database, by "user:game".
+    pub scorer_dbs: RefCell<BTreeMap<String, TestSql>>,
 }
 
 fn bind(p: &P) -> rusqlite::types::Value {
@@ -51,6 +53,56 @@ fn bind(p: &P) -> rusqlite::types::Value {
 
 fn err(e: rusqlite::Error) -> HostError {
     HostError(e.to_string())
+}
+
+/// A scorer's own database (its Durable Object's SQLite): one per player and
+/// game, shared by every `Scorer` made for them, like the object's storage
+/// outliving its memory.
+#[derive(Clone)]
+pub struct TestSql(pub std::rc::Rc<rusqlite::Connection>);
+
+impl TestSql {
+    pub fn new() -> TestSql {
+        TestSql(std::rc::Rc::new(rusqlite::Connection::open_in_memory().unwrap()))
+    }
+}
+
+impl LocalSql for TestSql {
+    fn exec(&self, sql: &str, params: &[SqlVal]) -> HostResult<Vec<Vec<SqlVal>>> {
+        use rusqlite::types::Value as V;
+        let sql = sql.trim();
+        if sql.is_empty() {
+            return Ok(Vec::new());
+        }
+        let vals: Vec<V> = params
+            .iter()
+            .map(|p| match p {
+                SqlVal::Null => V::Null,
+                SqlVal::Int(i) => V::Integer(*i),
+                SqlVal::Real(f) => V::Real(*f),
+                SqlVal::Text(s) => V::Text(s.clone()),
+                SqlVal::Blob(b) => V::Blob(b.clone()),
+            })
+            .collect();
+        let mut stmt = self.0.prepare(sql).map_err(err)?;
+        let cols = stmt.column_count();
+        let rows = stmt
+            .query_map(rusqlite::params_from_iter(vals), |r| {
+                (0..cols)
+                    .map(|i| {
+                        Ok(match r.get_ref(i)? {
+                            ValueRef::Null => SqlVal::Null,
+                            ValueRef::Integer(i) => SqlVal::Int(i),
+                            ValueRef::Real(f) => SqlVal::Real(f),
+                            ValueRef::Text(t) => SqlVal::Text(String::from_utf8_lossy(t).into_owned()),
+                            ValueRef::Blob(b) => SqlVal::Blob(b.to_vec()),
+                        })
+                    })
+                    .collect::<rusqlite::Result<Vec<SqlVal>>>()
+            })
+            .map_err(err)?;
+        rows.collect::<rusqlite::Result<Vec<_>>>().map_err(err)
+    }
 }
 
 impl TestHost {
@@ -85,7 +137,15 @@ impl TestHost {
             posts: RefCell::new(Vec::new()),
             post_status: Cell::new(202),
             fail_job_puts: Cell::new(0),
+            scorer_dbs: RefCell::new(BTreeMap::new()),
         }
+    }
+
+    /// The player's scorer, as a fresh Durable Object instance: nothing in
+    /// memory, its database as the last one left it.
+    pub fn scorer(&self, user_id: &str, game: pt_core::Game) -> pt_server::scorer::Scorer<TestSql> {
+        let db = self.scorer_dbs.borrow_mut().entry(format!("{user_id}:{}", game.as_str())).or_insert_with(TestSql::new).clone();
+        pt_server::scorer::Scorer::new(user_id, game, db)
     }
 
     pub fn advance(&self, ms: i64) {

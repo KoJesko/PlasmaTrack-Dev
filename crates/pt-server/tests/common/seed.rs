@@ -6,7 +6,6 @@ use std::path::Path;
 use pt_core::upload::{ManifestEntry, UploadChunk, UPLOAD_PROTOCOL};
 use pt_core::Game;
 use pt_server::http::{Request, Response};
-use pt_server::scorer::Scorer;
 use pt_server::{config, util};
 use serde_json::json;
 use serde_json::value::RawValue;
@@ -111,7 +110,7 @@ pub fn user_id(t: &TestHost) -> String {
 }
 
 pub fn score(t: &TestHost, game: Game) -> pt_server::scorer::Report {
-    let mut s = Scorer::new(&user_id(t), game);
+    let mut s = t.scorer(&user_id(t), game);
     block_on(s.process(t)).unwrap()
 }
 

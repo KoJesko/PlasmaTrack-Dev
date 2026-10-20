@@ -6,7 +6,7 @@ mod common;
 
 use common::seed::*;
 use common::TestHost;
-use pt_server::scorer::{Scorer, MAX_CHUNKS_PER_PASS};
+use pt_server::scorer::MAX_CHUNKS_PER_PASS;
 
 #[test]
 fn many_small_chunks_take_several_passes() {
@@ -19,7 +19,7 @@ fn many_small_chunks_take_several_passes() {
     let chunks = lines.len().div_ceil(4);
     assert!(chunks > 2 * MAX_CHUNKS_PER_PASS, "{chunks}");
 
-    let mut s = Scorer::new(&user_id(&t), pt_core::Game::Ats);
+    let mut s = t.scorer(&user_id(&t), pt_core::Game::Ats);
     let mut passes = Vec::new();
     loop {
         let r = common::block_on(s.process(&t)).unwrap();
@@ -49,7 +49,7 @@ fn a_rebuild_in_several_passes_never_stores_a_job_half_replayed() {
     let token = link(&t);
     let lines = synthetic_job("0123456789abcdef0123456789abcdef", 50.0, 180.0);
     upload(&t, &token, &lines, 4);
-    let mut s = Scorer::new(&user_id(&t), pt_core::Game::Ats);
+    let mut s = t.scorer(&user_id(&t), pt_core::Game::Ats);
     while common::block_on(s.process(&t)).unwrap().more {}
     let before = t.q("SELECT job_id, state, outcome, version FROM jobs");
     assert_eq!(before[0]["state"], "delivered");
@@ -80,7 +80,7 @@ fn a_job_whose_data_failed_to_store_is_stored_on_the_next_pass() {
     publish(&t);
     let token = link(&t);
     upload(&t, &token, &synthetic_job("0123456789abcdef0123456789abcdef", 50.0, 60.0), 200);
-    let mut s = Scorer::new(&user_id(&t), pt_core::Game::Ats);
+    let mut s = t.scorer(&user_id(&t), pt_core::Game::Ats);
     t.fail_job_puts.set(1);
     assert!(common::block_on(s.process(&t)).is_err(), "the write failed");
     assert!(t.blobs.borrow().keys().all(|k| !k.starts_with("jobs/")));
@@ -90,7 +90,7 @@ fn a_job_whose_data_failed_to_store_is_stored_on_the_next_pass() {
     let r = common::block_on(s.process(&t)).unwrap();
     assert_eq!(r.jobs_stored, 1);
     let id = t.q("SELECT job_id FROM jobs")[0]["job_id"].as_str().unwrap().to_string();
-    assert!(t.blobs.borrow().contains_key(&format!("jobs/{id}.json.gz")));
+    assert!(t.blobs.borrow().contains_key(&pt_server::jobs::meta_key(&id)));
     assert_eq!(t.call(t.admin("GET", &format!("/api/v1/admin/jobs/{id}/series"))).status, 200);
 }
 
@@ -103,10 +103,19 @@ fn a_row_whose_data_went_missing_gets_it_back() {
     score(&t, pt_core::Game::Ats);
     let id = t.q("SELECT job_id FROM jobs")[0]["job_id"].as_str().unwrap().to_string();
     // As production had it: the row, without its data.
-    t.blobs.borrow_mut().remove(&format!("jobs/{id}.json.gz"));
+    t.blobs.borrow_mut().retain(|k, _| !k.starts_with(&format!("jobs/{id}")));
     assert_eq!(t.call(t.admin("GET", &format!("/api/v1/admin/jobs/{id}/series"))).status, 404);
-    // Replaying the raw data (a new scorer: no snapshot in memory) restores it.
-    t.blobs.borrow_mut().retain(|k, _| !k.starts_with("snap/"));
+    // Replaying the raw data (a scorer with an empty database) restores it.
+    t.scorer_dbs.borrow_mut().clear();
     score(&t, pt_core::Game::Ats);
     assert_eq!(t.call(t.admin("GET", &format!("/api/v1/admin/jobs/{id}/series"))).status, 200);
+}
+
+#[test]
+fn a_new_scorer_format_wakes_every_scorer_once() {
+    let t = TestHost::new();
+    common::block_on(pt_server::manage::cron(&t)).unwrap();
+    common::block_on(pt_server::manage::cron(&t)).unwrap();
+    let pokes: Vec<_> = t.ops_queued.borrow().iter().filter(|m| m["kind"] == "poke_all").cloned().collect();
+    assert_eq!(pokes.len(), 1, "{pokes:?}");
 }

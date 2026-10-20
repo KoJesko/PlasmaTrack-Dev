@@ -17,7 +17,6 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use common::seed::*;
 use common::{block_on, TestHost};
 use pt_core::Game;
-use pt_server::scorer::Scorer;
 
 struct Counting;
 static CURRENT: AtomicUsize = AtomicUsize::new(0);
@@ -75,7 +74,7 @@ fn a_full_rebuild_fits_a_durable_object() {
     drop(lines);
 
     let game = if t.q("SELECT game FROM plugin_sessions WHERE game IS NOT NULL")[0]["game"] == "ats" { Game::Ats } else { Game::Ets2 };
-    let mut s = Scorer::new(&user_id(&t), game);
+    let mut s = t.scorer(&user_id(&t), game);
     let (mut passes, mut stored) = (0, 0);
     let mut worst = 0.0f64;
     let (start, start_blobs) = (CURRENT.load(Ordering::Relaxed), blob_bytes(&t));

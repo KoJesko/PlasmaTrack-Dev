@@ -67,7 +67,7 @@ pub struct JobView {
 }
 
 impl JobView {
-    fn new(job: &Job, r: &JobResult) -> JobView {
+    fn new<P>(job: &Job<P>, r: &JobResult) -> JobView {
         let route = &job.info.fingerprint.route;
         let wall = |e: Option<&pt_core::timeline::JobEvent>| e.map(event_wall).unwrap_or(0);
         let mut reasons: Vec<String> = r.review.iter().map(|x| x.code().to_string()).collect();
@@ -145,11 +145,12 @@ impl LiveJobs {
         let mut alerts = Vec::new();
         for (profile, n) in notices {
             let (Notice::JobDelivered { job } | Notice::PenaltyActivated { job, .. }) = &n else { continue };
-            let Some(j) = self.games[gi].1.jobs().find(|j| j.profile == profile && j.id == *job) else { continue };
+            let profiles = &self.games[gi].1;
+            let Some(j) = profiles.jobs().find(|j| j.profile == profile && j.id == *job) else { continue };
             let cargo = j.info.cargo_name.clone();
             match n {
                 Notice::JobDelivered { .. } => {
-                    let r = evaluate(j, &self.cfg, &Context::default());
+                    let r = profiles.evaluate(j, &self.cfg, &Context::default());
                     if r.speed.invalid {
                         alerts.push(Alert::InvalidDelivery { game, cargo, peak_mph: r.speed.peak_mph });
                     }
@@ -170,8 +171,7 @@ impl LiveJobs {
         let mut out: Vec<JobView> = self
             .games
             .iter()
-            .flat_map(|(_, p)| p.jobs())
-            .map(|j| JobView::new(j, &evaluate(j, &self.cfg, &Context::default())))
+            .flat_map(|(_, p)| p.jobs().map(move |j| JobView::new(j, &p.evaluate(j, &self.cfg, &Context::default()))))
             .collect();
         out.sort_by_key(|v| std::cmp::Reverse(v.started_ms));
         out.extend(self.finished.iter().cloned());

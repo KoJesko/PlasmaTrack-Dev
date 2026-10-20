@@ -143,9 +143,10 @@ Every Sunday at 03:47 UTC (`47 3 * * SUN`; Cloudflare does not accept `0` for Su
 - **D1 Time Travel** comes on top of this. For the last 30 days it can restore the database to
   any minute: `wrangler d1 time-travel restore plasmatrack --timestamp …`. The weekly files are
   extra copies outside D1.
-- **Not in the backup:** the R2 data, meaning raw chunks, job points, snapshots and evidence
+- **Not in the backup:** the R2 data, meaning raw chunks, job points and evidence
   images. These are big, and a copy in the same account guards against the same failures as
-  D1's own copies. Re-scoring needs the raw chunks.
+  D1's own copies. Re-scoring needs the raw chunks. Each scorer's own SQLite (live timelines)
+  is not backed up either: it is rebuilt from the raw chunks when lost.
 
 ## Watching it
 

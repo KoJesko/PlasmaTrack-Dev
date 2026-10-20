@@ -9,6 +9,7 @@ pub mod game;
 pub mod job;
 pub mod projection;
 pub mod rules;
+pub mod store;
 pub mod timeline;
 pub mod trace;
 pub mod units;

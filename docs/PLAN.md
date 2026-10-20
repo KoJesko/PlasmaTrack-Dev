@@ -19,7 +19,7 @@ Requirement changes folded in from our conversation:
 |---|---|---|
 | Plugin | C++17, CMake + Ninja. Primary toolchain is **llvm-mingw (UCRT)**; distro `x86_64-w64-mingw32-g++-posix` is the fallback. Two toolchain files (llvm-mingw layout, Debian layout). Fully static (`-static`), exports via `.def` | The SDK headers are C++-only (they do not compile as C). One toolchain covers Windows and Linux-cross, needs no thread-model choice, and is FOSS (ISC / Apache-2.0-LLVM / ZPL). A static build keeps the game directory free of runtime DLLs. |
 | Client | **Rust**, headless background app with a small status/settings page on `127.0.0.1` | The overlay is gone, so a webview is unnecessary. This avoids Tauri's proprietary MSVC Build Tools and WebView2. The GNU Rust toolchain is already installed. The client runs the exact same `pt-core` code as the server. |
-| Server | **Rust on Cloudflare Workers** (Workers Paid; decision 15). The `worker` crate (workers-rs, Apache-2.0) compiled to wasm, with D1 (SQLite) for records, R2 for raw chunks, job points and timeline snapshots, one Durable Object per (player, game) that runs the timeline, Queues for webhooks and bulk recalculation, and a Cron Trigger for revocations (§7a) | The same `pt-core` crate runs in wasm. All request logic lives in `pt-server`, plain Rust tested natively against rusqlite (D1 is SQLite); `pt-worker` only binds it to Cloudflare. |
+| Server | **Rust on Cloudflare Workers** (Workers Paid; decision 15). The `worker` crate (workers-rs, Apache-2.0) compiled to wasm, with D1 (SQLite) for records, R2 for raw chunks and job points, one Durable Object per (player, game) that runs the timeline (its points and state in the object's own SQLite), Queues for webhooks and bulk recalculation, and a Cron Trigger for revocations (§7a) | The same `pt-core` crate runs in wasm. All request logic lives in `pt-server`, plain Rust tested natively against rusqlite (D1 is SQLite); `pt-worker` only binds it to Cloudflare. |
 | Shared | `pt-core`: pure, with no I/O, no clock and no RNG | Deterministic. Client and server produce bit-identical results. The replay harness uses it directly. |
 | Web | **None.** There is no website. All public info (per-job route maps, leaderboards) and all admin actions go through the **Discord bot (separate repo)**, which consumes this server's JSON API | Your decision. This repo owns the API contract and route projection. |
 | Admin | Admin API + signed webhooks consumed by your **Discord bot (separate repo)** | Your decision; this repo only owns the API contract. |
@@ -520,8 +520,8 @@ retention ≤ 14 days.
 | Binding | Holds |
 |---|---|
 | D1 `DB` | every table in §7 except the raw data; idempotency keys; the webhook outbox |
-| R2 `RAW` | raw upload chunks (`raw/{user}/{sess}/{seq_from}.jsonl.gz`), each scored job's points (`jobs/{job_id}.json.gz`, for the series, trace and route endpoints), timeline snapshots (`snap/{user}/{game}.json.gz`) |
-| Durable Object `Scorer` | one per (player, game): the only place that runs the timeline, so a player's frames are processed strictly in order, one batch at a time |
+| R2 `RAW` | raw upload chunks (`raw/{user}/{sess}/{seq_from}.jsonl.gz`), each scored job's points (`jobs/{job_id}/meta.json.gz` plus content-addressed point segments `jobs/{job_id}/seg/{id}.bin.gz`, for re-scoring and the series, trace and route endpoints; jobs stored before 2026-10-20 have one `jobs/{job_id}.json.gz`, still read) |
+| Durable Object `Scorer` | one per (player, game): the only place that runs the timeline, so a player's frames are processed strictly in order, one batch at a time. Its own SQLite storage holds the timelines' points (blocks of 256) and its state |
 | Queue `webhooks` | event ids to deliver; the body stays in the D1 outbox (bodies can be 256 KiB) |
 | Queue `ops` | bulk recalculation: one message per (player, game) |
 | Cron | every 5 min: revocations that took effect, expired idempotency keys and cursors |
@@ -533,16 +533,25 @@ retention ≤ 14 days.
 3. It then pokes the player's `Scorer`.
 
 **Scoring path**
-1. The `Scorer` keeps the player's `pt_core::timeline::Profiles` in memory. After a restart it
-   loads the snapshot from R2 and replays the chunks uploaded since.
-2. Each batch pushes the new frames. Every job whose state changed is evaluated with
-   `pt_core::rules`, then written to D1 (and its points to R2).
-3. The webhook events are emitted: `job.needs_review`, `job.scored`, `job.discarded`, and
+1. The `Scorer` runs the player's `pt_core::timeline::Profiles`. The timelines' points are
+   not in memory: they are tracks in a `PointStore` kept in the object's own SQLite
+   (`pt_server::points`), in compressed blocks of 256 with a bounding box each, so only an
+   open block per track is in memory.
+2. Each chunk pushes its frames; then the points and the state (timelines without points,
+   chunks done, job memos) are committed together, with no await in between. A restarted
+   object continues from the last committed chunk; there is no snapshot to save.
+3. Every job whose state changed is evaluated with `pt_core::rules::evaluate_in`, which streams
+   over the store, then written to D1, and its points to R2 in segments. Unchanged segments
+   are not uploaded again.
+4. The webhook events are emitted: `job.needs_review`, `job.scored`, `job.discarded`, and
    `player.notification` with its random 5–30 s delay as the Queue delay.
-4. The snapshot is written back once the player has been idle for a minute, and at least
-   every 10 minutes.
-5. **Out-of-order data** (a chunk for a session older than the snapshot's position) rebuilds
+5. **Out-of-order data** (a chunk for a session older than the state's position) rebuilds
    that (player, game) from the raw chunks. A recalculation does the same.
+
+**Scorer memory (2026-10-20).** Before, the state was one JSON snapshot in R2 with every point
+of every open job. A job driven for two days (568k points) made it 208 MB, more than a
+Durable Object's 128 MB, and the owner's scorer stopped for good. Now nothing the scorer holds
+grows with a job's length; views of a very long job (map, graphs) read at most 100k points.
 
 **Bounded memory (decided 2026-10-14).** Samples arrive at 20 Hz, so a timeline that kept every
 job forever would outgrow 128 MB.

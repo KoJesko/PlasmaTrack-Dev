@@ -1,14 +1,17 @@
-//! Finished jobs are not held in memory (owner, 2026-10-16): once stored, only
-//! their last point stays in the scorer; the rest is on disk. A job brought
-//! back by a load continues from that point with a gap, and storing it again
-//! puts the points on disk and the new ones together.
+//! Finished jobs are not held in memory. Since 2026-10-20 every point is in
+//! the scorer's own database and only an open block per track is in memory;
+//! a job brought back by a load continues exactly as on the player's client
+//! (which keeps every point), and storing it again keeps every point.
 
 mod common;
 
 use common::seed::*;
 use common::{block_on, TestHost};
+use pt_core::rules::Context;
+use pt_core::timeline::Profiles;
 use pt_core::Game;
-use pt_server::scorer::Scorer;
+use pt_replay::{order_sessions, parse_lines, sample_config};
+use pt_server::points::BLOCK;
 use serde_json::{json, Value};
 
 const BASE_WALL: i64 = 1_791_000_000_000;
@@ -72,31 +75,28 @@ fn session(sess: &str, wall_s: i64, odo: f64, x: f64, secs: f64, end: End) -> Ve
     out
 }
 
-/// Every job in the scorer's saved snapshot: (state, points in memory, offloaded).
-fn snapshot_jobs(t: &TestHost, s: &mut Scorer) -> Vec<(String, usize, bool)> {
-    block_on(s.save(t)).unwrap();
-    let key = t.blobs.borrow().keys().find(|k| k.starts_with("snap/")).cloned().unwrap();
-    let snap: Value = pt_server::util::gunzip_json(&t.blobs.borrow()[&key]).unwrap();
-    let mut out = Vec::new();
-    fn walk(v: &Value, out: &mut Vec<(String, usize, bool)>) {
-        match v {
-            Value::Object(o) if o.contains_key("kept") && o.contains_key("events") => {
-                out.push((o["state"].as_str().unwrap_or("").to_string(), o["kept"].as_array().map_or(0, Vec::len), o["offloaded"] == true));
-            }
-            Value::Object(o) => o.values().for_each(|x| walk(x, out)),
-            Value::Array(a) => a.iter().for_each(|x| walk(x, out)),
-            _ => {}
-        }
-    }
-    walk(&snap, &mut out);
-    out
-}
 
-/// The stored job's points (on disk).
+/// The stored job's kept points (on disk).
 fn stored_points(t: &TestHost) -> (String, usize) {
     let id = t.q("SELECT job_id FROM jobs")[0]["job_id"].as_str().unwrap().to_string();
-    let blob = t.blobs.borrow()[&pt_server::jobs::blob_key(&id)].clone();
-    (id, pt_server::jobs::decode_blob(&blob).unwrap().0.kept.len())
+    let stored = block_on(pt_server::jobs::load_stored(t, &id)).unwrap().expect("job data");
+    (id, stored.job.kept.n)
+}
+
+/// What the player's client makes of the same frames (all points in memory).
+fn client_view(sessions: &[Vec<String>]) -> Vec<(String, f64)> {
+    let cfg = sample_config();
+    let lines: Vec<String> = sessions.concat();
+    let (mut frames, _) = parse_lines(&lines, &cfg);
+    order_sessions(&mut frames);
+    let mut p = Profiles::new(cfg.clone());
+    for f in &frames {
+        p.push(f);
+    }
+    p.into_jobs()
+        .iter()
+        .map(|j| (format!("{:?}", j.state).to_lowercase(), pt_core::rules::evaluate(j, &cfg, &Context::default()).distances.counted_game_km))
+        .collect()
 }
 
 #[test]
@@ -104,17 +104,23 @@ fn a_delivered_job_leaves_memory_and_a_load_into_it_keeps_its_points() {
     let t = TestHost::new();
     publish(&t);
     let token = link(&t);
-    upload(&t, &token, &session("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1", 0, 1000.0, 0.0, 60.0, End::Deliver), 200);
-    let mut s = Scorer::new(&user_id(&t), Game::Ats);
+    let first = session("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1", 0, 1000.0, 0.0, 60.0, End::Deliver);
+    upload(&t, &token, &first, 200);
+    let mut s = t.scorer(&user_id(&t), Game::Ats);
     while block_on(s.process(&t)).unwrap().more {}
     let (id, on_disk) = stored_points(&t);
     assert!(on_disk > 1000, "{on_disk}");
-    assert_eq!(snapshot_jobs(&t, &mut s), vec![("delivered".to_string(), 1, true)], "only the last point stays in memory");
+    let (in_memory, bytes) = s.footprint();
+    assert!(in_memory <= BLOCK, "only open blocks stay in memory: {in_memory}");
+    assert!(bytes > 0, "the points are on disk");
     let before = t.call(t.bot("GET", &format!("/api/v1/public/jobs/{id}"))).body_json();
 
     // A save from mid-job loaded in a new session: the job stops, and storing
-    // that keeps every point.
-    upload(&t, &token, &session("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa2", 600, 1003.0, 150.0, 5.0, End::Nothing), 200);
+    // that keeps every point. A new object instance (nothing in memory) picks
+    // up where the last one committed.
+    let second = session("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa2", 600, 1003.0, 150.0, 5.0, End::Nothing);
+    upload(&t, &token, &second, 200);
+    let mut s = t.scorer(&user_id(&t), Game::Ats);
     while block_on(s.process(&t)).unwrap().more {}
     let detail = t.call(t.admin("GET", &format!("/api/v1/admin/jobs/{id}"))).body_json();
     assert!(detail.to_string().contains("stopped_after_delivery"), "{}", detail["timeline"]);
@@ -122,33 +128,37 @@ fn a_delivered_job_leaves_memory_and_a_load_into_it_keeps_its_points() {
     let after = t.call(t.bot("GET", &format!("/api/v1/public/jobs/{id}"))).body_json();
     assert_eq!((after["outcome"].clone(), after["points"].clone()), (before["outcome"].clone(), before["points"].clone()));
     assert_eq!(t.call(t.admin("GET", &format!("/api/v1/admin/jobs/{id}/series?max_points=50"))).status, 200);
-    let jobs = snapshot_jobs(&t, &mut s);
-    assert!(jobs.iter().all(|(_, n, off)| *n <= 1 && *off), "{jobs:?}");
+    assert!(s.footprint().0 <= BLOCK);
+    assert_eq!(client_view(&[first, second])[0].0, "stopped");
 }
 
 #[test]
-fn a_cancelled_job_brought_back_by_a_load_continues_with_a_gap() {
+fn a_cancelled_job_brought_back_by_a_load_continues_as_on_the_client() {
     let t = TestHost::new();
     publish(&t);
     let token = link(&t);
-    upload(&t, &token, &session("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb1", 0, 1000.0, 0.0, 60.0, End::Cancel), 200);
-    let mut s = Scorer::new(&user_id(&t), Game::Ats);
+    let first = session("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb1", 0, 1000.0, 0.0, 60.0, End::Cancel);
+    upload(&t, &token, &first, 200);
+    let mut s = t.scorer(&user_id(&t), Game::Ats);
     while block_on(s.process(&t)).unwrap().more {}
-    // A cancelled job stays with the player's tracker: no record here, and
-    // only its last point in memory.
+    // A cancelled job stays with the player's tracker: no record here.
     assert!(t.q("SELECT job_id FROM jobs").is_empty());
-    assert_eq!(snapshot_jobs(&t, &mut s), vec![("cancelled".to_string(), 1, true)]);
+    assert!(s.footprint().0 <= BLOCK);
 
-    // A save from before the cancel: the job comes back and is delivered,
-    // with a gap where its earlier part was.
-    upload(&t, &token, &session("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb2", 600, 1010.0, 450.0, 30.0, End::Deliver), 200);
+    // A save from before the cancel: the job comes back from that point and
+    // is delivered, exactly as the client sees it.
+    let second = session("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb2", 600, 1010.0, 450.0, 30.0, End::Deliver);
+    upload(&t, &token, &second, 200);
     while block_on(s.process(&t)).unwrap().more {}
-    let (id, on_disk) = stored_points(&t);
+    let (id, _) = stored_points(&t);
     assert_eq!(t.q("SELECT job_id FROM jobs").len(), 1);
-    assert!((600..700).contains(&on_disk), "the last point before the cancel and the points after the load: {on_disk}");
     let detail = t.call(t.admin("GET", &format!("/api/v1/admin/jobs/{id}"))).body_json();
     assert_eq!(detail["state"], "delivered", "{}", detail["state"]);
-    let reasons: Vec<&str> = detail["reasons"].as_array().unwrap().iter().filter_map(|r| r["code"].as_str()).collect();
-    assert!(reasons.contains(&"gap"), "{reasons:?}");
-    assert_eq!(detail["outcome"], "pending_review");
+    let timeline = detail["timeline"].to_string();
+    assert!(timeline.contains("cancellation_reverted"), "{timeline}");
+    let client = client_view(&[first, second]);
+    assert_eq!(client.len(), 1);
+    assert_eq!(client[0].0, "delivered");
+    let server_km = detail["distances"]["counted_game_km"].as_f64().unwrap();
+    assert!((server_km - pt_server::util::round2(client[0].1)).abs() < 1e-9, "server {server_km} vs client {}", client[0].1);
 }

@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::config::{Config, ReviewAction, ScaleClass};
 use crate::job::JobInfo;
+use crate::store::{InMemory, Resolve};
 use crate::timeline::{Job, Point, StartKind};
 use crate::units::{exceeds, km_to_mi};
 
@@ -226,7 +227,7 @@ pub const TIME_WARP_OVER: f64 = 1.15;
 const TIME_WARP_MAX_STEP_S: f64 = 5.0;
 
 /// The fastest warped window and the game seconds gained in all of them.
-fn time_warp(kept: &[Point]) -> Option<(f64, f64)> {
+fn time_warp(kept: impl Iterator<Item = Point>) -> Option<(f64, f64)> {
     let (mut sim, mut wall, mut max, mut gained) = (0.0, 0.0, 0.0f64, 0.0);
     for (a, b) in pairs(kept) {
         let ds = b.sim_us.saturating_sub(a.sim_us) as f64 / 1e6;
@@ -249,11 +250,15 @@ fn time_warp(kept: &[Point]) -> Option<(f64, f64)> {
 }
 
 /// Neighbouring kept points of the same run: the only pairs that accumulate.
-fn pairs(kept: &[Point]) -> impl Iterator<Item = (&Point, &Point)> {
-    kept.windows(2).filter(|w| w[0].run == w[1].run && w[0].truck == w[1].truck).map(|w| (&w[0], &w[1]))
+fn pairs(kept: impl Iterator<Item = Point>) -> impl Iterator<Item = (Point, Point)> {
+    let mut prev: Option<Point> = None;
+    kept.filter_map(move |b| {
+        let a = prev.replace(b.clone());
+        a.filter(|a| a.run == b.run && a.truck == b.truck).map(|a| (a, b))
+    })
 }
 
-fn distances(job: &Job, cfg: &Config) -> Distances {
+fn distances<P, R: Resolve<P> + ?Sized>(job: &Job<P>, pts: &R, cfg: &Config) -> Distances {
     let wot = job.info.is_world_of_trucks();
     let vanilla = cfg.map.scale.vanilla(job.game);
     let eps = cfg.rules.distance.odometer_epsilon_km;
@@ -276,7 +281,7 @@ fn distances(job: &Job, cfg: &Config) -> Distances {
             d.tracked_uncounted_game_km += km;
         }
     };
-    for (a, b) in pairs(&job.kept) {
+    for (a, b) in pairs(pts.iter(&job.kept)) {
         let (Some(x), Some(y)) = (a.odometer_km, b.odometer_km) else { continue };
         let km = y - x;
         if km < -eps {
@@ -299,7 +304,7 @@ fn distances(job: &Job, cfg: &Config) -> Distances {
         }
         add(&mut d, km.max(0.0), counted, b.local_scale);
     }
-    for g in job.active_gaps() {
+    for g in job.active_gaps_in(pts) {
         if let Some(km) = g.game_km.filter(|k| *k > 0.0) {
             add(&mut d, km, g.counted, g.local_scale);
         }
@@ -309,7 +314,7 @@ fn distances(job: &Job, cfg: &Config) -> Distances {
     d
 }
 
-fn speed(job: &Job, cfg: &Config) -> SpeedStats {
+fn speed<P, R: Resolve<P> + ?Sized>(job: &Job<P>, pts: &R, cfg: &Config) -> SpeedStats {
     let (penalty_mph, invalid_mph) = cfg.rules.speed.limits_for(job.game, job.info.fingerprint.route.job_type);
     let prec = cfg.rules.speed.compare_precision_mph;
     let window = cfg.rules.speed.sustained_window_s;
@@ -318,14 +323,14 @@ fn speed(job: &Job, cfg: &Config) -> SpeedStats {
     // simulation time, so pausing neither adds time nor splits an episode.
     let mut ep_pen: Option<u64> = None;
     let mut ep_inv: Option<u64> = None;
-    let mut prev: Option<&Point> = None;
-    for p in &job.kept {
+    let mut prev: Option<Point> = None;
+    for p in pts.iter(&job.kept) {
         s.peak_mph = s.peak_mph.max(p.mph());
-        if prev.is_some_and(|q| q.run != p.run) || p.after_teleport {
+        if prev.as_ref().is_some_and(|q| q.run != p.run) || p.after_teleport {
             ep_pen = None;
             ep_inv = None;
         }
-        if let Some(q) = prev.filter(|q| q.run == p.run && !p.after_teleport) {
+        if let Some(q) = prev.as_ref().filter(|q| q.run == p.run && !p.after_teleport) {
             let dt = p.sim_us.saturating_sub(q.sim_us) as f64 / 1e6;
             if exceeds(q.mph(), penalty_mph, prec) && exceeds(p.mph(), penalty_mph, prec) {
                 s.over_penalty_s += dt;
@@ -352,77 +357,108 @@ fn speed(job: &Job, cfg: &Config) -> SpeedStats {
     s
 }
 
-/// Refuel episodes and rule 4 per run.
-fn fuel(job: &Job, cfg: &Config, review: &mut Vec<ReviewReason>) -> Vec<Refuel> {
-    let r = &cfg.rules.refuel;
-    let f = &cfg.rules.fuel;
-    let mut refuels = Vec::new();
-    let mut runs: Vec<&[Point]> = Vec::new();
-    let mut start = 0;
-    for i in 1..=job.kept.len() {
-        if i == job.kept.len() || job.kept[i].run != job.kept[i - 1].run || job.kept[i].truck != job.kept[i - 1].truck {
-            runs.push(&job.kept[start..i]);
-            start = i;
+/// What the fuel rules read of a point. One run at a time is held in memory,
+/// so this keeps it small.
+struct FuelPoint {
+    run: u32,
+    wall_ms: i64,
+    sim_us: u64,
+    fuel_l: Option<f64>,
+    mph: f64,
+    after_teleport: bool,
+}
+
+impl FuelPoint {
+    fn of(p: &Point) -> FuelPoint {
+        FuelPoint {
+            run: p.run,
+            wall_ms: p.wall_ms,
+            sim_us: p.sim_us,
+            fuel_l: p.fuel_l,
+            mph: p.mph(),
+            after_teleport: p.after_teleport,
         }
     }
-    for run in runs {
-        // Fuel rises while stationary, in steps (every 0.3 s of simulation in
-        // ATS 1.61), so zero-change samples inside an episode are allowed.
-        let mut refuelled = 0.0;
-        let mut in_refuel = vec![false; run.len()];
-        let mut i = 1;
-        while i < run.len() {
-            let rising = |k: usize| match (run[k - 1].fuel_l, run[k].fuel_l) {
-                (Some(a), Some(b)) => b - a > 1e-6,
-                _ => false,
-            };
-            let still = |k: usize| run[k].mph() < r.stationary_below_mph;
-            if !(rising(i) && still(i)) {
-                i += 1;
-                continue;
-            }
-            let first = i;
-            let mut last = i;
-            let mut k = i + 1;
-            while k < run.len() && still(k) && run[k].sim_us.saturating_sub(run[last].sim_us) <= 2_000_000 {
-                if rising(k) {
-                    last = k;
-                }
-                k += 1;
-            }
-            let litres = run[last].fuel_l.unwrap_or(0.0) - run[first - 1].fuel_l.unwrap_or(0.0);
-            let dur = run[last].sim_us.saturating_sub(run[first - 1].sim_us) as f64 / 1e6;
-            let rate = if dur > 0.0 { litres / dur } else { f64::INFINITY };
-            if dur >= r.min_duration_s && rate >= r.min_rate_l_per_s && rate <= r.max_rate_l_per_s {
-                refuelled += litres;
-                refuels.push(Refuel { wall_ms: run[first].wall_ms, litres, duration_s: dur });
-                for flag in &mut in_refuel[first..=last] {
-                    *flag = true;
-                }
-            }
-            i = last + 1;
+}
+
+/// Refuel episodes and rule 4 per run.
+fn fuel<P, R: Resolve<P> + ?Sized>(job: &Job<P>, pts: &R, cfg: &Config, review: &mut Vec<ReviewReason>) -> Vec<Refuel> {
+    let mut refuels = Vec::new();
+    // A run ends where the run id or the truck changes.
+    let mut run: Vec<FuelPoint> = Vec::new();
+    let mut key: Option<(u32, u32)> = None;
+    for p in pts.iter(&job.kept) {
+        if key.is_some_and(|k| k != (p.run, p.truck)) {
+            fuel_run(&run, cfg, review, &mut refuels);
+            run.clear();
         }
-        // Fuel that changes across a teleport is ignored, like across a load:
-        // World of Trucks event portals (Brackenreach, owner 2026-10-15) fill
-        // the tank as they move the truck.
-        let mut teleported = 0.0;
-        for k in 1..run.len() {
-            if let (Some(a), Some(b)) = (run[k - 1].fuel_l, run[k].fuel_l) {
-                if run[k].after_teleport {
-                    teleported += b - a;
-                } else if !in_refuel[k] && b - a > f.mid_job_jump_tolerance_l {
-                    review.push(ReviewReason::FuelJump { wall_ms: run[k].wall_ms, litres: b - a });
-                }
-            }
-        }
-        if let (Some(a), Some(b)) = (run.first().and_then(|p| p.fuel_l), run.last().and_then(|p| p.fuel_l)) {
-            let used = a - b + refuelled + teleported;
-            if used < -f.negative_fuel_tolerance_l {
-                review.push(ReviewReason::NegativeFuel { run: run[0].run, used_l: used });
-            }
-        }
+        key = Some((p.run, p.truck));
+        run.push(FuelPoint::of(&p));
+    }
+    if !run.is_empty() {
+        fuel_run(&run, cfg, review, &mut refuels);
     }
     refuels
+}
+
+fn fuel_run(run: &[FuelPoint], cfg: &Config, review: &mut Vec<ReviewReason>, refuels: &mut Vec<Refuel>) {
+    let r = &cfg.rules.refuel;
+    let f = &cfg.rules.fuel;
+    // Fuel rises while stationary, in steps (every 0.3 s of simulation in
+    // ATS 1.61), so zero-change samples inside an episode are allowed.
+    let mut refuelled = 0.0;
+    let mut in_refuel = vec![false; run.len()];
+    let mut i = 1;
+    while i < run.len() {
+        let rising = |k: usize| match (run[k - 1].fuel_l, run[k].fuel_l) {
+            (Some(a), Some(b)) => b - a > 1e-6,
+            _ => false,
+        };
+        let still = |k: usize| run[k].mph < r.stationary_below_mph;
+        if !(rising(i) && still(i)) {
+            i += 1;
+            continue;
+        }
+        let first = i;
+        let mut last = i;
+        let mut k = i + 1;
+        while k < run.len() && still(k) && run[k].sim_us.saturating_sub(run[last].sim_us) <= 2_000_000 {
+            if rising(k) {
+                last = k;
+            }
+            k += 1;
+        }
+        let litres = run[last].fuel_l.unwrap_or(0.0) - run[first - 1].fuel_l.unwrap_or(0.0);
+        let dur = run[last].sim_us.saturating_sub(run[first - 1].sim_us) as f64 / 1e6;
+        let rate = if dur > 0.0 { litres / dur } else { f64::INFINITY };
+        if dur >= r.min_duration_s && rate >= r.min_rate_l_per_s && rate <= r.max_rate_l_per_s {
+            refuelled += litres;
+            refuels.push(Refuel { wall_ms: run[first].wall_ms, litres, duration_s: dur });
+            for flag in &mut in_refuel[first..=last] {
+                *flag = true;
+            }
+        }
+        i = last + 1;
+    }
+    // Fuel that changes across a teleport is ignored, like across a load:
+    // World of Trucks event portals (Brackenreach, owner 2026-10-15) fill
+    // the tank as they move the truck.
+    let mut teleported = 0.0;
+    for k in 1..run.len() {
+        if let (Some(a), Some(b)) = (run[k - 1].fuel_l, run[k].fuel_l) {
+            if run[k].after_teleport {
+                teleported += b - a;
+            } else if !in_refuel[k] && b - a > f.mid_job_jump_tolerance_l {
+                review.push(ReviewReason::FuelJump { wall_ms: run[k].wall_ms, litres: b - a });
+            }
+        }
+    }
+    if let (Some(a), Some(b)) = (run.first().and_then(|p| p.fuel_l), run.last().and_then(|p| p.fuel_l)) {
+        let used = a - b + refuelled + teleported;
+        if used < -f.negative_fuel_tolerance_l {
+            review.push(ReviewReason::NegativeFuel { run: run[0].run, used_l: used });
+        }
+    }
 }
 
 fn pick_bonus(info: &JobInfo, base: f64, ctx: &Context) -> Option<(Bonus, f64)> {
@@ -458,15 +494,22 @@ fn pick_bonus(info: &JobInfo, base: f64, ctx: &Context) -> Option<(Bonus, f64)> 
 /// Scores a job. Works on any state; only a delivered job gets an outcome
 /// other than `Incomplete`.
 pub fn evaluate(job: &Job, cfg: &Config, ctx: &Context) -> JobResult {
+    evaluate_in(job, &InMemory, cfg, ctx)
+}
+
+/// [`evaluate`] for a job whose points are held anywhere (`pts` reads them):
+/// a live timeline's [`crate::store::PointStore`]. It streams over the points
+/// a few times and never holds more than one run of them.
+pub fn evaluate_in<P, R: Resolve<P> + ?Sized>(job: &Job<P>, pts: &R, cfg: &Config, ctx: &Context) -> JobResult {
     let r = &cfg.rules;
     let mut review = Vec::new();
-    let mut d = distances(job, cfg);
-    let speed = speed(job, cfg);
-    let refuels = fuel(job, cfg, &mut review);
-    let truckersmp = job.kept.iter().any(|p| p.truckersmp);
+    let mut d = distances(job, pts, cfg);
+    let speed = speed(job, pts, cfg);
+    let refuels = fuel(job, pts, cfg, &mut review);
+    let truckersmp = pts.iter(&job.kept).any(|p| p.truckersmp);
     // TruckersMP also reports a multiplayer time offset (2026-09-28 capture), so a
     // non-zero offset means Convoy only when TruckersMP is not loaded.
-    let convoy = !truckersmp && job.kept.iter().any(|p| p.mp_time_offset != 0);
+    let convoy = !truckersmp && pts.iter(&job.kept).any(|p| p.mp_time_offset != 0);
 
     // Distance: the game's figure, cross-checked, minus uncounted legs, to 1:1.
     d.delivered_game_km = job.delivered.as_ref().and_then(|x| x.distance_km);
@@ -513,7 +556,8 @@ pub fn evaluate(job: &Job, cfg: &Config, ctx: &Context) -> JobResult {
     // Review reasons from the timeline and rule 3.
     let policy = &cfg.review_policy;
     let gaps = job
-        .active_gaps()
+        .active_gaps_in(pts)
+        .into_iter()
         .filter(|g| g.kind == crate::timeline::GapKind::Load)
         .filter(|g| {
             let mi = km_to_mi(g.game_km.unwrap_or(f64::INFINITY).abs());
@@ -563,7 +607,7 @@ pub fn evaluate(job: &Job, cfg: &Config, ctx: &Context) -> JobResult {
         }
     }
     if policy.trace_checks == ReviewAction::Review {
-        if let Some((max_factor, gained_s)) = time_warp(&job.kept) {
+        if let Some((max_factor, gained_s)) = time_warp(pts.iter(&job.kept)) {
             review.push(ReviewReason::TimeWarp { max_factor, gained_s });
         }
     }
