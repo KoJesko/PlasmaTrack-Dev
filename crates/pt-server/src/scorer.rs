@@ -5,6 +5,7 @@
 
 use std::collections::BTreeMap;
 
+use pt_core::store::{PointStore, TrackId};
 use pt_core::timeline::{Job, JobState, Notice, Profiles};
 use pt_core::trace::{parse_frame, Body};
 use pt_core::Game;
@@ -23,8 +24,9 @@ pub const SNAPSHOT_EVERY_MS: i64 = 10 * 60_000;
 /// Part of the snapshot key: a snapshot of another format is not loaded, so
 /// every scorer rebuilds once from the raw data. 2 (2026-10-15): job memos
 /// know when a job was stored, and finished jobs wait in `unstored`. 3
-/// (2026-10-16): road trips (`car_job`) are tracked, so past ones appear.
-pub const SNAPSHOT_FORMAT: u32 = 3;
+/// (2026-10-16): road trips (`car_job`) are tracked, so past ones appear. 4
+/// (2026-10-20): a job's points are tracks in the timelines' point store.
+pub const SNAPSHOT_FORMAT: u32 = 4;
 /// At most this many chunks per pass. A catch-up after hours offline (or a
 /// capture-mode session: three times the frames, in small live chunks) is
 /// worked through in several passes, so one never runs out of memory or
@@ -103,19 +105,46 @@ fn snapshot_key(user_id: &str, game: Game) -> String {
     format!("snap/{user_id}/{}.json.gz", game.as_str())
 }
 
-fn fingerprint(j: &Job) -> String {
-    format!("{}|{}", shape(j), j.kept.len())
+/// `counts`: kept points, and reverted points over all branches
+/// ([`Job::point_counts`] for a live job, [`vec_counts`] for one in memory).
+fn fingerprint<P>(j: &Job<P>, counts: (usize, usize)) -> String {
+    format!("{}|{}", shape(j, counts), counts.0)
 }
 
 /// Everything in the fingerprint but the kept points, which grow with every
 /// upload while the job is driven.
-fn shape(j: &Job) -> String {
-    let reverted: usize = j.reverted.iter().map(|b| b.points.len()).sum();
+fn shape<P>(j: &Job<P>, (_, reverted): (usize, usize)) -> String {
     format!("{:?}|{}|{}|{}|{}|{}", j.state, j.events.len(), reverted, j.gaps.len(), j.delivered.is_some(), j.info.cargo_loaded)
 }
 
-fn memo_key(j: &Job) -> String {
+fn vec_counts(j: &Job) -> (usize, usize) {
+    (j.kept.len(), j.reverted.iter().map(|b| b.points.len()).sum())
+}
+
+/// The `sess` index of every kept and reverted point of a job in memory.
+fn vec_sessions(j: &Job) -> Vec<u32> {
+    j.kept.iter().chain(j.reverted.iter().flat_map(|b| b.points.iter())).map(|p| p.sess).collect()
+}
+
+fn memo_key<P>(j: &Job<P>) -> String {
     format!("{}/{}", j.profile, j.id)
+}
+
+/// What a job is stored with besides itself. `point_sess`: the `sess` index
+/// of its kept and reverted points.
+fn job_facts<P>(snap: &Snapshot, j: &Job<P>, point_sess: Vec<u32>) -> Facts {
+    let mut from_points = point_sess.clone();
+    from_points.sort_unstable();
+    from_points.dedup();
+    let sessions: Vec<String> =
+        from_points.iter().filter_map(|i| snap.profiles.session_id(&j.profile, *i).map(str::to_string)).collect();
+    let mut idx = point_sess;
+    idx.extend(j.gaps.iter().map(|g| g.to_sess));
+    idx.sort_unstable();
+    idx.dedup();
+    let sess_ids = idx.into_iter().filter_map(|i| snap.profiles.session_id(&j.profile, i).map(|s| (i, s.to_string()))).collect();
+    let truckersmp = sessions.iter().rev().find_map(|s| snap.truckersmp.get(s).copied());
+    Facts { delivered_at: snap.jobs.get(&memo_key(j)).and_then(|m| m.delivered_at), sessions, sess_ids, truckersmp }
 }
 
 impl Scorer {
@@ -265,20 +294,10 @@ impl Scorer {
         let snap = self.snap.as_mut().expect("loaded");
         let mut finished: Vec<(Job, Facts)> = std::mem::take(&mut snap.unstored);
         let mut changed: Vec<String> = Vec::new();
-        let facts = |snap: &Snapshot, j: &Job| -> Facts {
-            let sessions = snap.profiles.sessions_of(j);
-            let mut idx: Vec<u32> = j.kept.iter().chain(j.reverted.iter().flat_map(|b| b.points.iter())).map(|p| p.sess).collect();
-            idx.extend(j.gaps.iter().map(|g| g.to_sess));
-            idx.sort_unstable();
-            idx.dedup();
-            let sess_ids =
-                idx.into_iter().filter_map(|i| snap.profiles.session_id(&j.profile, i).map(|s| (i, s.to_string()))).collect();
-            let truckersmp = sessions.iter().rev().find_map(|s| snap.truckersmp.get(s).copied());
-            Facts { delivered_at: snap.jobs.get(&memo_key(j)).and_then(|m| m.delivered_at), sessions, sess_ids, truckersmp }
-        };
+        let facts = |snap: &Snapshot, j: &Job| job_facts(snap, j, vec_sessions(j));
         for j in evicted {
             let key = memo_key(&j);
-            let stored = snap.jobs.get(&key).is_some_and(|m| m.fingerprint == fingerprint(&j));
+            let stored = snap.jobs.get(&key).is_some_and(|m| m.fingerprint == fingerprint(&j, vec_counts(&j)));
             snap.jobs.remove(&key);
             // Offloaded and unchanged since it was stored: the server's copy is final.
             if j.offloaded && stored {
@@ -321,14 +340,16 @@ impl Scorer {
         // Behind on the raw data: the jobs still in the timelines are stored
         // once a pass reaches the end of it, but delivered ones at once, so a
         // rebuild does not hold them all in memory.
-        let finished_state = |j: &Job| matches!(j.state, JobState::Delivered | JobState::Stopped);
+        let finished_state = |j: &Job<TrackId>| matches!(j.state, JobState::Delivered | JobState::Stopped);
+        let points = snap.profiles.store();
         for j in snap.profiles.jobs().filter(|j| !report.more || finished_state(j)) {
             let m = snap.jobs.get(&memo_key(j)).cloned().unwrap_or_default();
-            if m.fingerprint == fingerprint(j) {
+            let counts = j.point_counts(points);
+            if m.fingerprint == fingerprint(j, counts) {
                 continue;
             }
             // Only the points grew: a job being driven waits a little.
-            let growing = m.shape == shape(j) && j.delivered.is_none();
+            let growing = m.shape == shape(j, counts) && j.delivered.is_none();
             if growing && now - m.stored_ms < LIVE_STORE_EVERY_MS {
                 continue;
             }
@@ -339,15 +360,17 @@ impl Scorer {
         // (the owner's ETS2 rebuild, 2026-10-16). The memo moves on only once
         // a job is stored, so a failed store is tried again on the next pass.
         for key in changed {
-            let Some(job) = snap.profiles.jobs().find(|j| memo_key(j) == key) else { continue };
-            let (fp, sh) = (fingerprint(job), shape(job));
+            let Some(live) = snap.profiles.jobs().find(|j| memo_key(j) == key) else { continue };
+            let counts = live.point_counts(snap.profiles.store());
+            let (fp, sh) = (fingerprint(live, counts), shape(live, counts));
+            let job = snap.profiles.materialize(live);
             let stored = if job.offloaded {
-                let full = Self::hydrate(h, &self.user_id, self.game, job).await?;
+                let full = Self::hydrate(h, &self.user_id, self.game, &job).await?;
                 let f = facts(snap, &full);
                 jobs::persist(h, &scoring.cfg, scoring.version_id.as_deref(), &user, &full, &f, trigger, None).await?
             } else {
-                let f = facts(snap, job);
-                jobs::persist(h, &scoring.cfg, scoring.version_id.as_deref(), &user, job, &f, trigger, None).await?
+                let f = facts(snap, &job);
+                jobs::persist(h, &scoring.cfg, scoring.version_id.as_deref(), &user, &job, &f, trigger, None).await?
             };
             if stored.is_some() {
                 report.jobs_stored += 1;
@@ -360,22 +383,24 @@ impl Scorer {
         }
         // Finished jobs leave memory once stored (owner, 2026-10-16): only
         // their last point stays, for a gap if a load brings one back.
+        let points = snap.profiles.store();
         let done: Vec<(String, u32, bool)> = snap
             .profiles
             .jobs()
             .filter(|j| matches!(j.state, JobState::Delivered | JobState::Stopped | JobState::Cancelled))
-            .filter(|j| !j.offloaded || j.kept.len() > 1 || !j.reverted.is_empty())
-            .filter(|j| snap.jobs.get(&memo_key(j)).is_some_and(|m| m.fingerprint == fingerprint(j)))
+            .filter(|j| !j.offloaded || points.len(j.kept) > 1 || !j.reverted.is_empty())
+            .filter(|j| snap.jobs.get(&memo_key(j)).is_some_and(|m| m.fingerprint == fingerprint(j, j.point_counts(points))))
             .map(|j| {
                 let invalid = j.state != JobState::Cancelled
-                    && (j.offloaded_invalid || pt_core::rules::evaluate(j, &scoring.cfg, &Default::default()).speed.invalid);
+                    && (j.offloaded_invalid || snap.profiles.evaluate(j, &scoring.cfg, &Default::default()).speed.invalid);
                 (j.profile.clone(), j.id, invalid)
             })
             .collect();
         for (profile, id, invalid) in done {
             snap.profiles.offload(&profile, id, invalid);
             let Some(j) = snap.profiles.jobs().find(|j| j.profile == profile && j.id == id) else { continue };
-            let (key, fp, sh) = (memo_key(j), fingerprint(j), shape(j));
+            let counts = j.point_counts(snap.profiles.store());
+            let (key, fp, sh) = (memo_key(j), fingerprint(j, counts), shape(j, counts));
             let m = snap.jobs.entry(key).or_default();
             m.fingerprint = fp;
             m.shape = sh;
@@ -388,7 +413,7 @@ impl Scorer {
         if trigger == Trigger::Upload {
             for (profile, id, wall_ms) in penalties {
                 if let Some(j) = snap.profiles.jobs().find(|j| j.profile == profile && j.id == id) {
-                    let r = pt_core::rules::evaluate(j, &scoring.cfg, &Default::default());
+                    let r = snap.profiles.evaluate(j, &scoring.cfg, &Default::default());
                     let job_id = store::one(
                         h,
                         "SELECT job_id FROM jobs WHERE user_id = ?1 AND game = ?2 AND profile_key = ?3 AND local_id = ?4",

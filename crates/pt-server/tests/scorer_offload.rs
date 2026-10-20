@@ -72,23 +72,33 @@ fn session(sess: &str, wall_s: i64, odo: f64, x: f64, secs: f64, end: End) -> Ve
     out
 }
 
-/// Every job in the scorer's saved snapshot: (state, points in memory, offloaded).
+/// Every job in the scorer's saved snapshot: (state, kept points in memory,
+/// offloaded). Also checks that the point store holds nothing but the jobs'
+/// own tracks.
 fn snapshot_jobs(t: &TestHost, s: &mut Scorer) -> Vec<(String, usize, bool)> {
     block_on(s.save(t)).unwrap();
     let key = t.blobs.borrow().keys().find(|k| k.starts_with("snap/")).cloned().unwrap();
     let snap: Value = pt_server::util::gunzip_json(&t.blobs.borrow()[&key]).unwrap();
+    let tracks = snap["profiles"]["store"]["tracks"].as_object().expect("point store in the snapshot").clone();
+    let len = |id: &Value| tracks.get(&id.to_string()).and_then(Value::as_array).map_or(0, Vec::len);
     let mut out = Vec::new();
-    fn walk(v: &Value, out: &mut Vec<(String, usize, bool)>) {
+    let mut held = 0;
+    let mut walk_stack = vec![&snap["profiles"]["timelines"]];
+    while let Some(v) = walk_stack.pop() {
         match v {
             Value::Object(o) if o.contains_key("kept") && o.contains_key("events") => {
-                out.push((o["state"].as_str().unwrap_or("").to_string(), o["kept"].as_array().map_or(0, Vec::len), o["offloaded"] == true));
+                let reverted: usize = o["reverted"].as_array().unwrap().iter().map(|b| len(&b["points"])).sum();
+                held += len(&o["kept"]) + reverted;
+                out.push((o["state"].as_str().unwrap_or("").to_string(), len(&o["kept"]), o["offloaded"] == true));
             }
-            Value::Object(o) => o.values().for_each(|x| walk(x, out)),
-            Value::Array(a) => a.iter().for_each(|x| walk(x, out)),
+            Value::Object(o) => walk_stack.extend(o.values()),
+            Value::Array(a) => walk_stack.extend(a.iter()),
             _ => {}
         }
     }
-    walk(&snap, &mut out);
+    let total: usize = tracks.values().map(|v| v.as_array().map_or(0, Vec::len)).sum();
+    assert_eq!(total, held, "the point store holds points no job refers to");
+    out.reverse();
     out
 }
 

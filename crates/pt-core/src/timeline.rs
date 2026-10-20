@@ -19,6 +19,8 @@ use serde::{Deserialize, Serialize};
 use crate::config::Config;
 use crate::game::Game;
 use crate::job::{Delivered, Fingerprint, JobInfo, JobType};
+use crate::rules::{evaluate_in, Context, JobResult};
+use crate::store::{PointStore, Resolve, TrackId, VecStore};
 use crate::trace::{attr, Body, Frame, Sample};
 use crate::units::mps_to_mph;
 
@@ -83,12 +85,13 @@ pub enum StartKind {
 }
 
 /// A stretch of a job that a save load undid. Never scored unless a later
-/// load returns to it ("revert, then restore").
+/// load returns to it ("revert, then restore"). `P` holds the points: a
+/// `Vec<Point>` for a finished job, a [`TrackId`] on a live timeline.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct Branch {
+pub struct Branch<P = Vec<Point>> {
     /// Seq of the kept point this branch forked from.
     pub fork_seq: u64,
-    pub points: Vec<Point>,
+    pub points: P,
     pub reverted_at_wall_ms: i64,
 }
 
@@ -152,8 +155,10 @@ pub enum JobEvent {
     DuplicateDelivery { wall_ms: i64 },
 }
 
+/// A job. `P` holds its points: `Vec<Point>` (the default) for a finished or
+/// stored job, a [`TrackId`] into the timeline's [`PointStore`] while live.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct Job {
+pub struct Job<P = Vec<Point>> {
     pub id: u32,
     pub game: Game,
     pub profile: String,
@@ -163,8 +168,8 @@ pub struct Job {
     pub first_info: JobInfo,
     pub state: JobState,
     pub start: StartKind,
-    pub kept: Vec<Point>,
-    pub reverted: Vec<Branch>,
+    pub kept: P,
+    pub reverted: Vec<Branch<P>>,
     pub gaps: Vec<Gap>,
     pub events: Vec<JobEvent>,
     pub cargo_switched: bool,
@@ -188,6 +193,72 @@ impl Job {
     /// a gap reverts it together with everything after it.
     pub fn active_gaps(&self) -> impl Iterator<Item = &Gap> {
         self.gaps.iter().filter(|g| self.kept.iter().any(|p| p.sess == g.to_sess && p.seq == g.to_seq))
+    }
+}
+
+impl<P> Job<P> {
+    /// [`Job::active_gaps`] for points held anywhere, in one pass over them.
+    pub fn active_gaps_in<R: Resolve<P> + ?Sized>(&self, r: &R) -> Vec<&Gap> {
+        if self.gaps.is_empty() {
+            return Vec::new();
+        }
+        let mut found = vec![false; self.gaps.len()];
+        for p in r.iter(&self.kept) {
+            for (k, g) in self.gaps.iter().enumerate() {
+                if p.sess == g.to_sess && p.seq == g.to_seq {
+                    found[k] = true;
+                }
+            }
+        }
+        self.gaps.iter().zip(found).filter(|(_, f)| *f).map(|(g, _)| g).collect()
+    }
+
+    /// The same job with its points held some other way.
+    fn with_points<Q>(&self, kept: Q, reverted: Vec<Branch<Q>>) -> Job<Q> {
+        Job {
+            id: self.id,
+            game: self.game,
+            profile: self.profile.clone(),
+            info: self.info.clone(),
+            first_info: self.first_info.clone(),
+            state: self.state,
+            start: self.start,
+            kept,
+            reverted,
+            gaps: self.gaps.clone(),
+            events: self.events.clone(),
+            cargo_switched: self.cargo_switched,
+            delivered: self.delivered.clone(),
+            delivered_wall_ms: self.delivered_wall_ms,
+            reverted_deliveries: self.reverted_deliveries.clone(),
+            offloaded: self.offloaded,
+            offloaded_invalid: self.offloaded_invalid,
+        }
+    }
+}
+
+impl Job<TrackId> {
+    /// The job with all its points in memory.
+    pub fn materialize<S: PointStore + ?Sized>(&self, store: &S) -> Job {
+        let reverted = self
+            .reverted
+            .iter()
+            .map(|b| Branch { fork_seq: b.fork_seq, points: store.to_vec(b.points), reverted_at_wall_ms: b.reverted_at_wall_ms })
+            .collect();
+        self.with_points(store.to_vec(self.kept), reverted)
+    }
+
+    /// Kept points, and reverted points over all branches.
+    pub fn point_counts<S: PointStore + ?Sized>(&self, store: &S) -> (usize, usize) {
+        (store.len(self.kept), self.reverted.iter().map(|b| store.len(b.points)).sum())
+    }
+
+    /// Frees the job's tracks in `store`.
+    fn release<S: PointStore + ?Sized>(&self, store: &mut S) {
+        store.remove(self.kept);
+        for b in &self.reverted {
+            store.remove(b.points);
+        }
     }
 }
 
@@ -238,7 +309,7 @@ pub struct Timeline {
     cfg: Config,
     profile: String,
     game: Option<Game>,
-    jobs: Vec<Job>,
+    jobs: Vec<Job<TrackId>>,
     current: Option<usize>,
     sess_ids: Vec<String>,
     sess: Option<u32>,
@@ -264,7 +335,7 @@ pub struct Timeline {
     /// Next job id. Ids stay unique when old jobs are evicted.
     next_id: u32,
     /// Jobs that left the live timeline (`reopen_window_wall_h`), not yet taken.
-    evicted: Vec<Job>,
+    evicted: Vec<Job<TrackId>>,
 }
 
 impl Timeline {
@@ -296,12 +367,12 @@ impl Timeline {
         }
     }
 
-    pub fn jobs(&self) -> &[Job] {
+    pub fn jobs(&self) -> &[Job<TrackId>] {
         &self.jobs
     }
 
     /// Every job, evicted ones included, in creation order.
-    pub fn into_jobs(self) -> Vec<Job> {
+    fn into_jobs(self) -> Vec<Job<TrackId>> {
         let mut jobs = self.evicted;
         jobs.extend(self.jobs);
         jobs.sort_by_key(|j| j.id);
@@ -309,7 +380,7 @@ impl Timeline {
     }
 
     /// Jobs evicted since the last call (PLAN §7a). They never change again.
-    pub fn take_evicted(&mut self) -> Vec<Job> {
+    fn take_evicted(&mut self) -> Vec<Job<TrackId>> {
         std::mem::take(&mut self.evicted)
     }
 
@@ -356,7 +427,7 @@ impl Timeline {
         self.bracket.session_change = true;
     }
 
-    pub fn push(&mut self, f: &Frame) {
+    pub fn push<S: PointStore + ?Sized>(&mut self, f: &Frame, store: &mut S) {
         let sess = match self.sess_ids.iter().position(|s| *s == f.sess) {
             Some(i) => i as u32,
             None => {
@@ -434,7 +505,7 @@ impl Timeline {
                 "job.delivered" => self.deliver(Delivered::from_attrs(attrs), f.wall_ms),
                 "car_job.delivered" => {
                     if self.current.is_none() {
-                        self.resume_lost_road_trip(f.wall_ms);
+                        self.resume_lost_road_trip(f.wall_ms, store);
                     }
                     self.deliver(Delivered::from_attrs(attrs), f.wall_ms)
                 }
@@ -455,7 +526,7 @@ impl Timeline {
                 self.truckersmp_sdk = Some(*connected);
                 self.truckersmp = *connected;
             }
-            Body::Sample(s) => self.on_sample(sess, f, s),
+            Body::Sample(s) => self.on_sample(sess, f, s, store),
             _ => {}
         }
     }
@@ -488,7 +559,7 @@ impl Timeline {
         self.next_run
     }
 
-    fn on_sample(&mut self, sess: u32, f: &Frame, s: &Sample) {
+    fn on_sample<S: PointStore + ?Sized>(&mut self, sess: u32, f: &Frame, s: &Sample, store: &mut S) {
         let bracket = std::mem::take(&mut self.bracket);
         let mut p = self.make_point(sess, f, s);
         let prev = self.last.clone();
@@ -525,21 +596,21 @@ impl Timeline {
 
         if is_load {
             p.run = self.new_run();
-            self.on_load(&mut p, session, bracket.job_after_no_job, wall);
+            self.on_load(&mut p, session, bracket.job_after_no_job, wall, store);
         } else {
             let teleport = jump_m >= teleport_min;
             if session || bracket.truck_changed {
                 p.run = self.new_run();
             }
             p.after_teleport = teleport;
-            self.on_continuous(&p, prev.as_ref(), &bracket, session, teleport, jump_m, wall);
+            self.on_continuous(&p, prev.as_ref(), &bracket, session, teleport, jump_m, wall, store);
         }
 
         // Record the point on the current job.
         if let Some(i) = self.current {
             if self.jobs[i].state == JobState::Tracking {
                 p.cargo_loaded = self.jobs[i].info.cargo_loaded;
-                self.jobs[i].kept.push(p.clone());
+                store.push(self.jobs[i].kept, p.clone());
                 self.watch_overspeed(i, &p);
             }
         }
@@ -576,7 +647,7 @@ impl Timeline {
         self.jobs.iter().rposition(|j| j.info.fingerprint.route == fp.route)
     }
 
-    fn start_job(&mut self, info: JobInfo, start: StartKind, wall: i64) -> usize {
+    fn start_job<S: PointStore + ?Sized>(&mut self, info: JobInfo, start: StartKind, wall: i64, store: &mut S) -> usize {
         let id = self.next_id;
         self.next_id += 1;
         self.jobs.push(Job {
@@ -587,7 +658,7 @@ impl Timeline {
             info,
             state: JobState::Tracking,
             start,
-            kept: Vec::new(),
+            kept: store.create(),
             reverted: Vec::new(),
             gaps: Vec::new(),
             events: vec![JobEvent::Started { start, wall_ms: wall }],
@@ -645,7 +716,7 @@ impl Timeline {
     /// delivery belongs to the road trip suspended at that load, if nothing
     /// has replaced it: it resumes, and the stretch it was not tracked becomes
     /// a gap from its last point, so the job goes to review instead of being lost.
-    fn resume_lost_road_trip(&mut self, wall: i64) {
+    fn resume_lost_road_trip<S: PointStore + ?Sized>(&mut self, wall: i64, store: &mut S) {
         let Some(k) = self.jobs.len().checked_sub(1) else { return };
         let job = &self.jobs[k];
         if job.state != JobState::Suspended || job.info.fingerprint.route.job_type != JobType::Car || self.job_cfg.is_some() {
@@ -653,11 +724,11 @@ impl Timeline {
         }
         let Some(mut p) = self.last.clone() else { return };
         p.cargo_loaded = job.info.cargo_loaded;
-        let since = job.kept.last().map(|q| q.wall_ms);
+        let since = store.last(job.kept).map(|q| q.wall_ms);
         self.jobs[k].state = JobState::Tracking;
         self.jobs[k].events.push(JobEvent::Resumed { wall_ms: wall });
         self.current = Some(k);
-        self.rebase(k, &p, false, wall);
+        self.rebase(k, &p, false, wall, store);
         // The stretch always counts as a gap: after loads its distance can be
         // near zero and the simulation clock restarts, so time it by the PC clock.
         let job = &mut self.jobs[k];
@@ -666,7 +737,7 @@ impl Timeline {
                 g.duration_s = g.duration_s.max((p.wall_ms - since).max(0) as f64 / 1000.0);
             }
         }
-        job.kept.push(p);
+        store.push(job.kept, p);
     }
 
     /// Applies a config (cargo loaded, cargo switch) to a job about to track.
@@ -687,7 +758,7 @@ impl Timeline {
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn on_continuous(
+    fn on_continuous<S: PointStore + ?Sized>(
         &mut self,
         p: &Point,
         prev: Option<&Point>,
@@ -696,6 +767,7 @@ impl Timeline {
         teleport: bool,
         jump_m: f64,
         wall: i64,
+        store: &mut S,
     ) {
         let cfg = self.job_cfg.clone();
         if teleport {
@@ -717,7 +789,7 @@ impl Timeline {
             (Some(i), Some(info)) if self.jobs[i].info.fingerprint.route == info.fingerprint.route => {
                 if session && self.jobs[i].state == JobState::Tracking {
                     self.jobs[i].events.push(JobEvent::SessionContinue { wall_ms: wall });
-                    self.bridge(i, p, wall);
+                    self.bridge(i, p, wall, store);
                 }
                 if self.jobs[i].state == JobState::Tracking {
                     self.apply_config(i, &info, wall);
@@ -726,18 +798,18 @@ impl Timeline {
             (Some(_), Some(info)) => {
                 // A different job without a load or an end event.
                 self.suspend_current(wall);
-                self.begin(info, (session || prev.is_none()) && !b.job_after_no_job, wall);
+                self.begin(info, (session || prev.is_none()) && !b.job_after_no_job, wall, store);
             }
             (Some(_), None) => self.suspend_current(wall),
-            (None, Some(info)) => self.begin(info, (session || prev.is_none()) && !b.job_after_no_job, wall),
+            (None, Some(info)) => self.begin(info, (session || prev.is_none()) && !b.job_after_no_job, wall, store),
             (None, None) => {}
         }
     }
 
     /// Samples went missing but the truck plainly kept driving: count the distance.
-    fn bridge(&mut self, i: usize, p: &Point, wall: i64) {
+    fn bridge<S: PointStore + ?Sized>(&mut self, i: usize, p: &Point, wall: i64, store: &S) {
         let job = &mut self.jobs[i];
-        let Some(last) = job.kept.last() else { return };
+        let Some(last) = store.last(job.kept) else { return };
         if last.truck != p.truck {
             return;
         }
@@ -760,7 +832,7 @@ impl Timeline {
 
     /// A job config with no current job and no load: a known job returning, or
     /// a new one (tracked if accepted in continuous data, late start otherwise).
-    fn begin(&mut self, info: JobInfo, first_seen_after_session: bool, wall: i64) {
+    fn begin<S: PointStore + ?Sized>(&mut self, info: JobInfo, first_seen_after_session: bool, wall: i64, store: &mut S) {
         if let Some(k) = self.find_job(&info.fingerprint) {
             match self.jobs[k].state {
                 JobState::Suspended | JobState::Tracking => {
@@ -774,12 +846,12 @@ impl Timeline {
             }
         }
         let kind = if first_seen_after_session { StartKind::LateStart } else { StartKind::Tracked };
-        self.current = Some(self.start_job(info, kind, wall));
+        self.current = Some(self.start_job(info, kind, wall, store));
     }
 
     /// `accepted_here`: the job appeared after the loaded state had none, so it
     /// was accepted after the load and its start was seen.
-    fn on_load(&mut self, p: &mut Point, session: bool, accepted_here: bool, wall: i64) {
+    fn on_load<S: PointStore + ?Sized>(&mut self, p: &mut Point, session: bool, accepted_here: bool, wall: i64, store: &mut S) {
         let before = self.current;
         let Some(info) = self.job_cfg.clone() else {
             self.suspend_current(wall);
@@ -788,7 +860,7 @@ impl Timeline {
         let Some(k) = self.find_job(&info.fingerprint) else {
             self.suspend_current(wall);
             let kind = if accepted_here { StartKind::Tracked } else { StartKind::LateStart };
-            self.current = Some(self.start_job(info, kind, wall));
+            self.current = Some(self.start_job(info, kind, wall, store));
             return;
         };
         if before != Some(k) {
@@ -798,7 +870,7 @@ impl Timeline {
             JobState::Delivered => {
                 let job = &self.jobs[k];
                 let invalid = job.offloaded_invalid
-                    || (!job.offloaded && crate::rules::evaluate(job, &self.cfg, &Default::default()).speed.invalid);
+                    || (!job.offloaded && evaluate_in(job, store, &self.cfg, &Default::default()).speed.invalid);
                 if invalid {
                     let job = &mut self.jobs[k];
                     if let Some(d) = job.delivered.take() {
@@ -829,28 +901,32 @@ impl Timeline {
         self.apply_config(k, &info, wall);
         p.cargo_loaded = self.jobs[k].info.cargo_loaded;
         self.current = Some(k);
-        self.rebase(k, p, session, wall);
+        self.rebase(k, p, session, wall, store);
     }
 
     /// Places the loaded point `p` on job `k`'s kept timeline (PLAN §5 rows).
-    fn rebase(&mut self, k: usize, p: &Point, session: bool, wall: i64) {
+    fn rebase<S: PointStore + ?Sized>(&mut self, k: usize, p: &Point, session: bool, wall: i64, store: &mut S) {
         let _ = session;
-        if let Some(idx) = self.match_in(&self.jobs[k].kept, p) {
+        if let Some(idx) = self.match_in(self.jobs[k].kept, p, store) {
             let job = &mut self.jobs[k];
-            let tail: Vec<Point> = job.kept.drain(idx + 1..).collect();
-            let n = tail.len();
+            let tail = store.split_off(job.kept, idx + 1);
+            let n = store.len(tail);
+            let to_seq = store.get(job.kept, idx).expect("matched point").seq;
             if n > 0 {
-                job.reverted.push(Branch { fork_seq: job.kept[idx].seq, points: tail, reverted_at_wall_ms: wall });
+                job.reverted.push(Branch { fork_seq: to_seq, points: tail, reverted_at_wall_ms: wall });
+            } else {
+                store.remove(tail);
             }
-            job.events.push(JobEvent::LoadTruncate { to_seq: job.kept[idx].seq, reverted_points: n, wall_ms: wall });
+            job.events.push(JobEvent::LoadTruncate { to_seq, reverted_points: n, wall_ms: wall });
             self.watch[k] = OverspeedWatch { notified: self.watch[k].notified, ..Default::default() };
             return;
         }
         // Previously reverted material: restore it (closes "revert, then restore").
         let mut found = None;
         for (bi, br) in self.jobs[k].reverted.iter().enumerate().rev() {
-            if let Some(j) = self.match_in(&br.points, p) {
-                if self.jobs[k].kept.iter().any(|q| q.seq == br.fork_seq) {
+            if let Some(j) = self.match_in(br.points, p, store) {
+                let fork_seq = br.fork_seq;
+                if store.position(self.jobs[k].kept, &|q| q.seq == fork_seq).is_some() {
                     found = Some((bi, j));
                     break;
                 }
@@ -859,24 +935,29 @@ impl Timeline {
         if let Some((bi, j)) = found {
             let job = &mut self.jobs[k];
             let br = job.reverted.remove(bi);
-            let fork = job.kept.iter().position(|q| q.seq == br.fork_seq).expect("checked above");
-            let tail: Vec<Point> = job.kept.drain(fork + 1..).collect();
-            if !tail.is_empty() {
+            let fork = store.position(job.kept, &|q| q.seq == br.fork_seq).expect("checked above");
+            let tail = store.split_off(job.kept, fork + 1);
+            if !store.is_empty(tail) {
                 job.reverted.push(Branch { fork_seq: br.fork_seq, points: tail, reverted_at_wall_ms: wall });
+            } else {
+                store.remove(tail);
             }
-            let restored: Vec<Point> = br.points[..=j].to_vec();
-            let n = restored.len();
-            job.kept.extend(restored);
-            if j + 1 < br.points.len() {
-                let fork_seq = br.points[j].seq;
-                job.reverted.push(Branch { fork_seq, points: br.points[j + 1..].to_vec(), reverted_at_wall_ms: wall });
+            // br.points[..=j] go back on the kept timeline, the rest stays reverted.
+            let rest_fork_seq = store.get(br.points, j).expect("matched point").seq;
+            let rest = store.split_off(br.points, j + 1);
+            let n = j + 1;
+            store.append(job.kept, br.points);
+            if !store.is_empty(rest) {
+                job.reverted.push(Branch { fork_seq: rest_fork_seq, points: rest, reverted_at_wall_ms: wall });
+            } else {
+                store.remove(rest);
             }
             job.events.push(JobEvent::LoadRestore { from_fork_seq: br.fork_seq, restored_points: n, wall_ms: wall });
             return;
         }
         // Beyond anything seen: a gap from the last kept point.
         let job = &mut self.jobs[k];
-        if let Some(last) = job.kept.last() {
+        if let Some(last) = store.last(job.kept) {
             let game_km = match (last.odometer_km, p.odometer_km) {
                 (Some(a), Some(b)) if last.truck == p.truck => Some(b - a),
                 _ => None,
@@ -897,12 +978,12 @@ impl Timeline {
         }
     }
 
-    /// Index of the point in `pts` that `p` was loaded from, if any.
-    fn match_in(&self, pts: &[Point], p: &Point) -> Option<usize> {
+    /// Index of the point in track `pts` that `p` was loaded from, if any.
+    fn match_in<S: PointStore + ?Sized>(&self, pts: TrackId, p: &Point, store: &S) -> Option<usize> {
         let t = &self.cfg.timeline;
         let p_pos = p.pos?;
         let mut best: Option<(usize, f64)> = None;
-        for (i, q) in pts.iter().enumerate() {
+        for (i, q) in store.near(pts, p_pos, t.match_position_tolerance_world_m) {
             let Some(q_pos) = q.pos else { continue };
             let d = dist3(q_pos, p_pos);
             if d > t.match_position_tolerance_world_m {
@@ -965,19 +1046,33 @@ pub fn dist3(a: [f64; 3], b: [f64; 3]) -> f64 {
 
 /// Routes frames to one [`Timeline`] per profile (PLAN §6b: profiles are
 /// separate timelines). Frames before any profile notice go to "unknown".
+/// The jobs' points live in `S`, every profile's in the same store.
 #[derive(Serialize, Deserialize)]
-pub struct Profiles {
+pub struct Profiles<S = VecStore> {
     cfg: Config,
     active: String,
     timelines: Vec<(String, Timeline)>,
     /// Init and module messages of the current session, replayed to a profile
     /// timeline created mid-session so it knows the game and multiplayer state.
     session: Vec<Frame>,
+    store: S,
 }
 
 impl Profiles {
+    /// Points in memory ([`VecStore`]); [`Profiles::with_store`] for another store.
     pub fn new(cfg: Config) -> Profiles {
-        Profiles { cfg, active: "unknown".into(), timelines: Vec::new(), session: Vec::new() }
+        Profiles::with_store(cfg, VecStore::new())
+    }
+}
+
+impl<S: PointStore> Profiles<S> {
+    pub fn with_store(cfg: Config, store: S) -> Profiles<S> {
+        Profiles { cfg, active: "unknown".into(), timelines: Vec::new(), session: Vec::new(), store }
+    }
+
+    /// Where the jobs' points are.
+    pub fn store(&self) -> &S {
+        &self.store
     }
 
     fn timeline(&mut self, key: &str) -> &mut Timeline {
@@ -986,7 +1081,7 @@ impl Profiles {
         }
         let mut t = Timeline::new(self.cfg.clone(), key);
         for f in &self.session {
-            t.push(f);
+            t.push(f, &mut self.store);
         }
         self.timelines.push((key.to_string(), t));
         &mut self.timelines.last_mut().expect("just pushed").1
@@ -1009,30 +1104,36 @@ impl Profiles {
             self.session.push(f.clone());
             for (k, t) in self.timelines.iter_mut() {
                 if *k != active {
-                    t.push(f);
+                    t.push(f, &mut self.store);
                 }
             }
         }
-        self.timeline(&active).push(f);
+        self.timeline(&active);
+        let i = self.timelines.iter().position(|(k, _)| *k == active).expect("just made");
+        self.timelines[i].1.push(f, &mut self.store);
     }
 
-    /// Live jobs of every profile timeline (evicted ones excluded).
-    pub fn jobs(&self) -> impl Iterator<Item = &Job> {
+    /// Live jobs of every profile timeline (evicted ones excluded). Their
+    /// points are in [`Profiles::store`].
+    pub fn jobs(&self) -> impl Iterator<Item = &Job<TrackId>> {
         self.timelines.iter().flat_map(|(_, t)| t.jobs())
+    }
+
+    /// A live job with all its points in memory.
+    pub fn materialize(&self, job: &Job<TrackId>) -> Job {
+        job.materialize(&self.store)
+    }
+
+    /// Scores a live job straight from the store.
+    pub fn evaluate(&self, job: &Job<TrackId>, cfg: &Config, ctx: &Context) -> JobResult {
+        evaluate_in(job, &self.store, cfg, ctx)
     }
 
     /// Gives back the spare capacity of every job's point lists. Lists grow by
     /// doubling, which left a third of a large rebuild's memory unused
     /// (2026-10-16); the server calls this after each pass.
     pub fn shrink_to_fit(&mut self) {
-        for (_, t) in &mut self.timelines {
-            for job in &mut t.jobs {
-                job.kept.shrink_to_fit();
-                for b in &mut job.reverted {
-                    b.points.shrink_to_fit();
-                }
-            }
-        }
+        self.store.shrink_to_fit();
     }
 
     /// Drops a finished job's points from memory but its last one (the
@@ -1041,16 +1142,31 @@ impl Profiles {
     pub fn offload(&mut self, profile: &str, id: u32, speed_invalid: bool) {
         let Some((_, t)) = self.timelines.iter_mut().find(|(k, _)| k == profile) else { return };
         let Some(job) = t.jobs.iter_mut().find(|j| j.id == id) else { return };
-        let last = job.kept.pop();
-        job.kept = last.into_iter().collect();
-        job.reverted = Vec::new();
+        let n = self.store.len(job.kept);
+        if n > 1 {
+            let last = self.store.split_off(job.kept, n - 1);
+            self.store.remove(job.kept);
+            job.kept = last;
+        }
+        for b in std::mem::take(&mut job.reverted) {
+            self.store.remove(b.points);
+        }
         job.offloaded = true;
         job.offloaded_invalid = speed_invalid;
     }
 
-    /// Jobs evicted from any profile timeline since the last call.
+    /// Jobs evicted from any profile timeline since the last call, with their
+    /// points; the store forgets them.
     pub fn take_evicted(&mut self) -> Vec<Job> {
-        self.timelines.iter_mut().flat_map(|(_, t)| t.take_evicted()).collect()
+        let evicted: Vec<Job<TrackId>> = self.timelines.iter_mut().flat_map(|(_, t)| t.take_evicted()).collect();
+        evicted
+            .into_iter()
+            .map(|j| {
+                let full = j.materialize(&self.store);
+                j.release(&mut self.store);
+                full
+            })
+            .collect()
     }
 
     /// Notices of every profile timeline since the last call, each with its
@@ -1069,12 +1185,27 @@ impl Profiles {
 
     /// The plugin sessions a job's points (kept and reverted) came from, in
     /// first-seen order.
-    pub fn sessions_of(&self, job: &Job) -> Vec<String> {
+    pub fn sessions_of(&self, job: &Job<TrackId>) -> Vec<String> {
         let Some((_, t)) = self.timelines.iter().find(|(k, _)| *k == job.profile) else { return Vec::new() };
-        let mut idx: Vec<u32> = job.kept.iter().chain(job.reverted.iter().flat_map(|b| b.points.iter())).map(|p| p.sess).collect();
+        let mut idx: Vec<u32> = self.point_sessions(job);
         idx.sort_unstable();
         idx.dedup();
         idx.into_iter().filter_map(|i| t.sess_ids.get(i as usize).cloned()).collect()
+    }
+
+    /// The `sess` index of every kept and reverted point of a job, unsorted
+    /// and with repeats collapsed only where neighbours share one.
+    pub fn point_sessions(&self, job: &Job<TrackId>) -> Vec<u32> {
+        let mut idx: Vec<u32> = Vec::new();
+        let tracks = std::iter::once(job.kept).chain(job.reverted.iter().map(|b| b.points));
+        for tr in tracks {
+            for p in self.store.iter(tr) {
+                if idx.last() != Some(&p.sess) {
+                    idx.push(p.sess);
+                }
+            }
+        }
+        idx
     }
 
     /// The session id behind a point's `sess` index in a profile's timeline.
@@ -1084,7 +1215,9 @@ impl Profiles {
     }
 
     pub fn into_jobs(self) -> Vec<Job> {
-        let mut jobs: Vec<Job> = self.timelines.into_iter().flat_map(|(_, t)| t.into_jobs()).collect();
+        let store = self.store;
+        let mut jobs: Vec<Job> =
+            self.timelines.into_iter().flat_map(|(_, t)| t.into_jobs()).map(|j| j.materialize(&store)).collect();
         jobs.sort_by_key(|j| j.events.first().map(event_wall).unwrap_or(0));
         jobs
     }

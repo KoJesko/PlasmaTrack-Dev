@@ -12,7 +12,7 @@
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
-use pt_core::rules::{evaluate, Context};
+use pt_core::rules::{evaluate, Context, JobResult};
 use pt_core::timeline::{Job, Profiles};
 use pt_core::trace::Frame;
 use pt_replay::{order_sessions, parse_lines, read_lines, sample_config};
@@ -31,15 +31,19 @@ fn sha(v: &impl serde::Serialize) -> String {
     Sha256::digest(&bytes).iter().map(|b| format!("{b:02x}")).collect()
 }
 
-/// The live jobs with all their points, the way a caller sees them.
-fn live_jobs(p: &Profiles) -> Vec<Job> {
-    p.jobs().cloned().collect()
+/// The live jobs with all their points, the way a caller sees them, and
+/// their scores taken straight from the point store.
+fn live_jobs(p: &Profiles) -> (Vec<Job>, Vec<JobResult>) {
+    let cfg = sample_config();
+    let ctx = Context::default();
+    p.jobs().map(|j| (p.materialize(j), p.evaluate(j, &cfg, &ctx))).unzip()
 }
 
-fn job_line(out: &mut String, tag: &str, jobs: &[Job]) {
+fn job_line(out: &mut String, tag: &str, (jobs, live_results): (Vec<Job>, Vec<JobResult>)) {
     let cfg = sample_config();
     let ctx = Context::default();
     let results: Vec<_> = jobs.iter().map(|j| evaluate(j, &cfg, &ctx)).collect();
+    assert_eq!(results, live_results, "{tag}: scoring from the store differs from scoring in memory");
     writeln!(out, "{tag} jobs={} jobs_sha={} results_sha={}", jobs.len(), sha(&jobs), sha(&results)).unwrap();
 }
 
@@ -52,12 +56,13 @@ fn digest(frames: &[Frame]) -> String {
     for (i, f) in frames.iter().enumerate() {
         profiles.push(f);
         if (i + 1) % CHECKPOINT_EVERY == 0 {
-            job_line(&mut out, &format!("frame {}", i + 1), &live_jobs(&profiles));
+            job_line(&mut out, &format!("frame {}", i + 1), live_jobs(&profiles));
         }
     }
-    job_line(&mut out, "live", &live_jobs(&profiles));
+    job_line(&mut out, "live", live_jobs(&profiles));
     let jobs = profiles.into_jobs();
-    job_line(&mut out, "final", &jobs);
+    let results = jobs.iter().map(|j| evaluate(j, &cfg, &ctx)).collect();
+    job_line(&mut out, "final", (jobs.clone(), results));
     for j in &jobs {
         let r = evaluate(j, &cfg, &ctx);
         let reverted: usize = j.reverted.iter().map(|b| b.points.len()).sum();
