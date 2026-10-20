@@ -110,3 +110,12 @@ fn a_row_whose_data_went_missing_gets_it_back() {
     score(&t, pt_core::Game::Ats);
     assert_eq!(t.call(t.admin("GET", &format!("/api/v1/admin/jobs/{id}/series"))).status, 200);
 }
+
+#[test]
+fn a_new_scorer_format_wakes_every_scorer_once() {
+    let t = TestHost::new();
+    common::block_on(pt_server::manage::cron(&t)).unwrap();
+    common::block_on(pt_server::manage::cron(&t)).unwrap();
+    let pokes: Vec<_> = t.ops_queued.borrow().iter().filter(|m| m["kind"] == "poke_all").cloned().collect();
+    assert_eq!(pokes.len(), 1, "{pokes:?}");
+}

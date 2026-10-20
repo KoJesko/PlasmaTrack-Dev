@@ -169,7 +169,27 @@ async fn recalculation_step<H: Host>(h: &H, op: &str) -> ApiResult<Option<Value>
 /// submission used.
 pub async fn cron<H: Host>(h: &H) -> ApiResult<()> {
     h.run("DELETE FROM idempotency WHERE created_at < ?1", params![h.now_ms() - store::IDEMPOTENCY_TTL_MS]).await?;
+    wake_scorers_after_format_change(h).await?;
     crate::manual::sweep(h).await
+}
+
+/// After a deploy that changes the scorer's stored format, every scorer is
+/// woken once to rebuild, instead of each waiting for its player's next upload
+/// (2026-10-20: a scorer stuck on the old format held a delivered job back).
+/// The marker is an `operations` row per format.
+pub async fn wake_scorers_after_format_change<H: Host>(h: &H) -> ApiResult<()> {
+    let marker = format!("op_scorer_format_{}", crate::scorer::SNAPSHOT_FORMAT);
+    let added = h
+        .run(
+            "INSERT OR IGNORE INTO operations (operation_id, kind, status, total, done, requested_by, reason, started_at, finished_at)
+             VALUES (?1, 'scorer_format', 'succeeded', 0, 0, 'system', 'Scorer format changed: every scorer rebuilds', ?2, ?2)",
+            params![&marker, h.now_ms()],
+        )
+        .await?;
+    if added > 0 {
+        h.queue_op(json!({"kind": "poke_all"})).await?;
+    }
+    Ok(())
 }
 
 // ---- bonuses (§9) ----------------------------------------------------------------
