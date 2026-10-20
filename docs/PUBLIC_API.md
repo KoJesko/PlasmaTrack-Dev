@@ -271,7 +271,7 @@ The job summary plus:
   "type": "FeatureCollection",
   "bbox": [1.17, 50.95, 1.86, 51.13],
   "properties": {"job_id": "7K2M9QXA", "game": "ets2", "vertex_count": 1843, "max_vertices": 5000,
-                 "simplification_tolerance_world_m": 5.0, "includes_reverted": false},
+                 "simplification_tolerance_world_m": 5.0, "includes_reverted": false, "projection": "basemap"},
   "features": [
     {"type": "Feature",
      "geometry": {"type": "LineString", "coordinates": [[1.3133, 51.1268], [1.3141, 51.1262]]},
@@ -298,6 +298,11 @@ The job summary plus:
     `world_km` are the odometer difference across the gap, when there is one.
 
   The renderer should draw the non-driving kinds differently, for example dashed.
+- **`properties.projection`** is `basemap` (lines up with the game's basemap tiles) or `local`:
+  the route left the basemap projection's range (a 1:1 map mod, whose real-size distances
+  wrap around the globe at the vanilla map's scale), so it is drawn flat in game metres,
+  1° = 111.32 km, centred on 0°, 0°, where no basemap tiles are. Every coordinate is always a
+  valid longitude and latitude.
 - **`counted`:** whether this stretch earned distance (loaded and hitched; any job driving for
   World of Trucks). The empty drive to the pickup is `false`.
 - **`scale_class`:** `city`, `road`, `one_to_one`, `nonstandard` or `unknown`.

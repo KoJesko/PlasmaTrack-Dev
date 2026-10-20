@@ -159,6 +159,7 @@ fn a_players_real_data_scores_within_a_durable_objects_memory() {
         let cached = t.call(t.bot("GET", &format!("/api/v1/public/jobs/{id}/route"))).body;
         t.blobs.borrow_mut().remove(&views[0]);
         let rebuilt = t.call(t.bot("GET", &format!("/api/v1/public/jobs/{id}/route"))).body;
+        if let Some(dump) = std::env::var_os("PT_ROUTE_DUMP") { std::fs::write(std::path::Path::new(&dump).join(format!("{id}.json")), &rebuilt).unwrap(); }
         assert_eq!(cached, rebuilt, "map from the stored view vs rebuilt");
         assert!(t.blobs.borrow().contains_key(&views[0]), "the rebuilt view is stored again");
         for path in [format!("/api/v1/public/jobs/{id}/route"), format!("/api/v1/admin/jobs/{id}/route"), format!("/api/v1/admin/jobs/{id}/series")] {
@@ -168,8 +169,19 @@ fn a_players_real_data_scores_within_a_durable_objects_memory() {
             let started = std::time::Instant::now();
             let r = t.call(req);
             let mb = (PEAK.load(Ordering::Relaxed) - before) as f64 / MB;
-            println!("{path}: {} in {:.2} s, {} bytes, peak {mb:.1} MB", r.status, started.elapsed().as_secs_f64(), r.body.len());
+            let features = serde_json::from_slice::<Value>(&r.body).ok().and_then(|v| v["features"].as_array().map(Vec::len));
+            println!("{path}: {} in {:.2} s, {} bytes, peak {mb:.1} MB, features {features:?}", r.status, started.elapsed().as_secs_f64(), r.body.len());
             assert_eq!(r.status, 200);
+            if path.ends_with("/route") {
+                // Every coordinate within what the bot's renderer accepts.
+                let v: Value = serde_json::from_slice(&r.body).unwrap();
+                let valid = v["features"].as_array().unwrap().iter().flat_map(|f| f["geometry"]["coordinates"].as_array().unwrap()).all(|c| {
+                    let (lon, lat) = (c[0].as_f64().unwrap_or(f64::NAN), c[1].as_f64().unwrap_or(f64::NAN));
+                    (-180.0..=180.0).contains(&lon) && (-90.0..=90.0).contains(&lat)
+                });
+                assert!(valid, "{path}: a coordinate out of range");
+                println!("{path}: projection {}", v["properties"]["projection"]);
+            }
         }
     }
 

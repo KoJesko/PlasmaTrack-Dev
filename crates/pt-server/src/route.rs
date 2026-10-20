@@ -56,6 +56,32 @@ struct Seg {
     world_km: f64,
 }
 
+/// Game metres per degree in the flat local projection (one degree of
+/// latitude), so a 1:1 map keeps its real size.
+const LOCAL_M_PER_DEG: f64 = 111_320.0;
+
+/// `Some(centre)` (game x, z) when any point of the route falls outside the
+/// basemap projection's range: a 1:1 map mod's distances, read at the vanilla
+/// map's scale, wrap around the globe (the owner's Alaska job, 2026-10-20:
+/// longitudes down to -332°). The whole route is then drawn flat in game
+/// metres around that centre.
+fn local_centre(job: &Job, shapes: &[Vec<[f64; 2]>]) -> Option<[f64; 2]> {
+    let pts = || shapes.iter().flatten();
+    let off = pts().any(|p| {
+        let [lon, lat] = projection::to_lon_lat(job.game, p[0], p[1]);
+        !(lon.is_finite() && lat.is_finite() && (-180.0..=180.0).contains(&lon) && (-85.0..=85.0).contains(&lat))
+    });
+    if !off {
+        return None;
+    }
+    let (mut lo, mut hi) = ([f64::INFINITY; 2], [f64::NEG_INFINITY; 2]);
+    for p in pts() {
+        lo = [lo[0].min(p[0]), lo[1].min(p[1])];
+        hi = [hi[0].max(p[0]), hi[1].max(p[1])];
+    }
+    Some([(lo[0] + hi[0]) / 2.0, (lo[1] + hi[1]) / 2.0])
+}
+
 fn xz(p: &Point) -> Option<[f64; 2]> {
     p.pos.map(|q| [q[0], q[2]])
 }
@@ -212,6 +238,11 @@ pub fn geojson(job: &Job, cfg: &Config, job_id: &str, admin: bool) -> Value {
     }
 
     let vanilla = cfg.map.scale.vanilla(job.game);
+    let local = local_centre(job, &shapes);
+    let project = |p: &[f64; 2]| match local {
+        Some([cx, cz]) => [(p[0] - cx) / LOCAL_M_PER_DEG, -(p[1] - cz) / LOCAL_M_PER_DEG],
+        None => projection::to_lon_lat(job.game, p[0], p[1]),
+    };
     let (mut lo, mut hi) = ([f64::INFINITY; 2], [f64::NEG_INFINITY; 2]);
     let mut features = Vec::new();
     let mut vertices = 0;
@@ -219,7 +250,7 @@ pub fn geojson(job: &Job, cfg: &Config, job_id: &str, admin: bool) -> Value {
         let coords: Vec<Value> = shape
             .iter()
             .map(|p| {
-                let [lon, lat] = projection::to_lon_lat(job.game, p[0], p[1]);
+                let [lon, lat] = project(p);
                 lo = [lo[0].min(lon), lo[1].min(lat)];
                 hi = [hi[0].max(lon), hi[1].max(lat)];
                 json!([r6(lon), r6(lat)])
@@ -246,6 +277,10 @@ pub fn geojson(job: &Job, cfg: &Config, job_id: &str, admin: bool) -> Value {
             // Game metres at the main road scale, as 1:1 metres.
             "simplification_tolerance_world_m": crate::util::round3(tol / vanilla.main_road_local_scale()),
             "includes_reverted": admin,
+            // "basemap": lines up with the game's basemap tiles. "local": the
+            // route left the basemap's projection (a 1:1 map mod), so it is
+            // drawn flat in game metres around 0°, 0°, off any tiles.
+            "projection": if local.is_some() { "local" } else { "basemap" },
         },
         "features": features,
     })
