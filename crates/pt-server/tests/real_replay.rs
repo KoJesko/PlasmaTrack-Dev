@@ -146,9 +146,8 @@ fn a_players_real_data_scores_within_a_durable_objects_memory() {
         }
     }
     println!("{chunks} chunks in {passes} passes, {stored} job stores; worst pass {worst:.1} MB above the host");
-    for j in t.q("SELECT local_id, state, start_kind, outcome, points, held_points, world_km, game_km, reasons FROM jobs ORDER BY local_id") {
-        println!("job {}", j);
-    }
+    let jobs = t.q("SELECT local_id, state, start_kind, outcome, points, held_points, world_km, game_km, reasons FROM jobs ORDER BY local_id");
+    println!("jobs replayed: {}", jobs.len());
 
     // The views of every stored job: map (public and admin) and graphs, timed.
     for j in t.q("SELECT job_id FROM jobs") {
@@ -170,7 +169,7 @@ fn a_players_real_data_scores_within_a_durable_objects_memory() {
             let r = t.call(req);
             let mb = (PEAK.load(Ordering::Relaxed) - before) as f64 / MB;
             println!("{path}: {} in {:.2} s, {} bytes, peak {mb:.1} MB", r.status, started.elapsed().as_secs_f64(), r.body.len());
-            assert_eq!(r.status, 200, "{}", String::from_utf8_lossy(&r.body));
+            assert_eq!(r.status, 200);
         }
     }
 
