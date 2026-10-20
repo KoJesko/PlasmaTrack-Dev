@@ -354,8 +354,9 @@ fn widen(r: &mut Option<(f64, f64)>, v: Option<f64>) {
 }
 
 /// Most points a view (map, graphs) holds in memory: longer jobs are thinned
-/// ([`jobs::StoredJob::thinned`]). A job driven for days has over 500k.
-pub const VIEW_POINTS: usize = 100_000;
+/// while read ([`jobs::load_view`]). A job driven for days has over 700k; the
+/// map draws at most 5,000 vertices and the graphs 4,000 buckets.
+pub const VIEW_POINTS: usize = 20_000;
 
 pub async fn load_stored<H: Host>(h: &H, job_id: &str) -> ApiResult<jobs::StoredJob> {
     jobs::load_stored(h, job_id).await?.ok_or_else(|| ApiError::not_found("job data"))
@@ -363,8 +364,7 @@ pub async fn load_stored<H: Host>(h: &H, job_id: &str) -> ApiResult<jobs::Stored
 
 /// A stored job for a view, thinned to [`VIEW_POINTS`].
 pub async fn load_job<H: Host>(h: &H, job_id: &str) -> ApiResult<(Job, Vec<(u32, String)>)> {
-    let s = load_stored(h, job_id).await?;
-    Ok((s.thinned(VIEW_POINTS), s.sess_ids.clone()))
+    jobs::load_view(h, job_id, VIEW_POINTS).await?.ok_or_else(|| ApiError::not_found("job data"))
 }
 
 fn max_points(req: &Request) -> ApiResult<usize> {
@@ -377,8 +377,7 @@ fn max_points(req: &Request) -> ApiResult<usize> {
 /// The series of a job (§5). `public` (PUBLIC_API §3): no reverted windows
 /// and no review markers.
 pub async fn series_json<H: Host>(h: &H, row: &Row, max_points: usize, public: bool) -> ApiResult<Value> {
-    let stored = load_stored(h, &row.s("job_id")).await?;
-    let job = stored.thinned(VIEW_POINTS);
+    let (job, _) = load_job(h, &row.s("job_id")).await?;
     let cfg = config::scoring(h).await?.cfg;
     let limits = cfg.rules.speed.limits(job.game);
     let (Some(first), Some(last)) = (job.kept.first(), job.kept.last()) else {
@@ -457,24 +456,21 @@ pub async fn series_json<H: Host>(h: &H, row: &Row, max_points: usize, public: b
             }
         }
     }
-    // Refuels and fuel jumps from every point, not the thinned ones.
-    let result = pt_core::rules::evaluate_in(&stored.job, &stored, &cfg, &Default::default());
-    for f in &result.refuels {
-        windows.push(json!({"kind": "refuel", "from": rfc3339(f.wall_ms),
-            "to": rfc3339(f.wall_ms + (f.duration_s * 1000.0) as i64), "litres": r2(f.litres)}));
+    // Refuels and fuel jumps as scored from every point (the stored row), not
+    // from the thinned points.
+    let detail = row.json("detail");
+    for f in detail["fuel"]["refuels"].as_array().into_iter().flatten() {
+        windows.push(json!({"kind": "refuel", "from": f["start_at"], "to": f["end_at"], "litres": f["litres"]}));
     }
     let markers: Vec<Value> = if public {
         Vec::new()
     } else {
-        result
-            .review
-            .iter()
-            .filter_map(|x| match x {
-                pt_core::rules::ReviewReason::FuelJump { wall_ms, litres } => {
-                    Some(json!({"kind": "fuel_jump", "at": rfc3339(*wall_ms), "litres": r2(*litres)}))
-                }
-                _ => None,
-            })
+        row.json("reasons")
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter(|x| x["code"] == "fuel_jump")
+            .map(|x| json!({"kind": "fuel_jump", "at": x["details"]["at"], "litres": x["details"]["litres"]}))
             .collect()
     };
     Ok(json!({

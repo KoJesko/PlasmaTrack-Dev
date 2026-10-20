@@ -150,6 +150,21 @@ fn a_players_real_data_scores_within_a_durable_objects_memory() {
         println!("job {}", j);
     }
 
+    // The views of every stored job: map (public and admin) and graphs, timed.
+    for j in t.q("SELECT job_id FROM jobs") {
+        let id = j["job_id"].as_str().unwrap();
+        for path in [format!("/api/v1/public/jobs/{id}/route"), format!("/api/v1/admin/jobs/{id}/route"), format!("/api/v1/admin/jobs/{id}/series")] {
+            let req = if path.contains("/admin/") { t.admin("GET", &path) } else { t.bot("GET", &path) };
+            PEAK.store(CURRENT.load(Ordering::Relaxed), Ordering::Relaxed);
+            let before = CURRENT.load(Ordering::Relaxed);
+            let started = std::time::Instant::now();
+            let r = t.call(req);
+            let mb = (PEAK.load(Ordering::Relaxed) - before) as f64 / MB;
+            println!("{path}: {} in {:.2} s, {} bytes, peak {mb:.1} MB", r.status, started.elapsed().as_secs_f64(), r.body.len());
+            assert_eq!(r.status, 200, "{}", String::from_utf8_lossy(&r.body));
+        }
+    }
+
     // The same frames with every point in memory, as the client scores them.
     let cfg = sample_config();
     let names = cfg.multiplayer.truckersmp_module_names.clone();

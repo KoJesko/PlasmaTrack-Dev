@@ -113,37 +113,11 @@ impl StoredJob {
     /// graphs): every k-th point, plus the ends of each run and every point a
     /// gap, a branch or a restore refers to. Scores always use every point.
     pub fn thinned(&self, max: usize) -> Job {
-        let total = self.total_points();
-        let k = if total <= max { 1 } else { total.div_ceil(max.max(1)) };
-        let mut keep_seq: HashSet<u64> = self.job.gaps.iter().flat_map(|g| [g.from_seq, g.to_seq]).collect();
-        keep_seq.extend(self.job.reverted.iter().map(|b| b.fork_seq));
-        for e in &self.job.events {
-            if let JobEvent::LoadRestore { from_fork_seq, .. } = e {
-                keep_seq.insert(*from_fork_seq);
-            }
-        }
+        let (k, keep) = thinning(&self.job, max);
         let thin = |s: &Segs| -> Vec<Point> {
-            if k == 1 {
-                return self.iter(s).collect();
-            }
-            let mut out: Vec<Point> = Vec::with_capacity(s.n / k + 16);
-            let mut prev: Option<Point> = None;
-            for (i, p) in self.iter(s).enumerate() {
-                let edge = prev.as_ref().is_none_or(|q| q.run != p.run || q.truck != p.truck);
-                if edge {
-                    // The last point of the run before.
-                    if let Some(q) = prev.take() {
-                        if out.last().is_none_or(|l| l.seq != q.seq || l.sess != q.sess) {
-                            out.push(q);
-                        }
-                    }
-                }
-                if edge || i % k == 0 || i + 1 == s.n || keep_seq.contains(&p.seq) {
-                    out.push(p.clone());
-                }
-                prev = Some(p);
-            }
-            out
+            let mut t = Thinner::new(k, s.n, &keep);
+            self.iter(s).for_each(|p| t.push(p));
+            t.out
         };
         let reverted = self
             .job
@@ -153,6 +127,86 @@ impl StoredJob {
             .collect();
         self.job.with_points(thin(&self.job.kept), reverted)
     }
+}
+
+/// Every how many points a view keeps, and the seqs it always keeps (gap
+/// ends, forks, restores).
+fn thinning(job: &Job<Segs>, max: usize) -> (usize, HashSet<u64>) {
+    let total = job.kept.n + job.reverted.iter().map(|b| b.points.n).sum::<usize>();
+    let k = if total <= max { 1 } else { total.div_ceil(max.max(1)) };
+    let mut keep: HashSet<u64> = job.gaps.iter().flat_map(|g| [g.from_seq, g.to_seq]).collect();
+    keep.extend(job.reverted.iter().map(|b| b.fork_seq));
+    for e in &job.events {
+        if let JobEvent::LoadRestore { from_fork_seq, .. } = e {
+            keep.insert(*from_fork_seq);
+        }
+    }
+    (k, keep)
+}
+
+/// Keeps every k-th point of a list, the ends of each run, and kept seqs.
+struct Thinner<'a> {
+    k: usize,
+    n: usize,
+    keep: &'a HashSet<u64>,
+    out: Vec<Point>,
+    prev: Option<Point>,
+    i: usize,
+}
+
+impl<'a> Thinner<'a> {
+    fn new(k: usize, n: usize, keep: &'a HashSet<u64>) -> Thinner<'a> {
+        Thinner { k, n, keep, out: Vec::with_capacity(n / k + 16), prev: None, i: 0 }
+    }
+
+    fn push(&mut self, p: Point) {
+        let edge = self.prev.as_ref().is_none_or(|q| q.run != p.run || q.truck != p.truck);
+        if edge && self.k > 1 {
+            // The last point of the run before.
+            if let Some(q) = self.prev.take() {
+                if self.out.last().is_none_or(|l| l.seq != q.seq || l.sess != q.sess) {
+                    self.out.push(q);
+                }
+            }
+        }
+        if self.k == 1 || edge || self.i % self.k == 0 || self.i + 1 == self.n || self.keep.contains(&p.seq) {
+            self.out.push(p.clone());
+        }
+        self.prev = Some(p);
+        self.i += 1;
+    }
+}
+
+/// A stored job for a view (map, graphs), thinned to about `max` points while
+/// its segments are read one at a time: memory stays near one segment plus
+/// the points kept, however long the job.
+pub async fn load_view<H: Host>(h: &H, job_id: &str, max: usize) -> ApiResult<Option<(Job, Vec<(u32, String)>)>> {
+    let Some(z) = h.blob_get(&meta_key(job_id)).await? else {
+        // Before 2026-10-20: one blob, small enough to read whole.
+        return Ok(load_stored(h, job_id).await?.map(|s| (s.thinned(max), s.sess_ids.clone())));
+    };
+    let m: Meta = util::gunzip_json(&z).map_err(|e| ApiError::internal(&e))?;
+    let (k, keep) = thinning(&m.job, max);
+    let mut lists: Vec<Vec<Point>> = Vec::new();
+    for s in std::iter::once(&m.job.kept).chain(m.job.reverted.iter().map(|b| &b.points)) {
+        let mut t = Thinner::new(k, s.n, &keep);
+        for id in &s.ids {
+            let data = h.blob_get(&seg_key(job_id, id)).await?.ok_or_else(|| ApiError::internal("missing job data segment"))?;
+            let raw = util::gunzip(&data, usize::MAX).map_err(|e| ApiError::internal(&e.to_string()))?;
+            drop(data);
+            decode_points(&raw).map_err(|e| ApiError::internal(&e))?.into_iter().for_each(|p| t.push(p));
+        }
+        lists.push(t.out);
+    }
+    let mut lists = lists.into_iter();
+    let kept = lists.next().unwrap_or_default();
+    let reverted = m
+        .job
+        .reverted
+        .iter()
+        .map(|b| Branch { fork_seq: b.fork_seq, points: lists.next().unwrap_or_default(), reverted_at_wall_ms: b.reverted_at_wall_ms })
+        .collect();
+    Ok(Some((m.job.with_points(kept, reverted), m.sess_ids)))
 }
 
 /// Is there stored data for this job (either format)?
