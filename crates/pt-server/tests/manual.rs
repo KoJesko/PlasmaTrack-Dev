@@ -7,7 +7,6 @@ use common::seed::*;
 use common::{block_on, TestHost, ADMIN};
 use pt_core::Game;
 use pt_server::http::Request;
-use pt_server::scorer::Scorer;
 use serde_json::{json, Value};
 
 fn webhook_types(t: &TestHost) -> Vec<String> {
@@ -154,7 +153,7 @@ fn moderators_edit_tracked_jobs_and_edits_survive_rescoring() {
     assert_eq!(d["distances"]["edited"], true);
 
     // A full replay from the raw frames keeps the edit.
-    let mut s = Scorer::new(&user_id(&t), Game::Ats);
+    let mut s = t.scorer(&user_id(&t), Game::Ats);
     block_on(s.reset(&t)).unwrap();
     block_on(s.process(&t)).unwrap();
     assert_eq!(t.call(t.bot("GET", &format!("/api/v1/public/jobs/{job_id}"))).body_json()["points"], edited["points"]);
@@ -188,7 +187,7 @@ fn moderators_add_and_remove_the_speed_penalty() {
     assert!(p["public_notes"].as_array().unwrap().iter().any(|n| n["code"] == "speed_penalty"), "{p}");
 
     // It survives a full replay from the raw frames.
-    let mut s = Scorer::new(&user_id(&t), Game::Ats);
+    let mut s = t.scorer(&user_id(&t), Game::Ats);
     block_on(s.reset(&t)).unwrap();
     block_on(s.process(&t)).unwrap();
     assert_eq!(t.call(t.bot("GET", &format!("/api/v1/public/jobs/{job_id}"))).body_json()["points"], penalised);

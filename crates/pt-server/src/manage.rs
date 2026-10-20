@@ -7,7 +7,7 @@ use serde_json::{json, Value};
 use crate::env::{Host, Row, RowExt};
 use crate::http::{self, ApiError, ApiResult, Request, Response};
 use crate::jobs::Trigger;
-use crate::scorer::Scorer;
+
 use crate::store::{self, Audit, User};
 use crate::util::{self, rfc3339};
 use crate::{admin, auth, config, params, public, webhooks};
@@ -132,7 +132,7 @@ async fn recalculation_step<H: Host>(h: &H, op: &str) -> ApiResult<Option<Value>
     for j in &rows {
         let id = j.s("job_id");
         let before = j.s("outcome");
-        if Scorer::rescore_job(h, &id, Trigger::Recalculation, None).await.is_err() {
+        if crate::scorer::rescore_job(h, &id, Trigger::Recalculation, None).await.is_err() {
             continue;
         }
         let after = store::one(h, "SELECT outcome FROM jobs WHERE job_id = ?1", params![&id]).await?.map(|x| x.s("outcome")).unwrap_or_default();

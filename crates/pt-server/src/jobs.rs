@@ -2,9 +2,12 @@
 //! views (PUBLIC_API §3, ADMIN_API §1-4).
 
 use pt_core::config::ScaleClass;
-use pt_core::rules::{evaluate, Bonus, BonusKind, Context, DiscardReason, JobResult, Outcome, ReviewReason};
+use std::collections::{HashMap, HashSet};
+
+use pt_core::rules::{evaluate_in, Bonus, BonusKind, Context, DiscardReason, JobResult, Outcome, ReviewReason};
+use pt_core::store::{decode_points, encode_points, Resolve};
 use pt_core::job::JobType;
-use pt_core::timeline::{Job, JobEvent};
+use pt_core::timeline::{Branch, Job, JobEvent, Point};
 use pt_core::{Config, Game};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
@@ -23,12 +26,6 @@ pub fn job_key(user_id: &str, game: Game, profile: &str, local_id: u32) -> Strin
     format!("jobs/{user_id}/{}/{profile}/{local_id}", game.as_str())
 }
 
-#[derive(Serialize)]
-struct BlobOut<'a> {
-    job: &'a Job,
-    sess_ids: &'a [(u32, String)],
-}
-
 #[derive(Deserialize)]
 struct BlobIn {
     job: Job,
@@ -36,13 +33,8 @@ struct BlobIn {
     sess_ids: Vec<(u32, String)>,
 }
 
-/// A job's stored data (`jobs/{id}.json.gz`): the job and its sessions,
-/// written straight into the compressor. A capture-mode job is tens of MB of
-/// JSON, more than fits in a Worker as a JSON tree.
-pub fn encode_blob(job: &Job, sess_ids: &[(u32, String)]) -> ApiResult<Vec<u8>> {
-    util::gzip_json(&BlobOut { job, sess_ids }).map_err(|e| ApiError::internal(&e))
-}
-
+/// A job's data before 2026-10-20: one gzip JSON of the job with every point.
+/// Still read; no longer written.
 pub fn decode_blob(z: &[u8]) -> ApiResult<(Job, Vec<(u32, String)>)> {
     let b: BlobIn = util::gunzip_json(z).map_err(|e| ApiError::internal(&e))?;
     Ok((b.job, b.sess_ids))
@@ -50,6 +42,211 @@ pub fn decode_blob(z: &[u8]) -> ApiResult<(Job, Vec<(u32, String)>)> {
 
 pub fn blob_key(job_id: &str) -> String {
     format!("jobs/{job_id}.json.gz")
+}
+
+// ---- job data (scorer memory, 2026-10-20) --------------------------------------
+//
+// `jobs/{id}/meta.json.gz` holds the job with each point list as a list of
+// segment ids; `jobs/{id}/seg/{sid}.bin.gz` holds up to SEGMENT points
+// (`pt_core::store::encode_points`). Segment ids are content hashes, so
+// storing a growing job again uploads only the segments that changed, and
+// nothing ever needs the whole job in memory as JSON.
+
+/// Points per stored segment.
+pub const SEGMENT: usize = 8192;
+
+/// One stored point list: its length and segment ids in order.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct Segs {
+    pub n: usize,
+    pub ids: Vec<String>,
+}
+
+#[derive(Serialize, Deserialize)]
+struct Meta {
+    job: Job<Segs>,
+    sess_ids: Vec<(u32, String)>,
+}
+
+pub fn meta_key(job_id: &str) -> String {
+    format!("jobs/{job_id}/meta.json.gz")
+}
+
+fn seg_key(job_id: &str, sid: &str) -> String {
+    format!("jobs/{job_id}/seg/{sid}.bin.gz")
+}
+
+fn seg_id(raw: &[u8]) -> String {
+    util::sha256_hex(raw)[..32].to_string()
+}
+
+/// A stored job: its points stay compressed per segment and are decoded one
+/// segment at a time while read ([`Resolve`]).
+pub struct StoredJob {
+    pub job: Job<Segs>,
+    pub sess_ids: Vec<(u32, String)>,
+    segs: HashMap<String, Vec<u8>>,
+}
+
+impl Resolve<Segs> for StoredJob {
+    fn iter<'a>(&'a self, s: &'a Segs) -> Box<dyn Iterator<Item = Point> + 'a> {
+        Box::new(s.ids.iter().flat_map(move |id| {
+            let z = self.segs.get(id).map(Vec::as_slice).unwrap_or_default();
+            let raw = util::gunzip(z, usize::MAX).unwrap_or_default();
+            decode_points(&raw).unwrap_or_default()
+        }))
+    }
+}
+
+impl StoredJob {
+    /// Kept and reverted points together.
+    pub fn total_points(&self) -> usize {
+        self.job.kept.n + self.job.reverted.iter().map(|b| b.points.n).sum::<usize>()
+    }
+
+    /// The job with every point in memory.
+    pub fn materialize(&self) -> Job {
+        self.thinned(usize::MAX)
+    }
+
+    /// The job with at most about `max` points in memory, for views (maps,
+    /// graphs): every k-th point, plus the ends of each run and every point a
+    /// gap, a branch or a restore refers to. Scores always use every point.
+    pub fn thinned(&self, max: usize) -> Job {
+        let total = self.total_points();
+        let k = if total <= max { 1 } else { total.div_ceil(max.max(1)) };
+        let mut keep_seq: HashSet<u64> = self.job.gaps.iter().flat_map(|g| [g.from_seq, g.to_seq]).collect();
+        keep_seq.extend(self.job.reverted.iter().map(|b| b.fork_seq));
+        for e in &self.job.events {
+            if let JobEvent::LoadRestore { from_fork_seq, .. } = e {
+                keep_seq.insert(*from_fork_seq);
+            }
+        }
+        let thin = |s: &Segs| -> Vec<Point> {
+            if k == 1 {
+                return self.iter(s).collect();
+            }
+            let mut out: Vec<Point> = Vec::with_capacity(s.n / k + 16);
+            let mut prev: Option<Point> = None;
+            for (i, p) in self.iter(s).enumerate() {
+                let edge = prev.as_ref().is_none_or(|q| q.run != p.run || q.truck != p.truck);
+                if edge {
+                    // The last point of the run before.
+                    if let Some(q) = prev.take() {
+                        if out.last().is_none_or(|l| l.seq != q.seq || l.sess != q.sess) {
+                            out.push(q);
+                        }
+                    }
+                }
+                if edge || i % k == 0 || i + 1 == s.n || keep_seq.contains(&p.seq) {
+                    out.push(p.clone());
+                }
+                prev = Some(p);
+            }
+            out
+        };
+        let reverted = self
+            .job
+            .reverted
+            .iter()
+            .map(|b| Branch { fork_seq: b.fork_seq, points: thin(&b.points), reverted_at_wall_ms: b.reverted_at_wall_ms })
+            .collect();
+        self.job.with_points(thin(&self.job.kept), reverted)
+    }
+}
+
+/// Is there stored data for this job (either format)?
+pub async fn has_job_data<H: Host>(h: &H, job_id: &str) -> ApiResult<bool> {
+    Ok(h.blob_size(&meta_key(job_id)).await?.is_some() || h.blob_size(&blob_key(job_id)).await?.is_some())
+}
+
+fn seg_ids(job: &Job<Segs>) -> impl Iterator<Item = &String> {
+    std::iter::once(&job.kept).chain(job.reverted.iter().map(|b| &b.points)).flat_map(|s| s.ids.iter())
+}
+
+/// Stores a job's data, streaming its points from `pts`. Segments already
+/// stored are not uploaded again; ones no longer used are deleted after the
+/// new description is in place.
+pub async fn write_job_data<H: Host, P, R: Resolve<P> + ?Sized>(
+    h: &H,
+    job_id: &str,
+    job: &Job<P>,
+    pts: &R,
+    sess_ids: &[(u32, String)],
+) -> ApiResult<()> {
+    let old: HashSet<String> = match h.blob_get(&meta_key(job_id)).await? {
+        Some(z) => util::gunzip_json::<Meta>(&z).map(|m| seg_ids(&m.job).cloned().collect()).unwrap_or_default(),
+        None => HashSet::new(),
+    };
+    let mut written: HashSet<String> = HashSet::new();
+    let mut lists: Vec<Segs> = Vec::new();
+    for track in std::iter::once(&job.kept).chain(job.reverted.iter().map(|b| &b.points)) {
+        let mut segs = Segs::default();
+        let mut it = pts.iter(track);
+        loop {
+            let chunk: Vec<Point> = it.by_ref().take(SEGMENT).collect();
+            if chunk.is_empty() {
+                break;
+            }
+            segs.n += chunk.len();
+            let raw = encode_points(&chunk);
+            let sid = seg_id(&raw);
+            if !old.contains(&sid) && !written.contains(&sid) {
+                h.blob_put(&seg_key(job_id, &sid), util::gzip(&raw)).await?;
+            }
+            written.insert(sid.clone());
+            segs.ids.push(sid);
+        }
+        lists.push(segs);
+    }
+    let mut lists = lists.into_iter();
+    let kept = lists.next().unwrap_or_default();
+    let reverted = job
+        .reverted
+        .iter()
+        .map(|b| Branch { fork_seq: b.fork_seq, points: lists.next().unwrap_or_default(), reverted_at_wall_ms: b.reverted_at_wall_ms })
+        .collect();
+    let mut stored = job.with_points(kept, reverted);
+    stored.offloaded = false;
+    stored.offloaded_invalid = false;
+    let meta = util::gzip_json(&Meta { job: stored, sess_ids: sess_ids.to_vec() }).map_err(|e| ApiError::internal(&e))?;
+    h.blob_put(&meta_key(job_id), meta).await?;
+    for sid in old.difference(&written) {
+        h.blob_delete(&seg_key(job_id, sid)).await?;
+    }
+    Ok(())
+}
+
+/// A job's stored data, in either format; `None` when there is none.
+pub async fn load_stored<H: Host>(h: &H, job_id: &str) -> ApiResult<Option<StoredJob>> {
+    if let Some(z) = h.blob_get(&meta_key(job_id)).await? {
+        let m: Meta = util::gunzip_json(&z).map_err(|e| ApiError::internal(&e))?;
+        let mut segs = HashMap::new();
+        for id in seg_ids(&m.job) {
+            if !segs.contains_key(id) {
+                let data = h.blob_get(&seg_key(job_id, id)).await?.ok_or_else(|| ApiError::internal("missing job data segment"))?;
+                segs.insert(id.clone(), data);
+            }
+        }
+        return Ok(Some(StoredJob { job: m.job, sess_ids: m.sess_ids, segs }));
+    }
+    let Some(z) = h.blob_get(&blob_key(job_id)).await? else { return Ok(None) };
+    let (job, sess_ids) = decode_blob(&z)?;
+    let mut segs = HashMap::new();
+    let mut list = |points: &[Point]| -> Segs {
+        let mut s = Segs { n: points.len(), ids: Vec::new() };
+        for chunk in points.chunks(SEGMENT) {
+            let raw = encode_points(chunk);
+            let sid = seg_id(&raw);
+            segs.insert(sid.clone(), util::gzip(&raw));
+            s.ids.push(sid);
+        }
+        s
+    };
+    let kept = list(&job.kept);
+    let reverted =
+        job.reverted.iter().map(|b| Branch { fork_seq: b.fork_seq, points: list(&b.points), reverted_at_wall_ms: b.reverted_at_wall_ms }).collect();
+    Ok(Some(StoredJob { job: job.with_points(kept, reverted), sess_ids, segs }))
 }
 
 /// What the scorer knows about a job beyond the job itself.
@@ -196,18 +393,21 @@ pub async fn integrity<H: Host>(h: &H, user_id: &str, sessions: &[String], at_ms
 /// The sample-rate trace check (PLAN §6a): more samples per simulated second
 /// than the plugin was configured for means a modified plugin or client. Fewer
 /// are normal at low frame rates.
-pub fn trace_checks(job: &Job, cfg: &Config, hellos: &Value) -> (bool, Vec<Value>) {
+pub fn trace_checks<P, R: Resolve<P> + ?Sized>(job: &Job<P>, pts: &R, cfg: &Config, hellos: &Value) -> (bool, Vec<Value>) {
     let declared = cfg.plugin.sample_rate_hz;
     let (mut n, mut secs) = (0usize, 0.0f64);
-    for w in job.kept.windows(2) {
-        let (a, b) = (&w[0], &w[1]);
-        if a.sess == b.sess && a.run == b.run {
-            let dt = b.sim_us.saturating_sub(a.sim_us) as f64 / 1e6;
-            if dt > 0.0 && dt < 1.0 {
-                n += 1;
-                secs += dt;
+    let mut prev: Option<Point> = None;
+    for b in pts.iter(&job.kept) {
+        if let Some(a) = prev.as_ref() {
+            if a.sess == b.sess && a.run == b.run {
+                let dt = b.sim_us.saturating_sub(a.sim_us) as f64 / 1e6;
+                if dt > 0.0 && dt < 1.0 {
+                    n += 1;
+                    secs += dt;
+                }
             }
         }
+        prev = Some(b);
     }
     let measured = if secs > 0.0 { n as f64 / secs } else { 0.0 };
     let rate_ok = secs < 10.0 || measured <= declared * 1.25 + 0.5;
@@ -275,7 +475,7 @@ pub fn reason(code: &str, details: Value) -> Value {
     json!({"code": code, "text": reason_text(code), "details": details})
 }
 
-fn review_details(r: &ReviewReason, job: &Job, cfg: &Config) -> Value {
+fn review_details<P>(r: &ReviewReason, job: &Job<P>, cfg: &Config) -> Value {
     match r {
         ReviewReason::LongJob { world_km } => {
             json!({"world_km": round2(*world_km), "threshold_world_km": cfg.rules.manual_review_over_world_km})
@@ -355,11 +555,14 @@ fn place(city_id: &str, city: &str, company_id: &str, company: &str) -> Value {
 
 /// Fuel used: every drop between neighbouring points of one run, except
 /// across a teleport (rules: fuel changes there are ignored).
-fn fuel_used(job: &Job) -> f64 {
-    job.kept
-        .windows(2)
-        .filter(|w| w[0].run == w[1].run && !w[1].after_teleport)
-        .filter_map(|w| Some((w[0].fuel_l? - w[1].fuel_l?).max(0.0)))
+fn fuel_used<P, R: Resolve<P> + ?Sized>(job: &Job<P>, pts: &R) -> f64 {
+    let mut prev: Option<Point> = None;
+    pts.iter(&job.kept)
+        .filter_map(|b| {
+            let a = prev.replace(b.clone());
+            let a = a.filter(|a| a.run == b.run && !b.after_teleport)?;
+            Some((a.fuel_l? - b.fuel_l?).max(0.0))
+        })
         .sum()
 }
 
@@ -374,7 +577,17 @@ struct Built {
 }
 
 #[allow(clippy::too_many_arguments)]
-fn build(job: &Job, r: &JobResult, cfg: &Config, facts: &Facts, integrity: &Integrity, trace: (bool, Vec<Value>), bonus_label: Option<(&str, &str)>) -> Built {
+fn build<P, R: Resolve<P> + ?Sized>(
+    job: &Job<P>,
+    pts: &R,
+    r: &JobResult,
+    cfg: &Config,
+    facts: &Facts,
+    integrity: &Integrity,
+    trace: (bool, Vec<Value>),
+    bonus_label: Option<(&str, &str)>,
+) -> Built {
+    let fuel = fuel_used(job, pts);
     let route = &job.info.fingerprint.route;
     let names = &job.info.names;
     let d = &r.distances;
@@ -415,7 +628,7 @@ fn build(job: &Job, r: &JobResult, cfg: &Config, facts: &Facts, integrity: &Inte
         "bonus": bonus,
         "distance_by_scale_class": by_class,
         "multiplayer": multiplayer,
-        "fuel_used_l": round2(fuel_used(job)),
+        "fuel_used_l": round2(fuel),
         "damage_pct": job.delivered.as_ref().and_then(|x| x.cargo_damage).map(|d| round2(d * 100.0)),
         "income": job.delivered.as_ref().and_then(|x| x.revenue),
         "currency": currency(job.game),
@@ -453,7 +666,7 @@ fn build(job: &Job, r: &JobResult, cfg: &Config, facts: &Facts, integrity: &Inte
         o => outcome_str(o),
     };
 
-    let segments = segments(job, facts);
+    let segments = segments(job, pts, facts);
     let refuels: Vec<Value> = r
         .refuels
         .iter()
@@ -490,7 +703,7 @@ fn build(job: &Job, r: &JobResult, cfg: &Config, facts: &Facts, integrity: &Inte
         "speed": {"peak_mph": round2(r.speed.peak_mph), "over_penalty_s": round2(r.speed.over_penalty_s),
                   "over_invalid_s": round2(r.speed.over_invalid_s),
                   "penalty_over_mph": limits.penalty_over_mph, "invalid_over_mph": limits.invalid_over_mph},
-        "fuel": {"used_l": round2(fuel_used(job)), "refuels": refuels},
+        "fuel": {"used_l": round2(fuel), "refuels": refuels},
         "rules": rules,
         "integrity": integ,
         "segments": segments,
@@ -502,11 +715,11 @@ fn build(job: &Job, r: &JobResult, cfg: &Config, facts: &Facts, integrity: &Inte
 
 /// What the recording says, as a sheet (ADMIN_API §14): the base that a
 /// moderator's overrides apply to.
-fn tracked_sheet(job: &Job, r: &JobResult, started: i64) -> Map<String, Value> {
+fn tracked_sheet<P>(job: &Job<P>, fuel: f64, r: &JobResult, started: i64) -> Map<String, Value> {
     let n = &job.info.names;
     let mut m = Map::new();
     m.insert("distance_km".into(), json!(r.distances.counted_game_km));
-    m.insert("fuel_used_l".into(), json!(fuel_used(job)));
+    m.insert("fuel_used_l".into(), json!(fuel));
     m.insert("started_at_ms".into(), json!(started));
     m.insert("ended_at_ms".into(), json!(job.delivered_wall_ms));
     m.insert("cargo_name".into(), job.first_info.cargo_name.clone().into());
@@ -529,11 +742,11 @@ fn tracked_sheet(job: &Job, r: &JobResult, started: i64) -> Map<String, Value> {
 /// and, when a distance field or the bonus is overridden, the distance and the
 /// points. Returns the (started, ended) times to store.
 #[allow(clippy::too_many_arguments)]
-fn apply_overrides(
+fn apply_overrides<P>(
     built: &mut Built,
     base: &Map<String, Value>,
     overrides: &Map<String, Value>,
-    job: &Job,
+    job: &Job<P>,
     r: &JobResult,
     cfg: &Config,
     bonus_rows: &[(Bonus, String)],
@@ -647,7 +860,7 @@ pub fn by_class_json(classes: &[(ScaleClass, f64, f64)]) -> Value {
     Value::Object(out)
 }
 
-fn segments(job: &Job, facts: &Facts) -> Vec<Value> {
+fn segments<P, R: Resolve<P> + ?Sized>(job: &Job<P>, pts: &R, facts: &Facts) -> Vec<Value> {
     let mut out = Vec::new();
     let mut run: Option<(u32, u64, u64, i64, i64)> = None; // sess, seq_from, seq_to, from, to
     let flush = |out: &mut Vec<Value>, r: Option<(u32, u64, u64, i64, i64)>| {
@@ -655,7 +868,7 @@ fn segments(job: &Job, facts: &Facts) -> Vec<Value> {
             out.push(json!({"status": "kept", "from": rfc3339(from), "to": rfc3339(to), "sess": facts.sess_of(s), "seq_from": a, "seq_to": b}));
         }
     };
-    for p in &job.kept {
+    for p in pts.iter(&job.kept) {
         match &mut run {
             Some((s, _, b, _, to)) if *s == p.sess => {
                 *b = p.seq;
@@ -669,12 +882,15 @@ fn segments(job: &Job, facts: &Facts) -> Vec<Value> {
     }
     flush(&mut out, run);
     for br in &job.reverted {
-        if let (Some(a), Some(b)) = (br.points.first(), br.points.last()) {
+        let mut it = pts.iter(&br.points);
+        let first = it.next();
+        let last = it.last().or_else(|| first.clone());
+        if let (Some(a), Some(b)) = (first, last) {
             out.push(json!({"status": "reverted", "from": rfc3339(a.wall_ms), "to": rfc3339(b.wall_ms), "sess": facts.sess_of(a.sess),
                 "seq_from": a.seq, "seq_to": b.seq, "by_load_at": rfc3339(br.reverted_at_wall_ms)}));
         }
     }
-    for g in job.active_gaps() {
+    for g in job.active_gaps_in(pts) {
         out.push(json!({"status": "gap", "from": Value::Null, "to": rfc3339(g.wall_ms), "sess": facts.sess_of(g.to_sess),
             "seq_from": g.from_seq, "seq_to": g.to_seq, "kind": g.kind}));
     }
@@ -734,12 +950,13 @@ pub fn division_at(user: &User, at_ms: i64) -> bool {
 /// Scores and stores one job; emits the webhooks its change calls for.
 #[allow(clippy::too_many_arguments)]
 /// Returns the job id, or `None` for a job that was never delivered.
-pub async fn persist<H: Host>(
+pub async fn persist<H: Host, P, R: Resolve<P> + ?Sized>(
     h: &H,
     cfg: &Config,
     config_version: Option<&str>,
     user: &User,
-    job: &Job,
+    job: &Job<P>,
+    pts: &R,
     facts: &Facts,
     trigger: Trigger,
     moderator: Option<Moderator<'_>>,
@@ -765,12 +982,12 @@ pub async fn persist<H: Host>(
         singleplayer_division: division_at(user, at),
         delivered_at_ms: Some(at),
     };
-    let r = evaluate(job, cfg, &ctx);
+    let r = evaluate_in(job, pts, cfg, &ctx);
     let label = r.bonus.as_ref().and_then(|b| bonus_rows.iter().find(|(x, _)| x.id == b.id)).map(|(b, l)| (b.id.as_str(), l.as_str()));
-    let trace = trace_checks(job, cfg, &integrity.json["hellos"]);
-    let mut built = build(job, &r, cfg, facts, &integrity, trace, label);
+    let trace = trace_checks(job, pts, cfg, &integrity.json["hellos"]);
+    let mut built = build(job, pts, &r, cfg, facts, &integrity, trace, label);
     let started = job.events.first().map(|e| event_json(e)["at"].as_str().and_then(util::parse_rfc3339).unwrap_or(0)).unwrap_or(0);
-    let base = tracked_sheet(job, &r, started);
+    let base = tracked_sheet(job, fuel_used(job, pts), &r, started);
     let overrides: Map<String, Value> = existing.as_ref().and_then(|e| serde_json::from_value(e.json("overrides")).ok()).unwrap_or_default();
     let (started, ended) = apply_overrides(&mut built, &base, &overrides, job, &r, cfg, &bonus_rows);
     built.detail["sheet_base"] = Value::Object(base);
@@ -800,17 +1017,16 @@ pub async fn persist<H: Host>(
                 || e.s("auto_outcome") != built.auto_outcome
         }
     };
-    let data_key = blob_key(&job_id);
     if !changed {
         // The row is current; its data may still be missing (a write that
         // failed after the row was stored, before 2026-10-15).
-        if h.blob_size(&data_key).await?.is_none() {
-            h.blob_put(&data_key, encode_blob(job, &facts.sess_ids)?).await?;
+        if !has_job_data(h, &job_id).await? {
+            write_job_data(h, &job_id, job, pts, &facts.sess_ids).await?;
         }
         return Ok(Some(job_id));
     }
     // The data first: a row is never stored without it.
-    h.blob_put(&data_key, encode_blob(job, &facts.sess_ids)?).await?;
+    write_job_data(h, &job_id, job, pts, &facts.sess_ids).await?;
     let version = existing.as_ref().map_or(1, |e| e.i("version") + 1);
     let bonus_id = built.summary["bonus"]["bonus_id"].as_str().map(str::to_string).filter(|s| !s.is_empty());
     let p = params![

@@ -151,6 +151,47 @@ pub trait Host {
     async fn http_post(&self, url: &str, headers: Vec<(String, String)>, body: Vec<u8>) -> HostResult<u16>;
 }
 
+/// A value of [`LocalSql`]: SQLite's own five kinds.
+#[derive(Debug, Clone, PartialEq)]
+pub enum SqlVal {
+    Null,
+    Int(i64),
+    Real(f64),
+    Text(String),
+    Blob(Vec<u8>),
+}
+
+impl SqlVal {
+    pub fn int(&self) -> i64 {
+        match self {
+            SqlVal::Int(i) => *i,
+            SqlVal::Real(f) => *f as i64,
+            _ => 0,
+        }
+    }
+    pub fn real(&self) -> Option<f64> {
+        match self {
+            SqlVal::Int(i) => Some(*i as f64),
+            SqlVal::Real(f) => Some(*f),
+            _ => None,
+        }
+    }
+    pub fn into_bytes(self) -> Vec<u8> {
+        match self {
+            SqlVal::Blob(b) => b,
+            SqlVal::Text(s) => s.into_bytes(),
+            _ => Vec::new(),
+        }
+    }
+}
+
+/// A scorer's own SQLite database (its Durable Object's storage; rusqlite
+/// in tests). Synchronous: writes made between two awaits commit together.
+pub trait LocalSql {
+    /// Rows as positional values.
+    fn exec(&self, sql: &str, params: &[SqlVal]) -> HostResult<Vec<Vec<SqlVal>>>;
+}
+
 /// Reading typed values out of a [`Row`]. D1 returns every number as a
 /// JavaScript number, so integers are read leniently.
 pub trait RowExt {

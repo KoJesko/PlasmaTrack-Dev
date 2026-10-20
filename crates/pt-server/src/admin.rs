@@ -1,6 +1,7 @@
 //! Moderator endpoints about jobs (ADMIN_API §1-8, §13) and the TruckersMP
 //! flags (§3).
 
+use pt_core::store::Resolve;
 use pt_core::timeline::{Job, JobEvent};
 use serde_json::{json, Map, Value};
 
@@ -8,7 +9,7 @@ use crate::env::{Host, Row, RowExt};
 use crate::http::{self, ApiError, ApiResult, Request, Response};
 use crate::jobs::{self, Trigger};
 use crate::public::{self, job_row};
-use crate::scorer::Scorer;
+
 use crate::store::{self, Audit, User};
 use crate::util::{self, rfc3339};
 use crate::{auth, config, manual, params, sheet, webhooks};
@@ -180,13 +181,13 @@ async fn apply_edit<H: Host>(h: &H, admin: &User, row: Row, fields: &Value, reas
     let mut row = row;
     if row.s("origin") == "tracked" && row.json("detail")["sheet_base"].is_null() {
         // Scored before edits existed: score it once so the recording's sheet is stored.
-        Scorer::rescore_job(h, &job_id, Trigger::Recalculation, None).await?;
+        crate::scorer::rescore_job(h, &job_id, Trigger::Recalculation, None).await?;
         row = job_row(h, &job_id).await?;
     }
     let before = snapshot(&row);
     let (o_before, o_after) = manual::write_overrides(h, &row, fields).await?;
     let m = jobs::Moderator { discord_user_id: &admin.discord_user_id, quiet };
-    Scorer::rescore_job(h, &job_id, Trigger::Edit, Some(m)).await?;
+    crate::scorer::rescore_job(h, &job_id, Trigger::Edit, Some(m)).await?;
     let now = job_row(h, &job_id).await?;
     let (mut b, mut a) = (before, snapshot(&now));
     b["overrides"] = sheet::to_json(&serde_json::from_value(o_before).unwrap_or_default());
@@ -319,7 +320,7 @@ pub async fn recalculate_job<H: Host>(h: &H, req: &Request, raw_id: &str) -> Api
     let job_id = row.s("job_id");
     let snap = |r: &Row| json!({"outcome": r.s("outcome"), "points": r.opt_f("points"), "held_points": r.opt_f("held_points")});
     let before = snap(&row);
-    Scorer::rescore_job(h, &job_id, Trigger::Recalculation, None).await?;
+    crate::scorer::rescore_job(h, &job_id, Trigger::Recalculation, None).await?;
     let now_row = store::one(h, "SELECT * FROM jobs WHERE job_id = ?1", params![&job_id]).await?.ok_or_else(|| ApiError::not_found("job"))?;
     let after = snap(&now_row);
     store::audit(h, Audit {
@@ -352,9 +353,18 @@ fn widen(r: &mut Option<(f64, f64)>, v: Option<f64>) {
     }
 }
 
+/// Most points a view (map, graphs) holds in memory: longer jobs are thinned
+/// ([`jobs::StoredJob::thinned`]). A job driven for days has over 500k.
+pub const VIEW_POINTS: usize = 100_000;
+
+pub async fn load_stored<H: Host>(h: &H, job_id: &str) -> ApiResult<jobs::StoredJob> {
+    jobs::load_stored(h, job_id).await?.ok_or_else(|| ApiError::not_found("job data"))
+}
+
+/// A stored job for a view, thinned to [`VIEW_POINTS`].
 pub async fn load_job<H: Host>(h: &H, job_id: &str) -> ApiResult<(Job, Vec<(u32, String)>)> {
-    let blob = h.blob_get(&jobs::blob_key(job_id)).await?.ok_or_else(|| ApiError::not_found("job data"))?;
-    jobs::decode_blob(&blob)
+    let s = load_stored(h, job_id).await?;
+    Ok((s.thinned(VIEW_POINTS), s.sess_ids.clone()))
 }
 
 fn max_points(req: &Request) -> ApiResult<usize> {
@@ -367,7 +377,8 @@ fn max_points(req: &Request) -> ApiResult<usize> {
 /// The series of a job (§5). `public` (PUBLIC_API §3): no reverted windows
 /// and no review markers.
 pub async fn series_json<H: Host>(h: &H, row: &Row, max_points: usize, public: bool) -> ApiResult<Value> {
-    let (job, _) = load_job(h, &row.s("job_id")).await?;
+    let stored = load_stored(h, &row.s("job_id")).await?;
+    let job = stored.thinned(VIEW_POINTS);
     let cfg = config::scoring(h).await?.cfg;
     let limits = cfg.rules.speed.limits(job.game);
     let (Some(first), Some(last)) = (job.kept.first(), job.kept.last()) else {
@@ -446,7 +457,8 @@ pub async fn series_json<H: Host>(h: &H, row: &Row, max_points: usize, public: b
             }
         }
     }
-    let result = pt_core::rules::evaluate(&job, &cfg, &Default::default());
+    // Refuels and fuel jumps from every point, not the thinned ones.
+    let result = pt_core::rules::evaluate_in(&stored.job, &stored, &cfg, &Default::default());
     for f in &result.refuels {
         windows.push(json!({"kind": "refuel", "from": rfc3339(f.wall_ms),
             "to": rfc3339(f.wall_ms + (f.duration_s * 1000.0) as i64), "litres": r2(f.litres)}));
@@ -534,18 +546,21 @@ pub async fn trace<H: Host>(h: &H, req: &Request, raw_id: &str) -> ApiResult<Res
 /// Every raw frame of the job's sessions from accept to end, each marked
 /// `pt_status` kept / reverted / outside.
 async fn build_trace<H: Host>(h: &H, row: &Row, key: &str) -> ApiResult<(i64, i64)> {
-    let (job, sess_ids) = load_job(h, &row.s("job_id")).await?;
+    let stored = load_stored(h, &row.s("job_id")).await?;
+    let (job, sess_ids) = (&stored.job, &stored.sess_ids);
     let wall = |e: &JobEvent| serde_json::to_value(e).ok().and_then(|v| v["wall_ms"].as_i64()).unwrap_or(0);
     let start = job.events.first().map(wall).unwrap_or(0);
     let end = job.events.last().map(wall).unwrap_or(i64::MAX);
-    let id_of = |i: u32| sess_ids.iter().find(|(x, _)| *x == i).map(|(_, s)| s.clone()).unwrap_or_default();
-    let kept: std::collections::HashSet<(String, u64)> = job.kept.iter().map(|p| (id_of(p.sess), p.seq)).collect();
-    let reverted: std::collections::HashSet<(String, u64)> =
-        job.reverted.iter().flat_map(|b| b.points.iter()).map(|p| (id_of(p.sess), p.seq)).collect();
+    // Every point, by session index: one String per point would not fit for
+    // a long job.
+    let kept: std::collections::HashSet<(u32, u64)> = stored.iter(&job.kept).map(|p| (p.sess, p.seq)).collect();
+    let reverted: std::collections::HashSet<(u32, u64)> =
+        job.reverted.iter().flat_map(|b| stored.iter(&b.points)).map(|p| (p.sess, p.seq)).collect();
+    let idx_of = |s: &str| sess_ids.iter().find(|(_, x)| x == s).map(|(i, _)| *i);
     let user_id = row.s("user_id");
     let mut out = Vec::new();
     let mut frames = 0i64;
-    for (_, sess) in &sess_ids {
+    for (_, sess) in sess_ids.iter() {
         let chunks = h
             .all("SELECT r2_key FROM raw_chunks WHERE user_id = ?1 AND sess = ?2 ORDER BY chunk_no", params![&user_id, sess])
             .await?;
@@ -558,7 +573,7 @@ async fn build_trace<H: Host>(h: &H, row: &Row, key: &str) -> ApiResult<(i64, i6
                 if w < start || w > end {
                     continue;
                 }
-                let k = (sess.clone(), v["seq"].as_u64().unwrap_or(0));
+                let k = (idx_of(sess).unwrap_or(u32::MAX), v["seq"].as_u64().unwrap_or(0));
                 v["pt_status"] = if kept.contains(&k) {
                     "kept"
                 } else if reverted.contains(&k) {

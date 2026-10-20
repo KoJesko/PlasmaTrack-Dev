@@ -231,7 +231,7 @@ fn scenario(t: &TestHost) -> (Vec<(Call, Value)>, BTreeMap<String, Value>) {
     }
     let uid = t.q(&format!("SELECT user_id FROM users WHERE discord_user_id = '{p}'"))[0]["user_id"].as_str().unwrap().to_string();
     for g in [Game::Ats, Game::Ets2] {
-        let mut s = pt_server::scorer::Scorer::new(&uid, g);
+        let mut s = t.scorer(&uid, g);
         block_on(s.process(t)).unwrap();
     }
     // A player whose install matches no release (job.discarded), and one who
@@ -244,7 +244,7 @@ fn scenario(t: &TestHost) -> (Vec<(Call, Value)>, BTreeMap<String, Value>) {
     upload(t, &fast, &synthetic_job("0123456789abcdef0123456789abcdef", 160.0, 120.0), 5000);
     for d in ["345678901234567890", "456789012345678901"] {
         let id = t.q(&format!("SELECT user_id FROM users WHERE discord_user_id = '{d}'"))[0]["user_id"].as_str().unwrap().to_string();
-        block_on(pt_server::scorer::Scorer::new(&id, Game::Ats).process(t)).unwrap();
+        block_on(t.scorer(&id, Game::Ats).process(t)).unwrap();
     }
     let job = |sql: &str| t.q(sql)[0]["job_id"].as_str().unwrap().to_string();
     let valid = job("SELECT job_id FROM jobs WHERE game = 'ats' AND outcome = 'valid'");

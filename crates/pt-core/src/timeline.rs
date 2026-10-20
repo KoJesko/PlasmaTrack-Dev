@@ -214,7 +214,7 @@ impl<P> Job<P> {
     }
 
     /// The same job with its points held some other way.
-    fn with_points<Q>(&self, kept: Q, reverted: Vec<Branch<Q>>) -> Job<Q> {
+    pub fn with_points<Q>(&self, kept: Q, reverted: Vec<Branch<Q>>) -> Job<Q> {
         Job {
             id: self.id,
             game: self.game,
@@ -1073,6 +1073,21 @@ impl<S: PointStore> Profiles<S> {
     /// Where the jobs' points are.
     pub fn store(&self) -> &S {
         &self.store
+    }
+
+    pub fn store_mut(&mut self) -> &mut S {
+        &mut self.store
+    }
+
+    /// Jobs evicted since the last call, their points still in the store:
+    /// [`Profiles::release`] each once it is stored elsewhere.
+    pub fn take_evicted_live(&mut self) -> Vec<Job<TrackId>> {
+        self.timelines.iter_mut().flat_map(|(_, t)| t.take_evicted()).collect()
+    }
+
+    /// Frees the tracks of a job that left the timelines.
+    pub fn release(&mut self, job: &Job<TrackId>) {
+        job.release(&mut self.store);
     }
 
     fn timeline(&mut self, key: &str) -> &mut Timeline {

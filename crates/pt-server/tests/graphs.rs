@@ -67,7 +67,7 @@ fn leaderboards_rank_by_any_metric() {
     let other = link_other(&t, "555", "Short Hauler");
     upload(&t, &other, &synthetic_job("0123456789abcdef0123456789abcdef", 50.0, 400.0), 5000);
     let id = t.q("SELECT user_id FROM users WHERE discord_user_id = '555'")[0]["user_id"].as_str().unwrap().to_string();
-    common::block_on(pt_server::scorer::Scorer::new(&id, pt_core::Game::Ats).process(&t)).unwrap();
+    common::block_on(t.scorer(&id, pt_core::Game::Ats).process(&t)).unwrap();
     let board = |q: &str| {
         let v = get(&t, &format!("/api/v1/public/ats/leaderboard?{q}")).body_json();
         let names: Vec<String> = v["items"].as_array().unwrap().iter().map(|i| i["display_name"].as_str().unwrap().to_string()).collect();

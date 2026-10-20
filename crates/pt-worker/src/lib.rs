@@ -12,7 +12,7 @@ use std::time::Duration;
 
 use futures_util::future::{select, Either};
 use pt_core::Game;
-use pt_server::env::{Host, HostError, HostResult, Row, Settings, Stmt, P};
+use pt_server::env::{Host, HostError, HostResult, LocalSql, Row, Settings, SqlVal, Stmt, P};
 use pt_server::http;
 use pt_server::scorer::Scorer;
 use pt_server::webhooks::Delivery;
@@ -22,8 +22,8 @@ use worker::wasm_bindgen::JsValue;
 use worker::*;
 
 const WEBHOOK_TIMEOUT: Duration = Duration::from_secs(10);
-/// The scorer saves its snapshot this long after the last upload.
-const SNAPSHOT_IDLE_MS: i64 = 60_000;
+/// A pass that failed (R2, D1) is tried again this soon.
+const RETRY_MS: i64 = 60_000;
 /// When a pass left chunks (`Report::more`), the next starts this soon, as a
 /// new invocation with its own limits.
 const NEXT_PASS_MS: i64 = 1_000;
@@ -346,24 +346,70 @@ async fn scheduled(event: ScheduledEvent, env: Env, _ctx: ScheduleContext) {
     }
 }
 
+/// The object's own SQLite storage, where the scorer keeps its points and
+/// state (pt_server::points).
+#[derive(Clone)]
+struct ObjectSql(SqlStorage);
+
+impl LocalSql for ObjectSql {
+    fn exec(&self, sql: &str, params: &[SqlVal]) -> HostResult<Vec<Vec<SqlVal>>> {
+        let sql = sql.trim();
+        if sql.is_empty() {
+            return Ok(Vec::new());
+        }
+        let bindings: Vec<SqlStorageValue> = params
+            .iter()
+            .map(|p| match p {
+                SqlVal::Null => SqlStorageValue::Null,
+                SqlVal::Int(i) => SqlStorageValue::Integer(*i),
+                SqlVal::Real(f) => SqlStorageValue::Float(*f),
+                SqlVal::Text(s) => SqlStorageValue::String(s.clone()),
+                SqlVal::Blob(b) => SqlStorageValue::Blob(b.clone()),
+            })
+            .collect();
+        let cursor = self.0.exec(sql, bindings).map_err(host_err)?;
+        let mut rows = Vec::new();
+        for row in cursor.raw() {
+            let row = row.map_err(host_err)?;
+            rows.push(
+                row.into_iter()
+                    .map(|v| match v {
+                        SqlStorageValue::Null => SqlVal::Null,
+                        SqlStorageValue::Boolean(b) => SqlVal::Int(b as i64),
+                        SqlStorageValue::Integer(i) => SqlVal::Int(i),
+                        SqlStorageValue::Float(f) => SqlVal::Real(f),
+                        SqlStorageValue::String(s) => SqlVal::Text(s),
+                        SqlStorageValue::Blob(b) => SqlVal::Blob(b),
+                    })
+                    .collect(),
+            );
+        }
+        Ok(rows)
+    }
+}
+
 /// One per (player, game): runs that player's timeline (pt_server::scorer).
 /// Requests are processed one at a time; a poke during a run makes the run
-/// go round once more instead of overlapping it.
+/// go round once more instead of overlapping it. Everything the scorer needs
+/// to continue is committed to the object's SQLite after every chunk, so
+/// nothing has to be saved when the object goes idle.
 #[durable_object]
 pub struct ScorerObject {
     state: State,
     env: Env,
-    scorer: RefCell<Option<Scorer>>,
+    scorer: RefCell<Option<Scorer<ObjectSql>>>,
     busy: Cell<bool>,
     again: Cell<bool>,
     /// The last pass left chunks for the next one.
     more: Cell<bool>,
+    /// (user, game) of this object, from its first request; the alarm needs it.
+    who: RefCell<Option<(String, Game)>>,
 }
 
 impl ScorerObject {
     /// Processes until no poke arrived during the last run, or until a pass
     /// leaves chunks for the next invocation.
-    async fn drain(&self, host: &CfHost, scorer: &mut Scorer) -> pt_server::http::ApiResult<pt_server::scorer::Report> {
+    async fn drain(&self, host: &CfHost, scorer: &mut Scorer<ObjectSql>) -> pt_server::http::ApiResult<pt_server::scorer::Report> {
         loop {
             self.again.set(false);
             let r = scorer.process(host).await;
@@ -377,7 +423,15 @@ impl ScorerObject {
 
 impl DurableObject for ScorerObject {
     fn new(state: State, env: Env) -> Self {
-        ScorerObject { state, env, scorer: RefCell::new(None), busy: Cell::new(false), again: Cell::new(false), more: Cell::new(false) }
+        ScorerObject {
+            state,
+            env,
+            scorer: RefCell::new(None),
+            busy: Cell::new(false),
+            again: Cell::new(false),
+            more: Cell::new(false),
+            who: RefCell::new(None),
+        }
     }
 
     async fn fetch(&self, req: Request) -> Result<Response> {
@@ -385,6 +439,11 @@ impl DurableObject for ScorerObject {
         let q: Vec<(String, String)> = url.query_pairs().map(|(k, v)| (k.into_owned(), v.into_owned())).collect();
         let get = |k: &str| q.iter().find(|(x, _)| x == k).map(|(_, v)| v.clone()).unwrap_or_default();
         let (user, game) = (get("user"), Game::from_api(&get("game")).ok_or_else(|| Error::RustError("bad game".into()))?);
+        if self.who.borrow().as_ref() != Some(&(user.clone(), game)) {
+            // Kept in storage too: an alarm can wake an evicted object.
+            self.state.storage().put("who", (user.clone(), game.as_str().to_string())).await?;
+            *self.who.borrow_mut() = Some((user.clone(), game));
+        }
         if self.busy.get() {
             // The running pass (or the alarm) goes round once more.
             self.again.set(true);
@@ -393,18 +452,19 @@ impl DurableObject for ScorerObject {
         self.busy.set(true);
         let host = CfHost::new(self.env.clone(), None);
         let taken = self.scorer.borrow_mut().take();
-        let mut scorer = taken.unwrap_or_else(|| Scorer::new(&user, game));
+        let mut scorer = taken.unwrap_or_else(|| Scorer::new(&user, game, ObjectSql(self.state.storage().sql())));
         let result = self.drain(&host, &mut scorer).await;
-        let dirty = scorer.needs_save();
+        let (in_memory, on_disk) = scorer.footprint();
         *self.scorer.borrow_mut() = Some(scorer);
         self.busy.set(false);
-        if self.more.get() {
-            self.state.storage().set_alarm(NEXT_PASS_MS).await?;
-        } else if dirty {
-            self.state.storage().set_alarm(SNAPSHOT_IDLE_MS).await?;
+        if self.more.get() || result.is_err() {
+            // More chunks, or a failure (R2, D1): try again soon.
+            let delay = if self.more.get() { NEXT_PASS_MS } else { RETRY_MS };
+            self.state.storage().set_alarm(delay).await?;
         }
         match result {
-            Ok(r) => Response::from_json(&json!({"chunks": r.chunks, "frames": r.frames, "jobs_stored": r.jobs_stored, "rebuilt": r.rebuilt})),
+            Ok(r) => Response::from_json(&json!({"chunks": r.chunks, "frames": r.frames, "jobs_stored": r.jobs_stored, "rebuilt": r.rebuilt,
+                "points_in_memory": in_memory, "point_bytes_on_disk": on_disk})),
             Err(e) => {
                 console_error!("scorer {user}: {}", e.message);
                 Response::error(e.message, e.status)
@@ -412,36 +472,48 @@ impl DurableObject for ScorerObject {
         }
     }
 
-    /// A minute after the last upload: write the snapshot to R2 (and first
-    /// process a poke that arrived meanwhile).
+    /// The next pass of a long catch-up, or a retry after a failure.
     async fn alarm(&self) -> Result<Response> {
         if self.busy.get() {
-            self.state.storage().set_alarm(SNAPSHOT_IDLE_MS).await?;
+            self.state.storage().set_alarm(NEXT_PASS_MS).await?;
             return Response::ok("busy");
         }
+        let known = self.who.borrow().clone();
+        let who = match known {
+            Some(w) => Some(w),
+            None => self
+                .state
+                .storage()
+                .get::<(String, String)>("who")
+                .await
+                .ok()
+                .flatten()
+                .and_then(|(u, g)| Game::from_api(&g).map(|g| (u, g))),
+        };
+        let Some((user, game)) = who else { return Response::ok("idle") };
+        *self.who.borrow_mut() = Some((user.clone(), game));
         let taken = self.scorer.borrow_mut().take();
-        let Some(mut scorer) = taken else { return Response::ok("idle") };
+        let mut scorer = taken.unwrap_or_else(|| Scorer::new(&user, game, ObjectSql(self.state.storage().sql())));
         self.busy.set(true);
         let host = CfHost::new(self.env.clone(), None);
-        let mut outcome = scorer.save(&host).await;
-        if outcome.is_ok() && (self.again.get() || self.more.get()) {
-            outcome = self.drain(&host, &mut scorer).await.map(|_| ());
-            if outcome.is_ok() {
-                outcome = scorer.save(&host).await;
-            }
-        }
-        if outcome.is_ok() && self.more.get() {
-            *self.scorer.borrow_mut() = Some(scorer);
-            self.busy.set(false);
-            self.state.storage().set_alarm(NEXT_PASS_MS).await?;
-            return Response::ok("more");
-        }
+        let outcome = self.drain(&host, &mut scorer).await;
+        let (in_memory, on_disk) = scorer.footprint();
         *self.scorer.borrow_mut() = Some(scorer);
         self.busy.set(false);
-        if let Err(e) = outcome {
-            console_error!("snapshot: {}", e.message);
-            self.state.storage().set_alarm(SNAPSHOT_IDLE_MS).await?;
+        match outcome {
+            Ok(r) => {
+                console_log!("scorer {user}: {} chunks, {} jobs stored, {in_memory} points in memory, {on_disk} bytes on disk", r.chunks, r.jobs_stored);
+                if self.more.get() {
+                    self.state.storage().set_alarm(NEXT_PASS_MS).await?;
+                    return Response::ok("more");
+                }
+                Response::ok("done")
+            }
+            Err(e) => {
+                console_error!("scorer {user}: {}", e.message);
+                self.state.storage().set_alarm(RETRY_MS).await?;
+                Response::ok("retry")
+            }
         }
-        Response::ok("saved")
     }
 }

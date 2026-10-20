@@ -12,6 +12,7 @@ pub mod jobs;
 pub mod sheet;
 pub mod manual;
 pub mod webhooks;
+pub mod points;
 pub mod scorer;
 pub mod admin;
 pub mod manage;

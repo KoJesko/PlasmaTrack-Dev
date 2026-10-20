@@ -161,9 +161,155 @@ impl<S: PointStore + ?Sized> Resolve<TrackId> for S {
     }
 }
 
+/// Points as compact bytes (a stored block or segment). Every field round-trips
+/// bit for bit, so scores from decoded points are the same.
+pub fn encode_points(points: &[Point]) -> Vec<u8> {
+    let mut out = Vec::with_capacity(5 + points.len() * 96);
+    out.push(CODEC_VERSION);
+    out.extend_from_slice(&(points.len() as u32).to_le_bytes());
+    for p in points {
+        let flags: u16 = (p.odometer_km.is_some() as u16)
+            | (p.fuel_l.is_some() as u16) << 1
+            | (p.pos.is_some() as u16) << 2
+            | (p.game_time_min.is_some() as u16) << 3
+            | (p.cargo_loaded as u16) << 4
+            | (p.trailer_connected as u16) << 5
+            | (p.truckersmp as u16) << 6
+            | (p.after_teleport as u16) << 7
+            | (p.cargo_damage.is_some() as u16) << 8;
+        out.extend_from_slice(&flags.to_le_bytes());
+        out.extend_from_slice(&p.sess.to_le_bytes());
+        out.extend_from_slice(&p.seq.to_le_bytes());
+        out.extend_from_slice(&p.wall_ms.to_le_bytes());
+        out.extend_from_slice(&p.sim_us.to_le_bytes());
+        out.extend_from_slice(&p.run.to_le_bytes());
+        out.extend_from_slice(&p.speed_mps.to_le_bytes());
+        for v in [p.odometer_km, p.fuel_l].into_iter().flatten() {
+            out.extend_from_slice(&v.to_le_bytes());
+        }
+        for v in p.pos.iter().flatten() {
+            out.extend_from_slice(&v.to_le_bytes());
+        }
+        if let Some(t) = p.game_time_min {
+            out.extend_from_slice(&t.to_le_bytes());
+        }
+        out.extend_from_slice(&p.local_scale.to_le_bytes());
+        out.extend_from_slice(&p.truck.to_le_bytes());
+        out.extend_from_slice(&p.mp_time_offset.to_le_bytes());
+        if let Some(d) = p.cargo_damage {
+            out.extend_from_slice(&d.to_le_bytes());
+        }
+    }
+    out
+}
+
+const CODEC_VERSION: u8 = 1;
+
+pub fn decode_points(bytes: &[u8]) -> Result<Vec<Point>, String> {
+    struct R<'a>(&'a [u8]);
+    impl R<'_> {
+        fn take<const N: usize>(&mut self) -> Result<[u8; N], String> {
+            if self.0.len() < N {
+                return Err("truncated point data".into());
+            }
+            let (a, b) = self.0.split_at(N);
+            self.0 = b;
+            Ok(a.try_into().expect("length checked"))
+        }
+        fn u16(&mut self) -> Result<u16, String> {
+            self.take().map(u16::from_le_bytes)
+        }
+        fn u32(&mut self) -> Result<u32, String> {
+            self.take().map(u32::from_le_bytes)
+        }
+        fn u64(&mut self) -> Result<u64, String> {
+            self.take().map(u64::from_le_bytes)
+        }
+        fn i64(&mut self) -> Result<i64, String> {
+            self.take().map(i64::from_le_bytes)
+        }
+        fn f64(&mut self) -> Result<f64, String> {
+            self.take().map(f64::from_le_bytes)
+        }
+    }
+    let mut r = R(bytes);
+    let [version] = r.take()?;
+    if version != CODEC_VERSION {
+        return Err(format!("point data version {version}"));
+    }
+    let n = r.u32()? as usize;
+    let mut out = Vec::with_capacity(n.min(1 << 20));
+    for _ in 0..n {
+        let flags = r.u16()?;
+        let bit = |k: u16| flags & (1 << k) != 0;
+        let sess = r.u32()?;
+        let seq = r.u64()?;
+        let wall_ms = r.i64()?;
+        let sim_us = r.u64()?;
+        let run = r.u32()?;
+        let speed_mps = r.f64()?;
+        let odometer_km = if bit(0) { Some(r.f64()?) } else { None };
+        let fuel_l = if bit(1) { Some(r.f64()?) } else { None };
+        let pos = if bit(2) { Some([r.f64()?, r.f64()?, r.f64()?]) } else { None };
+        let game_time_min = if bit(3) { Some(r.u32()?) } else { None };
+        let local_scale = r.f64()?;
+        let truck = r.u32()?;
+        let mp_time_offset = r.i64()?;
+        let cargo_damage = if bit(8) { Some(r.f64()?) } else { None };
+        out.push(Point {
+            sess,
+            seq,
+            wall_ms,
+            sim_us,
+            run,
+            speed_mps,
+            odometer_km,
+            fuel_l,
+            pos,
+            game_time_min,
+            local_scale,
+            cargo_loaded: bit(4),
+            trailer_connected: bit(5),
+            truck,
+            mp_time_offset,
+            truckersmp: bit(6),
+            after_teleport: bit(7),
+            cargo_damage,
+        });
+    }
+    if !r.0.is_empty() {
+        return Err("trailing bytes after point data".into());
+    }
+    Ok(out)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn point_codec_round_trips_every_field() {
+        let mut a = pt(7);
+        a.sess = 3;
+        a.wall_ms = -12;
+        a.odometer_km = Some(1234.5678);
+        a.fuel_l = Some(f64::MIN_POSITIVE);
+        a.game_time_min = Some(u32::MAX);
+        a.cargo_loaded = true;
+        a.truckersmp = true;
+        a.after_teleport = true;
+        a.cargo_damage = Some(0.125);
+        a.speed_mps = -0.0;
+        a.mp_time_offset = i64::MIN;
+        let mut b = pt(8);
+        b.pos = None;
+        b.trailer_connected = false;
+        let pts = vec![a, b];
+        let back = decode_points(&encode_points(&pts)).unwrap();
+        assert_eq!(back, pts);
+        assert_eq!(back[0].speed_mps.to_bits(), (-0.0f64).to_bits());
+        assert!(decode_points(&encode_points(&pts)[..20]).is_err());
+    }
 
     fn pt(seq: u64) -> Point {
         Point {
