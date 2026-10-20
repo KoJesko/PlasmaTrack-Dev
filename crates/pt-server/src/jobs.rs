@@ -180,21 +180,35 @@ impl<'a> Thinner<'a> {
 /// A stored job for a view (map, graphs), thinned to about `max` points while
 /// its segments are read one at a time: memory stays near one segment plus
 /// the points kept, however long the job.
+///
+/// The thinned job is kept as one object next to the data (written with it,
+/// and here when missing), so a view is normally a single read: reading every
+/// segment of a long job took longer than the bot waits (2026-10-20).
 pub async fn load_view<H: Host>(h: &H, job_id: &str, max: usize) -> ApiResult<Option<(Job, Vec<(u32, String)>)>> {
     let Some(z) = h.blob_get(&meta_key(job_id)).await? else {
         // Before 2026-10-20: one blob, small enough to read whole.
         return Ok(load_stored(h, job_id).await?.map(|s| (s.thinned(max), s.sess_ids.clone())));
     };
     let m: Meta = util::gunzip_json(&z).map_err(|e| ApiError::internal(&e))?;
+    let key = view_key(job_id, &z, max);
+    if let Some(v) = h.blob_get(&key).await? {
+        if let Ok(view) = util::gunzip_json::<View>(&v) {
+            return Ok(Some((view.job, m.sess_ids)));
+        }
+    }
     let (k, keep) = thinning(&m.job, max);
     let mut lists: Vec<Vec<Point>> = Vec::new();
     for s in std::iter::once(&m.job.kept).chain(m.job.reverted.iter().map(|b| &b.points)) {
         let mut t = Thinner::new(k, s.n, &keep);
-        for id in &s.ids {
-            let data = h.blob_get(&seg_key(job_id, id)).await?.ok_or_else(|| ApiError::internal("missing job data segment"))?;
-            let raw = util::gunzip(&data, usize::MAX).map_err(|e| ApiError::internal(&e.to_string()))?;
-            drop(data);
-            decode_points(&raw).map_err(|e| ApiError::internal(&e))?.into_iter().for_each(|p| t.push(p));
+        // Several reads at a time; each batch is decoded and dropped.
+        for batch in s.ids.chunks(VIEW_READS_AT_ONCE) {
+            let keys: Vec<String> = batch.iter().map(|id| seg_key(job_id, id)).collect();
+            let reads = futures_util::future::join_all(keys.iter().map(|k| h.blob_get(k))).await;
+            for data in reads {
+                let data = data?.ok_or_else(|| ApiError::internal("missing job data segment"))?;
+                let raw = util::gunzip(&data, usize::MAX).map_err(|e| ApiError::internal(&e.to_string()))?;
+                decode_points(&raw).map_err(|e| ApiError::internal(&e))?.into_iter().for_each(|p| t.push(p));
+            }
         }
         lists.push(t.out);
     }
@@ -206,8 +220,62 @@ pub async fn load_view<H: Host>(h: &H, job_id: &str, max: usize) -> ApiResult<Op
         .iter()
         .map(|b| Branch { fork_seq: b.fork_seq, points: lists.next().unwrap_or_default(), reverted_at_wall_ms: b.reverted_at_wall_ms })
         .collect();
-    Ok(Some((m.job.with_points(kept, reverted), m.sess_ids)))
+    let job = m.job.with_points(kept, reverted);
+    if let Ok(z) = util::gzip_json(&View { job: job.clone() }) {
+        h.blob_put(&key, z).await?;
+    }
+    Ok(Some((job, m.sess_ids)))
 }
+
+/// Segment reads in flight at once when a view is built from the data.
+const VIEW_READS_AT_ONCE: usize = 16;
+
+/// A job thinned for views, stored next to its data.
+#[derive(Serialize, Deserialize)]
+struct View {
+    job: Job,
+}
+
+/// Named after the stored description (`meta_z`, its gzip bytes as stored), so
+/// a job stored again gets a new view and an old one is never served.
+fn view_key(job_id: &str, meta_z: &[u8], max: usize) -> String {
+    let mut bytes = meta_z.to_vec();
+    bytes.extend_from_slice(format!("|{max}").as_bytes());
+    format!("jobs/{job_id}/view-{}.json.gz", &util::sha256_hex(&bytes)[..16])
+}
+
+/// Writes the view of freshly stored data (`meta_z`: its description as it
+/// will be stored), so the first map is quick too.
+async fn write_view<H: Host, P, R: Resolve<P> + ?Sized>(
+    h: &H,
+    job_id: &str,
+    meta_z: &[u8],
+    stored: &Job<Segs>,
+    job: &Job<P>,
+    pts: &R,
+    max: usize,
+) -> ApiResult<String> {
+    let (k, keep) = thinning(stored, max);
+    let thin = |track: &P, n: usize| -> Vec<Point> {
+        let mut t = Thinner::new(k, n, &keep);
+        pts.iter(track).for_each(|p| t.push(p));
+        t.out
+    };
+    let kept = thin(&job.kept, stored.kept.n);
+    let reverted = job
+        .reverted
+        .iter()
+        .zip(&stored.reverted)
+        .map(|(b, s)| Branch { fork_seq: b.fork_seq, points: thin(&b.points, s.points.n), reverted_at_wall_ms: b.reverted_at_wall_ms })
+        .collect();
+    let key = view_key(job_id, meta_z, max);
+    let z = util::gzip_json(&View { job: stored.with_points(kept, reverted) }).map_err(|e| ApiError::internal(&e))?;
+    h.blob_put(&key, z).await?;
+    Ok(key)
+}
+
+/// Points a stored view holds (`admin::VIEW_POINTS` uses the same).
+pub const VIEW_POINTS: usize = 20_000;
 
 /// Is there stored data for this job (either format)?
 pub async fn has_job_data<H: Host>(h: &H, job_id: &str) -> ApiResult<bool> {
@@ -228,10 +296,12 @@ pub async fn write_job_data<H: Host, P, R: Resolve<P> + ?Sized>(
     pts: &R,
     sess_ids: &[(u32, String)],
 ) -> ApiResult<()> {
-    let old: HashSet<String> = match h.blob_get(&meta_key(job_id)).await? {
-        Some(z) => util::gunzip_json::<Meta>(&z).map(|m| seg_ids(&m.job).cloned().collect()).unwrap_or_default(),
+    let old_meta = h.blob_get(&meta_key(job_id)).await?;
+    let old: HashSet<String> = match &old_meta {
+        Some(z) => util::gunzip_json::<Meta>(z).map(|m| seg_ids(&m.job).cloned().collect()).unwrap_or_default(),
         None => HashSet::new(),
     };
+    let old_view = old_meta.as_deref().map(|z| view_key(job_id, z, VIEW_POINTS));
     let mut written: HashSet<String> = HashSet::new();
     let mut lists: Vec<Segs> = Vec::new();
     for track in std::iter::once(&job.kept).chain(job.reverted.iter().map(|b| &b.points)) {
@@ -263,8 +333,12 @@ pub async fn write_job_data<H: Host, P, R: Resolve<P> + ?Sized>(
     let mut stored = job.with_points(kept, reverted);
     stored.offloaded = false;
     stored.offloaded_invalid = false;
-    let meta = util::gzip_json(&Meta { job: stored, sess_ids: sess_ids.to_vec() }).map_err(|e| ApiError::internal(&e))?;
+    let meta = util::gzip_json(&Meta { job: stored.clone(), sess_ids: sess_ids.to_vec() }).map_err(|e| ApiError::internal(&e))?;
+    let view = write_view(h, job_id, &meta, &stored, job, pts, VIEW_POINTS).await?;
     h.blob_put(&meta_key(job_id), meta).await?;
+    if let Some(old_view) = old_view.filter(|k| *k != view) {
+        h.blob_delete(&old_view).await?;
+    }
     for sid in old.difference(&written) {
         h.blob_delete(&seg_key(job_id, sid)).await?;
     }

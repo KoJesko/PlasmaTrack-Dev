@@ -356,7 +356,7 @@ fn widen(r: &mut Option<(f64, f64)>, v: Option<f64>) {
 /// Most points a view (map, graphs) holds in memory: longer jobs are thinned
 /// while read ([`jobs::load_view`]). A job driven for days has over 700k; the
 /// map draws at most 5,000 vertices and the graphs 4,000 buckets.
-pub const VIEW_POINTS: usize = 20_000;
+pub const VIEW_POINTS: usize = jobs::VIEW_POINTS;
 
 pub async fn load_stored<H: Host>(h: &H, job_id: &str) -> ApiResult<jobs::StoredJob> {
     jobs::load_stored(h, job_id).await?.ok_or_else(|| ApiError::not_found("job data"))

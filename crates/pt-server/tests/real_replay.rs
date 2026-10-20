@@ -153,6 +153,15 @@ fn a_players_real_data_scores_within_a_durable_objects_memory() {
     // The views of every stored job: map (public and admin) and graphs, timed.
     for j in t.q("SELECT job_id FROM jobs") {
         let id = j["job_id"].as_str().unwrap();
+        // The view was stored with the data; one rebuilt from the segments
+        // (a job stored before views existed) gives the same map.
+        let views: Vec<String> = t.blobs.borrow().keys().filter(|k| k.starts_with(&format!("jobs/{id}/view-"))).cloned().collect();
+        assert_eq!(views.len(), 1, "{views:?}");
+        let cached = t.call(t.bot("GET", &format!("/api/v1/public/jobs/{id}/route"))).body;
+        t.blobs.borrow_mut().remove(&views[0]);
+        let rebuilt = t.call(t.bot("GET", &format!("/api/v1/public/jobs/{id}/route"))).body;
+        assert_eq!(cached, rebuilt, "map from the stored view vs rebuilt");
+        assert!(t.blobs.borrow().contains_key(&views[0]), "the rebuilt view is stored again");
         for path in [format!("/api/v1/public/jobs/{id}/route"), format!("/api/v1/admin/jobs/{id}/route"), format!("/api/v1/admin/jobs/{id}/series")] {
             let req = if path.contains("/admin/") { t.admin("GET", &path) } else { t.bot("GET", &path) };
             PEAK.store(CURRENT.load(Ordering::Relaxed), Ordering::Relaxed);
