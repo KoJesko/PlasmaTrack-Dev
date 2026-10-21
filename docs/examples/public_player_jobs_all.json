@@ -97,7 +97,8 @@
         "company_id": "polarislines",
         "company_name": "Polaris Lines"
       },
-      "fuel_used_l": 0.0,
+      "fuel_readable": false,
+      "fuel_used_l": null,
       "game": "ets2",
       "game_km": 2512.0,
       "game_mi": 1560.88,

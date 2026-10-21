@@ -67,9 +67,10 @@
   "evidence": [],
   "fuel": {
     "refuels": [],
-    "used_l": 0.0
+    "used_l": null
   },
-  "fuel_used_l": 0.0,
+  "fuel_readable": false,
+  "fuel_used_l": null,
   "game": "ets2",
   "game_km": 2512.0,
   "game_mi": 1560.88,
@@ -208,7 +209,7 @@
     "distance_km": 2512.0,
     "distance_mi": 1560.88,
     "ended_at": "2026-10-14T01:03:43.006Z",
-    "fuel_used_l": 0.0,
+    "fuel_used_l": null,
     "map_scale": null,
     "mods": [],
     "profit": 99053,

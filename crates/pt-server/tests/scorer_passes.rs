@@ -119,3 +119,38 @@ fn a_new_scorer_format_wakes_every_scorer_once() {
     let pokes: Vec<_> = t.ops_queued.borrow().iter().filter(|m| m["kind"] == "poke_all").cloned().collect();
     assert_eq!(pokes.len(), 1, "{pokes:?}");
 }
+
+/// Fuel save-edited far past full (the owner's Actros: 600 L × 99,999) reads
+/// 59,999,400 L and never visibly drops: no fuel used is shown, and the job
+/// says its fuel could not be read. A normal job is unchanged.
+#[test]
+fn fuel_edited_past_any_tank_shows_no_fuel_used() {
+    let t = TestHost::new();
+    publish(&t);
+    let token = link(&t);
+    let lines: Vec<String> = synthetic_job("0123456789abcdef0123456789abcdef", 50.0, 60.0)
+        .into_iter()
+        .map(|l| l.replace("\"truck.fuel.amount\":500.0", "\"truck.fuel.amount\":59999400.0"))
+        .collect();
+    assert!(lines.iter().any(|l| l.contains("59999400")), "the fixture's fuel was replaced");
+    upload(&t, &token, &lines, 200);
+    score(&t, pt_core::Game::Ats);
+    let summary = &t.q("SELECT summary FROM jobs")[0]["summary"];
+    let s: serde_json::Value = serde_json::from_str(summary.as_str().unwrap()).unwrap();
+    assert_eq!(s["fuel_used_l"], serde_json::Value::Null);
+    assert_eq!(s["fuel_readable"], false);
+    let id = t.q("SELECT job_id FROM jobs")[0]["job_id"].as_str().unwrap().to_string();
+    let api = t.call(t.bot("GET", &format!("/api/v1/public/jobs/{id}"))).body_json();
+    assert_eq!((api["fuel_used_l"].clone(), api["fuel_readable"].clone()), (serde_json::Value::Null, serde_json::Value::Bool(false)));
+
+    let d = TestHost::new();
+    publish(&d);
+    let token = link(&d);
+    upload(&d, &token, &synthetic_job("0123456789abcdef0123456789abcdef", 50.0, 60.0), 200);
+    score(&d, pt_core::Game::Ats);
+    let s: serde_json::Value = serde_json::from_str(d.q("SELECT summary FROM jobs")[0]["summary"].as_str().unwrap()).unwrap();
+    assert!(s["fuel_used_l"].is_number());
+    let id = d.q("SELECT job_id FROM jobs")[0]["job_id"].as_str().unwrap().to_string();
+    assert!(d.call(d.bot("GET", &format!("/api/v1/public/jobs/{id}"))).body_json().get("fuel_readable").is_none());
+    assert!(s.get("fuel_readable").is_none());
+}
