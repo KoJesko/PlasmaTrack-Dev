@@ -1,0 +1,469 @@
+/* "Greek Question Mark or ;" */
+
+:root {
+  /* System UI fonts draw U+037E and U+003B with the same glyph. */
+  --font-ui: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue",
+    Arial, "Noto Sans", sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono",
+    "DejaVu Sans Mono", monospace;
+  --font-glyph: var(--font-ui);
+
+  --bg: #f6f7f9;
+  --surface: #ffffff;
+  --text: #16181d;
+  --muted: #5b6270;
+  --border: #d5d9e0;
+  --accent: #2448c8;
+  --accent-text: #ffffff;
+  --focus: #e0a100;
+  --good: #146c2e;
+  --good-bg: #e6f4ea;
+  --bad: #b3261e;
+  --bad-bg: #fbe9e7;
+  --target: #2448c8;
+  --target-bg: rgba(36, 72, 200, 0.08);
+  --error-bg: #b3261e;
+  --error-text: #ffffff;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #111318;
+    --surface: #1b1e25;
+    --text: #e8eaef;
+    --muted: #a0a7b4;
+    --border: #353a45;
+    --accent: #8aa4ff;
+    --accent-text: #0d1020;
+    --focus: #ffcc4d;
+    --good: #7fd49a;
+    --good-bg: #16301f;
+    --bad: #ff9a90;
+    --bad-bg: #3a1a17;
+    --target: #8aa4ff;
+    --target-bg: rgba(138, 164, 255, 0.12);
+  }
+}
+
+body.hard {
+  --font-glyph: var(--font-mono);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: 1rem;
+  line-height: 1.5;
+}
+
+.app {
+  max-width: 44rem;
+  margin: 0 auto;
+  padding: 1.5rem 1rem 3rem;
+}
+
+.screen {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1.5rem;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+h1,
+h2 {
+  margin: 0 0 0.75rem;
+  line-height: 1.2;
+}
+
+h1 {
+  font-size: clamp(1.6rem, 6vw, 2.4rem);
+}
+
+.title-glyph {
+  font-family: var(--font-glyph);
+}
+
+.lede {
+  color: var(--muted);
+  margin: 0 0 1.25rem;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Self-check target: in the DOM and rendered, but out of sight. */
+.selfcheck {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  font-family: var(--font-glyph);
+}
+
+/* ---- Controls ---- */
+
+.options {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  margin: 0 0 1rem;
+  padding: 0.5rem 1rem 0.75rem;
+}
+
+.options legend {
+  font-weight: 600;
+  padding: 0 0.25rem;
+}
+
+.radio,
+.check {
+  display: flex;
+  gap: 0.6rem;
+  align-items: flex-start;
+  padding: 0.35rem 0;
+  cursor: pointer;
+}
+
+.radio input,
+.check input {
+  margin: 0.3rem 0 0;
+  width: 1.1rem;
+  height: 1.1rem;
+  flex: none;
+  accent-color: var(--accent);
+}
+
+.best {
+  color: var(--muted);
+  margin: 0 0 1rem;
+}
+
+.btn {
+  font: inherit;
+  color: var(--text);
+  background: var(--surface);
+  border: 2px solid var(--border);
+  border-radius: 8px;
+  padding: 0.65rem 1.25rem;
+  cursor: pointer;
+  min-height: 44px;
+}
+
+.btn:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+.btn:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.btn-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-text);
+  font-weight: 600;
+}
+
+:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 3px;
+}
+
+h2[tabindex="-1"]:focus {
+  outline: none;
+}
+
+h2[tabindex="-1"]:focus-visible {
+  outline: 3px solid var(--focus);
+}
+
+kbd {
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  padding: 0 0.3em;
+}
+
+/* ---- Question ---- */
+
+.play-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.5rem 1rem;
+  margin-bottom: 1rem;
+}
+
+.progress {
+  font-size: 1.25rem;
+  margin: 0;
+}
+
+.play-mode {
+  color: var(--muted);
+}
+
+.running-score {
+  margin-left: auto;
+  font-weight: 600;
+}
+
+.stage {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: clamp(10rem, 40vw, 18rem);
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+  padding: 1rem;
+  font-family: var(--font-glyph);
+  overflow-wrap: anywhere;
+}
+
+/* Normal text selection stays on: copying the glyph into a hex viewer is allowed. */
+.glyph {
+  font-size: clamp(7rem, 32vw, 14rem);
+  line-height: 1;
+}
+
+.snippet {
+  font-family: var(--font-glyph);
+  font-size: clamp(1.4rem, 5.5vw, 2.4rem);
+  line-height: 1.6;
+  margin: 0;
+  text-align: center;
+}
+
+.target {
+  display: inline-block;
+  min-width: 0.9em;
+  padding: 0 0.15em;
+  margin: 0 0.05em;
+  border: 2px solid var(--target);
+  border-radius: 6px;
+  background: var(--target-bg);
+  line-height: 1.2;
+  text-align: center;
+}
+
+.debug-cp {
+  display: none;
+  margin: 0.5rem 0 0;
+  text-align: center;
+  font-family: var(--font-mono);
+  color: var(--muted);
+}
+
+body.debug .debug-cp {
+  display: block;
+}
+
+.answers {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+  margin: 1.25rem 0 0;
+}
+
+.answer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.15rem;
+  padding: 0.9rem 0.75rem;
+}
+
+.answer-name {
+  font-weight: 600;
+}
+
+.answer-cp {
+  font-family: var(--font-mono);
+  color: var(--muted);
+}
+
+.answer-key {
+  margin-top: 0.25rem;
+}
+
+.answer.chosen {
+  border-color: var(--accent);
+  opacity: 1;
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.answer.chosen .answer-name::before {
+  content: "Your pick: ";
+  font-weight: 400;
+}
+
+.feedback {
+  margin-top: 1.25rem;
+  border-radius: 8px;
+  padding: 0.9rem 1rem;
+  border: 2px solid;
+}
+
+.feedback.is-correct {
+  color: var(--good);
+  background: var(--good-bg);
+  border-color: var(--good);
+}
+
+.feedback.is-wrong {
+  color: var(--bad);
+  background: var(--bad-bg);
+  border-color: var(--bad);
+}
+
+.verdict {
+  font-size: 1.35rem;
+  font-weight: 700;
+  margin: 0 0 0.5rem;
+}
+
+.verdict-icon {
+  margin-right: 0.35rem;
+}
+
+.facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  gap: 0.5rem 1rem;
+  margin: 0;
+  color: var(--text);
+}
+
+.facts dt {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.facts dd {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-weight: 600;
+}
+
+.next {
+  margin-top: 1rem;
+  width: 100%;
+}
+
+.hint {
+  margin: 1rem 0 0;
+  font-size: 0.875rem;
+  color: var(--muted);
+}
+
+/* ---- End ---- */
+
+.final-score {
+  font-size: clamp(2.5rem, 12vw, 4rem);
+  font-weight: 700;
+  margin: 0;
+  line-height: 1.1;
+}
+
+.breakdown {
+  list-style: none;
+  margin: 1rem 0 1.5rem;
+  padding: 0;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.breakdown li {
+  border: 1px solid var(--border);
+  border-left-width: 6px;
+  border-radius: 8px;
+  padding: 0.6rem 0.8rem;
+}
+
+.breakdown li.is-correct {
+  border-left-color: var(--good);
+}
+
+.breakdown li.is-wrong {
+  border-left-color: var(--bad);
+}
+
+.bd-head {
+  display: flex;
+  gap: 0.5rem;
+  align-items: baseline;
+  font-weight: 600;
+}
+
+.is-correct .bd-icon,
+.is-correct .bd-verdict {
+  color: var(--good);
+}
+
+.is-wrong .bd-icon,
+.is-wrong .bd-verdict {
+  color: var(--bad);
+}
+
+.bd-detail {
+  margin: 0.2rem 0 0;
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
+.bd-snippet {
+  font-size: 1.1rem;
+  text-align: left;
+  margin-top: 0.3rem;
+}
+
+.end-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+/* ---- Error banner ---- */
+
+.error-banner {
+  background: var(--error-bg);
+  color: var(--error-text);
+  padding: 0.75rem 1rem;
+  text-align: center;
+}
+
+@media (max-width: 420px) {
+  .screen {
+    padding: 1rem;
+  }
+
+  .answers {
+    grid-template-columns: 1fr;
+  }
+}

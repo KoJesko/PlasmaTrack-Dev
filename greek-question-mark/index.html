@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!-- The semicolon in the title is the character reference &#59;, never a
+       pasted glyph. The game's own characters come from game.js at runtime. -->
+  <title>Greek Question Mark or &#59;</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="errorBanner" class="error-banner" role="alert" hidden>
+    <strong>Error:</strong> <span id="errorText"></span>
+  </div>
+
+  <!-- Target for the Unicode self-check on load. -->
+  <span id="selfcheck" class="selfcheck" aria-hidden="true"></span>
+
+  <main class="app">
+    <!-- Start -->
+    <section id="startScreen" class="screen start" aria-labelledby="title">
+      <h1 id="title">Greek Question Mark or <span class="title-glyph">&#59;</span></h1>
+      <p class="lede">
+        U+037E GREEK QUESTION MARK and U+003B SEMICOLON look identical in most
+        fonts. Ten characters, ten guesses: which one is it?
+      </p>
+
+      <fieldset class="options">
+        <legend>Mode</legend>
+        <label class="radio">
+          <input type="radio" name="mode" value="bare" checked>
+          <span><strong>Bare</strong>: just the character</span>
+        </label>
+        <label class="radio">
+          <input type="radio" name="mode" value="context">
+          <span><strong>In context</strong>: the character inside a line of code or a sentence</span>
+        </label>
+      </fieldset>
+
+      <fieldset class="options">
+        <legend>Options</legend>
+        <label class="check">
+          <input type="checkbox" id="hardToggle">
+          <span><strong>Hard mode</strong>: force a monospace font</span>
+        </label>
+        <label class="check">
+          <input type="checkbox" id="debugToggle">
+          <span><strong>Debug</strong>: show the code point under the glyph (round won't count as best)</span>
+        </label>
+      </fieldset>
+
+      <p id="bestScore" class="best"></p>
+      <button type="button" id="playBtn" class="btn btn-primary">Play</button>
+    </section>
+
+    <!-- Question -->
+    <section id="playScreen" class="screen play" aria-labelledby="progress" hidden>
+      <div class="play-bar">
+        <h2 id="progress" class="progress" tabindex="-1">
+          <span id="progressText"></span><span id="stageLabel" class="sr-only"></span>
+        </h2>
+        <span id="playMode" class="play-mode"></span>
+        <span id="runningScore" class="running-score"></span>
+      </div>
+
+      <!-- Hidden from screen readers: both characters can be announced with
+           telling names, so the glyph would spoil the answer. -->
+      <div id="stage" class="stage" aria-hidden="true"></div>
+      <p id="debugCp" class="debug-cp"></p>
+
+      <div class="answers" role="group" aria-label="Your answer">
+        <button type="button" id="answerGreek" class="btn answer">
+          <span class="answer-name">Greek Question Mark</span>
+          <span class="answer-cp">U+037E</span>
+          <kbd class="answer-key">1 / ←</kbd>
+        </button>
+        <button type="button" id="answerSemi" class="btn answer">
+          <span class="answer-name">Semicolon</span>
+          <span class="answer-cp">U+003B</span>
+          <kbd class="answer-key">2 / →</kbd>
+        </button>
+      </div>
+
+      <div id="feedbackLive" class="sr-only" aria-live="polite" aria-atomic="true"></div>
+
+      <div id="feedback" class="feedback" hidden>
+        <p class="verdict">
+          <span id="verdictIcon" class="verdict-icon" aria-hidden="true"></span>
+          <span id="verdictText"></span>
+        </p>
+        <dl class="facts">
+          <div><dt>Code point</dt><dd id="factCp"></dd></div>
+          <div><dt>Unicode name</dt><dd id="factName"></dd></div>
+          <div><dt>UTF-8 bytes</dt><dd id="factBytes"></dd></div>
+          <div><dt>You said</dt><dd id="factGuess"></dd></div>
+        </dl>
+      </div>
+      <button type="button" id="nextBtn" class="btn btn-primary next" hidden>Next</button>
+      <p class="hint">Keys: <kbd>1</kbd> or <kbd>←</kbd> Greek Question Mark, <kbd>2</kbd> or <kbd>→</kbd> Semicolon, <kbd>Enter</kbd> next.</p>
+    </section>
+
+    <!-- End of round -->
+    <section id="endScreen" class="screen end" aria-labelledby="endHeading" hidden>
+      <h2 id="endHeading" tabindex="-1">Round over</h2>
+      <p class="final-score"><span class="sr-only">Score: </span><span id="finalScore"></span></p>
+      <p id="finalBest" class="best"></p>
+      <ol id="breakdown" class="breakdown"></ol>
+      <div class="end-actions">
+        <button type="button" id="againBtn" class="btn btn-primary">Play again</button>
+        <button type="button" id="menuBtn" class="btn">Change mode</button>
+      </div>
+    </section>
+  </main>
+
+  <script src="snippets.js"></script>
+  <script src="game.js"></script>
+</body>
+</html>
