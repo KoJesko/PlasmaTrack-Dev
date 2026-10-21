@@ -119,3 +119,38 @@ fn a_new_scorer_format_wakes_every_scorer_once() {
     let pokes: Vec<_> = t.ops_queued.borrow().iter().filter(|m| m["kind"] == "poke_all").cloned().collect();
     assert_eq!(pokes.len(), 1, "{pokes:?}");
 }
+
+/// Without simulated fuel (an electric truck, a fuel-off server) the game
+/// reports one fixed, impossible amount (59,999,400 L): no fuel used, and the
+/// job says fuel was not simulated. A normal job is unchanged.
+#[test]
+fn a_job_without_simulated_fuel_has_no_fuel_used() {
+    let t = TestHost::new();
+    publish(&t);
+    let token = link(&t);
+    let lines: Vec<String> = synthetic_job("0123456789abcdef0123456789abcdef", 50.0, 60.0)
+        .into_iter()
+        .map(|l| l.replace("\"truck.fuel.amount\":500.0", "\"truck.fuel.amount\":59999400.0"))
+        .collect();
+    assert!(lines.iter().any(|l| l.contains("59999400")), "the fixture's fuel was replaced");
+    upload(&t, &token, &lines, 200);
+    score(&t, pt_core::Game::Ats);
+    let summary = &t.q("SELECT summary FROM jobs")[0]["summary"];
+    let s: serde_json::Value = serde_json::from_str(summary.as_str().unwrap()).unwrap();
+    assert_eq!(s["fuel_used_l"], serde_json::Value::Null);
+    assert_eq!(s["fuel_simulated"], false);
+    let id = t.q("SELECT job_id FROM jobs")[0]["job_id"].as_str().unwrap().to_string();
+    let api = t.call(t.bot("GET", &format!("/api/v1/public/jobs/{id}"))).body_json();
+    assert_eq!((api["fuel_used_l"].clone(), api["fuel_simulated"].clone()), (serde_json::Value::Null, serde_json::Value::Bool(false)));
+
+    let d = TestHost::new();
+    publish(&d);
+    let token = link(&d);
+    upload(&d, &token, &synthetic_job("0123456789abcdef0123456789abcdef", 50.0, 60.0), 200);
+    score(&d, pt_core::Game::Ats);
+    let s: serde_json::Value = serde_json::from_str(d.q("SELECT summary FROM jobs")[0]["summary"].as_str().unwrap()).unwrap();
+    assert!(s["fuel_used_l"].is_number());
+    let id = d.q("SELECT job_id FROM jobs")[0]["job_id"].as_str().unwrap().to_string();
+    assert!(d.call(d.bot("GET", &format!("/api/v1/public/jobs/{id}"))).body_json().get("fuel_simulated").is_none());
+    assert!(s.get("fuel_simulated").is_none());
+}

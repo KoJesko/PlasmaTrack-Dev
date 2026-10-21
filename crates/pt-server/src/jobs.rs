@@ -681,9 +681,37 @@ fn place(city_id: &str, city: &str, company_id: &str, company: &str) -> Value {
     json!({"city_id": city_id, "city_name": city, "company_id": company_id, "company_name": company})
 }
 
-/// Fuel used: every drop between neighbouring points of one run, except
-/// across a teleport (rules: fuel changes there are ignored).
-fn fuel_used<P, R: Resolve<P> + ?Sized>(job: &Job<P>, pts: &R) -> f64 {
+/// A fuel reading above this is no tank: the largest real ones hold about
+/// 1,500 L. When fuel is not simulated the game reports one fixed, far larger
+/// value, 59,999,400 L: on the owner's Volvo FH Electric (2026-10-21, 800 L
+/// tank in its config; the SDK has no channel for an electric truck's battery)
+/// and on a diesel Actros on a TruckersMP server with fuel off (2026-10-13).
+const NO_TANK_OVER_L: f64 = 100_000.0;
+
+/// Fuel was not simulated (an electric truck, or fuel turned off): the job has
+/// fuel readings and every one is beyond any real tank.
+pub fn fuel_not_simulated<P, R: Resolve<P> + ?Sized>(job: &Job<P>, pts: &R) -> bool {
+    let mut any = false;
+    for f in pts.iter(&job.kept).filter_map(|p| p.fuel_l) {
+        if f <= NO_TANK_OVER_L {
+            return false;
+        }
+        any = true;
+    }
+    any
+}
+
+/// Fuel used, or `None` when fuel was not simulated (nothing to measure): every drop
+/// between neighbouring points of one run, except across a teleport (rules:
+/// fuel changes there are ignored).
+fn fuel_used<P, R: Resolve<P> + ?Sized>(job: &Job<P>, pts: &R) -> Option<f64> {
+    if fuel_not_simulated(job, pts) {
+        return None;
+    }
+    Some(fuel_used_l(job, pts))
+}
+
+fn fuel_used_l<P, R: Resolve<P> + ?Sized>(job: &Job<P>, pts: &R) -> f64 {
     let mut prev: Option<Point> = None;
     pts.iter(&job.kept)
         .filter_map(|b| {
@@ -743,7 +771,7 @@ fn build<P, R: Resolve<P> + ?Sized>(
     };
     let discarded = r.outcome == Outcome::Discarded;
     let (world_km, game_km) = if discarded { (0.0, 0.0) } else { (d.world_km, d.counted_game_km) };
-    let summary = json!({
+    let mut summary = json!({
         "cargo": {"id": job.first_info.fingerprint.cargo.cargo_id, "name": job.first_info.cargo_name},
         "source": place(&route.source_city, &names.source_city, &route.source_company, &names.source_company),
         "destination": place(&route.destination_city, &names.destination_city, &route.destination_company, &names.destination_company),
@@ -756,11 +784,15 @@ fn build<P, R: Resolve<P> + ?Sized>(
         "bonus": bonus,
         "distance_by_scale_class": by_class,
         "multiplayer": multiplayer,
-        "fuel_used_l": round2(fuel),
+        "fuel_used_l": fuel.map(round2),
         "damage_pct": job.delivered.as_ref().and_then(|x| x.cargo_damage).map(|d| round2(d * 100.0)),
         "income": job.delivered.as_ref().and_then(|x| x.revenue),
         "currency": currency(job.game),
     });
+    if fuel.is_none() {
+        // Only on such jobs, so other jobs' stored summaries stay the same.
+        summary["fuel_simulated"] = false.into();
+    }
 
     // Reasons: review reasons, then invalid and discard.
     let mut reasons: Vec<Value> = r.review.iter().map(|x| reason(x.code(), review_details(x, job, cfg))).collect();
@@ -831,7 +863,7 @@ fn build<P, R: Resolve<P> + ?Sized>(
         "speed": {"peak_mph": round2(r.speed.peak_mph), "over_penalty_s": round2(r.speed.over_penalty_s),
                   "over_invalid_s": round2(r.speed.over_invalid_s),
                   "penalty_over_mph": limits.penalty_over_mph, "invalid_over_mph": limits.invalid_over_mph},
-        "fuel": {"used_l": round2(fuel), "refuels": refuels},
+        "fuel": {"used_l": fuel.map(round2), "refuels": refuels},
         "rules": rules,
         "integrity": integ,
         "segments": segments,
@@ -843,7 +875,7 @@ fn build<P, R: Resolve<P> + ?Sized>(
 
 /// What the recording says, as a sheet (ADMIN_API §14): the base that a
 /// moderator's overrides apply to.
-fn tracked_sheet<P>(job: &Job<P>, fuel: f64, r: &JobResult, started: i64) -> Map<String, Value> {
+fn tracked_sheet<P>(job: &Job<P>, fuel: Option<f64>, r: &JobResult, started: i64) -> Map<String, Value> {
     let n = &job.info.names;
     let mut m = Map::new();
     m.insert("distance_km".into(), json!(r.distances.counted_game_km));
@@ -1337,6 +1369,11 @@ pub fn summary_json(row: &Row) -> Value {
     out.insert("multiplayer".into(), o.remove("multiplayer").unwrap_or(Value::Null));
     for k in ["fuel_used_l", "damage_pct", "income"] {
         out.insert(k.into(), o.remove(k).unwrap_or(Value::Null));
+    }
+    // Only when false: fuel was not simulated (an electric truck, fuel off),
+    // so `fuel_used_l` is null for that reason rather than unknown.
+    if o.remove("fuel_simulated") == Some(Value::Bool(false)) {
+        out.insert("fuel_simulated".into(), false.into());
     }
     let game = pt_core::Game::from_api(&row.s("game")).unwrap_or(pt_core::Game::Ets2);
     out.insert("currency".into(), o.remove("currency").unwrap_or_else(|| currency(game).into()));

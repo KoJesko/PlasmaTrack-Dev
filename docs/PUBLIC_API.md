@@ -149,7 +149,11 @@ comma-separated outcomes. Each item is a **job summary**:
 **Fuel, damage and income** (public, like distance and points; owner, 2026-10-15). Each is
 `null` when unknown:
 
-- **`fuel_used_l`:** litres used on the job; the bot converts to gallons for ATS.
+- **`fuel_used_l`:** litres used on the job; the bot converts to gallons for ATS. `null` when
+  unknown (manual jobs), or when the game did not simulate fuel: an electric truck, or fuel
+  turned off (some TruckersMP servers). The game then reports one fixed amount beyond any tank
+  (59,999,400 L), and the job also has **`fuel_simulated: false`** (absent otherwise). The
+  telemetry SDK has no channel for an electric truck's battery, so there is no kWh figure.
 - **`damage_pct`:** **cargo** damage at delivery, 0–100. The tracker doesn't record truck wear, so
   a manual job's `damage` means cargo damage too.
 - **`income`:** whole units of `currency` (`EUR` for ETS2, `USD` for ATS).

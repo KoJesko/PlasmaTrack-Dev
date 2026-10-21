@@ -1008,10 +1008,16 @@
                       "refuels":
                         "type": "array"
                       "used_l":
-                        "type": "number"
+                        "type":
+                        - "null"
+                        - "number"
                     "type": "object"
+                  "fuel_simulated":
+                    "type": "boolean"
                   "fuel_used_l":
-                    "type": "number"
+                    "type":
+                    - "null"
+                    - "number"
                   "game":
                     "type": "string"
                   "game_km":
@@ -1216,7 +1222,9 @@
                         "format": "date-time"
                         "type": "string"
                       "fuel_used_l":
-                        "type": "number"
+                        "type":
+                        - "null"
+                        - "number"
                       "map_scale":
                         "type":
                         - "null"
@@ -4062,8 +4070,12 @@
                             "type": "number"
                         "type": "object"
                     "type": "object"
+                  "fuel_simulated":
+                    "type": "boolean"
                   "fuel_used_l":
-                    "type": "number"
+                    "type":
+                    - "number"
+                    - "null"
                   "game":
                     "type": "string"
                   "game_km":
@@ -4653,8 +4665,12 @@
                             "company_name":
                               "type": "string"
                           "type": "object"
+                        "fuel_simulated":
+                          "type": "boolean"
                         "fuel_used_l":
-                          "type": "number"
+                          "type":
+                          - "number"
+                          - "null"
                         "game":
                           "type": "string"
                         "game_km":
@@ -5066,8 +5082,12 @@
                             "company_name":
                               "type": "string"
                           "type": "object"
+                        "fuel_simulated":
+                          "type": "boolean"
                         "fuel_used_l":
-                          "type": "number"
+                          "type":
+                          - "number"
+                          - "null"
                         "game":
                           "type": "string"
                         "game_km":

@@ -46,7 +46,8 @@
       "world_mi": 0.0
     }
   },
-  "fuel_used_l": 0.0,
+  "fuel_simulated": false,
+  "fuel_used_l": null,
   "game": "ets2",
   "game_km": 2512.0,
   "game_mi": 1560.88,
