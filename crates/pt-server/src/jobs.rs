@@ -682,15 +682,15 @@ fn place(city_id: &str, city: &str, company_id: &str, company: &str) -> Value {
 }
 
 /// A fuel reading above this is no tank: the largest real ones hold about
-/// 1,500 L. When fuel is not simulated the game reports one fixed, far larger
-/// value, 59,999,400 L: on the owner's Volvo FH Electric (2026-10-21, 800 L
-/// tank in its config; the SDK has no channel for an electric truck's battery)
-/// and on a diesel Actros on a TruckersMP server with fuel off (2026-10-13).
+/// 1,500 L. A save edit can set the fill (`fuel_relative`) far past full: the
+/// owner's Actros read 59,999,400 L, its 600 L tank × 99,999 (2026-10-13 and
+/// 2026-10-21). The SDK sends fuel as a 32-bit float, which at that size moves
+/// in 4 L steps, so the truck burns fuel the readings never show.
 const NO_TANK_OVER_L: f64 = 100_000.0;
 
-/// Fuel was not simulated (an electric truck, or fuel turned off): the job has
-/// fuel readings and every one is beyond any real tank.
-pub fn fuel_not_simulated<P, R: Resolve<P> + ?Sized>(job: &Job<P>, pts: &R) -> bool {
+/// The fuel used cannot be read: the job has fuel readings and every one is
+/// beyond any real tank.
+pub fn fuel_unreadable<P, R: Resolve<P> + ?Sized>(job: &Job<P>, pts: &R) -> bool {
     let mut any = false;
     for f in pts.iter(&job.kept).filter_map(|p| p.fuel_l) {
         if f <= NO_TANK_OVER_L {
@@ -701,11 +701,11 @@ pub fn fuel_not_simulated<P, R: Resolve<P> + ?Sized>(job: &Job<P>, pts: &R) -> b
     any
 }
 
-/// Fuel used, or `None` when fuel was not simulated (nothing to measure): every drop
+/// Fuel used, or `None` when it cannot be read ([`fuel_unreadable`]): every drop
 /// between neighbouring points of one run, except across a teleport (rules:
 /// fuel changes there are ignored).
 fn fuel_used<P, R: Resolve<P> + ?Sized>(job: &Job<P>, pts: &R) -> Option<f64> {
-    if fuel_not_simulated(job, pts) {
+    if fuel_unreadable(job, pts) {
         return None;
     }
     Some(fuel_used_l(job, pts))
@@ -791,7 +791,7 @@ fn build<P, R: Resolve<P> + ?Sized>(
     });
     if fuel.is_none() {
         // Only on such jobs, so other jobs' stored summaries stay the same.
-        summary["fuel_simulated"] = false.into();
+        summary["fuel_readable"] = false.into();
     }
 
     // Reasons: review reasons, then invalid and discard.
@@ -1370,10 +1370,10 @@ pub fn summary_json(row: &Row) -> Value {
     for k in ["fuel_used_l", "damage_pct", "income"] {
         out.insert(k.into(), o.remove(k).unwrap_or(Value::Null));
     }
-    // Only when false: fuel was not simulated (an electric truck, fuel off),
+    // Only when false: the fuel readings were beyond any tank (a save edit),
     // so `fuel_used_l` is null for that reason rather than unknown.
-    if o.remove("fuel_simulated") == Some(Value::Bool(false)) {
-        out.insert("fuel_simulated".into(), false.into());
+    if o.remove("fuel_readable") == Some(Value::Bool(false)) {
+        out.insert("fuel_readable".into(), false.into());
     }
     let game = pt_core::Game::from_api(&row.s("game")).unwrap_or(pt_core::Game::Ets2);
     out.insert("currency".into(), o.remove("currency").unwrap_or_else(|| currency(game).into()));

@@ -69,7 +69,7 @@
     "refuels": [],
     "used_l": null
   },
-  "fuel_simulated": false,
+  "fuel_readable": false,
   "fuel_used_l": null,
   "game": "ets2",
   "game_km": 2512.0,

@@ -1012,7 +1012,7 @@
                         - "null"
                         - "number"
                     "type": "object"
-                  "fuel_simulated":
+                  "fuel_readable":
                     "type": "boolean"
                   "fuel_used_l":
                     "type":
@@ -4070,7 +4070,7 @@
                             "type": "number"
                         "type": "object"
                     "type": "object"
-                  "fuel_simulated":
+                  "fuel_readable":
                     "type": "boolean"
                   "fuel_used_l":
                     "type":
@@ -4665,7 +4665,7 @@
                             "company_name":
                               "type": "string"
                           "type": "object"
-                        "fuel_simulated":
+                        "fuel_readable":
                           "type": "boolean"
                         "fuel_used_l":
                           "type":
@@ -5082,7 +5082,7 @@
                             "company_name":
                               "type": "string"
                           "type": "object"
-                        "fuel_simulated":
+                        "fuel_readable":
                           "type": "boolean"
                         "fuel_used_l":
                           "type":
