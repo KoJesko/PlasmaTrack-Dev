@@ -103,6 +103,7 @@ fn pt(i: u64) -> Point {
         truck: (i / 5000) as u32,
         mp_time_offset: 0,
         truckersmp: false,
+        mp_mod: if i % 7 == 0 { Some("haulmp".into()) } else { None },
         after_teleport: i % 1000 == 0,
         cargo_damage: None,
     }

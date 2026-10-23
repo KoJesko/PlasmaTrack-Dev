@@ -7,17 +7,21 @@
 use std::path::Path;
 
 use pt_core::job::JobType;
-use pt_core::rules::{Context, Outcome, ReviewReason};
+use pt_core::rules::{Context, DiscardReason, Outcome, ReviewReason};
+use pt_core::Config;
 use pt_core::timeline::{GapKind, JobEvent, JobState, StartKind};
 use pt_replay::{order_sessions, parse_lines, read_lines, replay, sample_config, Replayed};
 
 fn run(name: &str) -> Vec<Replayed> {
+    run_with(name, &sample_config(), &Context::default())
+}
+
+fn run_with(name: &str, cfg: &Config, ctx: &Context) -> Vec<Replayed> {
     let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/real").join(name);
-    let cfg = sample_config();
-    let (mut frames, bad) = parse_lines(&read_lines(&path).expect("fixture"), &cfg);
+    let (mut frames, bad) = parse_lines(&read_lines(&path).expect("fixture"), cfg);
     assert_eq!(bad, 0);
     order_sessions(&mut frames);
-    replay(&frames, &cfg, &Context::default())
+    replay(&frames, cfg, ctx)
 }
 
 fn find<'a>(jobs: &'a [Replayed], cargo: &str) -> &'a Replayed {
@@ -196,6 +200,76 @@ fn ets2_convoy_with_a_quick_job() {
     assert!(r.result.convoy && !r.result.truckersmp, "multiplayer.time.offset 3..5, no TruckersMP");
     assert!(r.job.events.iter().all(|e| !matches!(e, JobEvent::LoadTruncate { .. } | JobEvent::LoadGap { .. })), "hosting is not a load");
     assert_eq!(r.result.outcome, Outcome::Incomplete);
+}
+
+/// The owner's first HaulMP job (ETS2 1.61.1.9s, HaulMP v814, Traffic server,
+/// 2026-10-22): Dover → Groningen across three game sessions, with the Dover →
+/// Calais ferry. HaulMP keeps `multiplayer.time.offset` at 0 and runs the game
+/// clock at `local.scale`, so only its module names (kept by redaction as
+/// `mod_matches`) tell it from singleplayer.
+#[test]
+fn ets2_haulmp_job_across_sessions() {
+    let name = "ets2-haulmp-ferry-three-sessions.jsonl.gz";
+    let jobs = run(name);
+    assert_eq!(jobs.len(), 1);
+    let r = &jobs[0];
+    assert_eq!(r.job.info.fingerprint.cargo.cargo_id, "jcb_pw125qe");
+    assert_eq!((r.job.state, r.job.start), (JobState::Delivered, StartKind::Tracked));
+    let ev = &r.job.events;
+    assert_eq!(count(ev, |e| matches!(e, JobEvent::Teleport { ferry_or_train: true, .. })), 1, "the ferry");
+    assert_eq!(count(ev, |e| matches!(e, JobEvent::SessionContinue { .. })), 2, "two game restarts");
+    assert!(r.job.gaps.is_empty());
+    assert_eq!(r.result.multiplayer_mod.as_deref(), Some("haulmp"));
+    assert!(!r.result.truckersmp && !r.result.convoy);
+    assert_eq!(r.result.distances.delivered_game_km, Some(603.0));
+    assert!(close(r.result.distances.driven_counted_world_km, 36.248, 0.002));
+    assert_eq!(r.result.outcome, Outcome::Valid, "{:?}", r.result.review);
+    assert_eq!(r.result.points, 22.5);
+
+    // The Singleplayer Division discards it, as configured for HaulMP.
+    let sp = Context { singleplayer_division: true, ..Context::default() };
+    let r = &run_with(name, &sample_config(), &sp)[0];
+    assert_eq!(r.result.outcome, Outcome::Discarded);
+    assert_eq!(r.result.discard, Some(DiscardReason::SingleplayerDivisionMultiplayerMod));
+    assert_eq!(r.result.points, 0.0);
+
+    // With the toggle off it counts for them too.
+    let mut keep = sample_config();
+    keep.multiplayer.mods.iter_mut().for_each(|m| m.singleplayer_division_discard = false);
+    assert_eq!(run_with(name, &keep, &sp)[0].result.outcome, Outcome::Valid);
+
+    // A config without HaulMP sees singleplayer, as clients did before.
+    let mut none = sample_config();
+    none.multiplayer.mods.clear();
+    let r = &run_with(name, &none, &sp)[0];
+    assert_eq!(r.result.multiplayer_mod, None);
+    assert!(!r.result.truckersmp && !r.result.convoy);
+    assert_eq!(r.result.outcome, Outcome::Valid);
+}
+
+/// The owner's first TrucklineMP job (ETS2 1.61.1.9s, launcher 1.2.3,
+/// 2026-10-23): Calais → Reims, 274 km, from the client's own database (capture
+/// mode was off). The server holds the game clock at a game minute per 9 real
+/// seconds, pulling the game's own steps back a minute about 100 times.
+#[test]
+fn ets2_trucklinemp_server_clock() {
+    let name = "ets2-trucklinemp-calais-reims.jsonl.gz";
+    let jobs = run(name);
+    let r = jobs.iter().find(|r| r.job.state == JobState::Delivered).expect("delivered job");
+    assert_eq!(r.job.info.fingerprint.cargo.cargo_id, "frozen_hake");
+    assert_eq!(r.result.multiplayer_mod.as_deref(), Some("trucklinemp"));
+    assert!(!r.result.truckersmp && !r.result.convoy);
+    assert_eq!(r.result.distances.delivered_game_km, Some(274.0));
+    assert_eq!((r.result.outcome, r.result.points), (Outcome::Valid, 10.2), "{:?}", r.result.review);
+    // The pullbacks cancel: 91 game minutes at the server rate are the 13.7
+    // real minutes driven, not 191 minutes counted one step at a time.
+    let d = &r.result.distances;
+    assert_eq!(d.driven_game_min, 91.0);
+    assert!(close(d.driven_game_clock_min, d.driven_s / 60.0, 0.3), "{} vs {}", d.driven_game_clock_min, d.driven_s / 60.0);
+
+    let sp = Context { singleplayer_division: true, ..Context::default() };
+    let r = run_with(name, &sample_config(), &sp).into_iter().find(|r| r.job.state == JobState::Delivered).unwrap();
+    assert_eq!(r.result.discard, Some(DiscardReason::SingleplayerDivisionMultiplayerMod));
 }
 
 /// The server snapshots the timeline between batches (PLAN §7a): stopping

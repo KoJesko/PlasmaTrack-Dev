@@ -14,6 +14,7 @@ use axum::Router;
 use pt_client::db::Db;
 use pt_client::status::Status;
 use pt_client::uploader::UploaderConfig;
+use pt_core::config::Multiplayer;
 use pt_core::upload::{ManifestEntry, UploadAck, UploadChunk};
 use pt_core::wire::{encode_frame, FrameDecoder};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -118,7 +119,7 @@ async fn plugin_to_client_to_server() {
         batch_interval: Duration::ZERO,
         max_frames: 25,
         max_bytes: 1 << 20,
-        truckersmp_module_names: vec!["core_atsmp.dll".into()],
+        multiplayer: Multiplayer { truckersmp_module_names: vec!["core_atsmp.dll".into()], mods: vec![] },
         config_hash: cfg.integrity_hash(),
         config_canonical_json: cfg.integrity_canonical_json(),
     };
@@ -226,7 +227,7 @@ async fn uploads_are_batched_but_deliveries_go_at_once() {
         batch_interval: BATCH,
         max_frames: 5000,
         max_bytes: 4 << 20,
-        truckersmp_module_names: vec![],
+        multiplayer: Multiplayer { truckersmp_module_names: vec![], mods: vec![] },
         config_hash: cfg.integrity_hash(),
         config_canonical_json: cfg.integrity_canonical_json(),
     };

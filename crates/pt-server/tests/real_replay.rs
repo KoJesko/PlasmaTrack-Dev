@@ -187,12 +187,12 @@ fn a_players_real_data_scores_within_a_durable_objects_memory() {
 
     // The same frames with every point in memory, as the client scores them.
     let cfg = sample_config();
-    let names = cfg.multiplayer.truckersmp_module_names.clone();
+    let mp = cfg.multiplayer.clone();
     let mut client = Profiles::new(cfg.clone());
     for key in &order {
         let text = pt_server::util::gunzip(&t.blobs.borrow()[key], usize::MAX).unwrap();
         for line in text.split(|b| *b == b'\n').filter(|l| !l.is_empty()) {
-            if let Ok(f) = parse_frame(std::str::from_utf8(line).unwrap(), &names) {
+            if let Ok(f) = parse_frame(std::str::from_utf8(line).unwrap(), &mp) {
                 client.push(&f);
             }
         }

@@ -40,7 +40,7 @@ Every message except `hello` and `snapshot` carries these fields:
 | `snapshot` | `paused`, `configs` (array holding the latest `config` message per id), `last_sample` (a `sample` message or null). Sent second on every connection. Has no `seq`. |
 | `init` | `api_version` (always "1.01"), `game_id` ("eut2" or "ats"), `game_name`, `game_version` {`major`, `minor`} (the telemetry game version, not the patch level), `plugin_version`, `platform`, `sample_rate_hz`, `capture`, `channels` {name: registered}, `events_failed` (comma list) |
 | `integrity` | `plugin_path`, `plugin_sha256` (SHA-256 of the plugin file, for rule 0) |
-| `modules` | `modules`: sorted base names of every module loaded in the game process. Re-sent when the list changes (checked every 10 s). The client matches TruckersMP names from `[multiplayer]`. |
+| `modules` | `modules`: sorted base names of every module loaded in the game process. Re-sent when the list changes (checked every 10 s). The client matches TruckersMP and multiplayer-mod names from `[multiplayer]`. |
 | `config` | `id` (e.g. `job`, `truck`, `trailer.0`), `attrs` (array of attributes). An **empty** `attrs` means "none", e.g. no job (common/scssdk_telemetry_common_configs.h:125) |
 | `gameplay` | `id` (e.g. `job.delivered`; unknown ids are forwarded too), `attrs` |
 | `paused` / `started` | none (scssdk_telemetry_event.h:38-54) |

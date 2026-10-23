@@ -65,6 +65,44 @@ fn upload_score_and_read_a_real_delivery() {
     assert_eq!((b["type"].as_str(), b["data"]["job_id"].as_str(), b["data"]["by"]["kind"].as_str()), (Some("job.scored"), Some(job_id.as_str()), Some("rules")));
 }
 
+/// A HaulMP job uploaded the way the client does (module lists redacted to
+/// `mod_matches`): labelled `haulmp`, and discarded once the player is in the
+/// Singleplayer Division, because the sample config says so for HaulMP.
+#[test]
+fn haulmp_jobs_are_labelled_and_left_out_of_the_singleplayer_division() {
+    let t = TestHost::new();
+    publish(&t);
+    let token = link(&t);
+    upload(&t, &token, &fixture("ets2-haulmp-ferry-three-sessions.jsonl.gz"), 400);
+    assert_eq!(score(&t, Game::Ets2).jobs_stored, 1);
+    let job_id = t.q("SELECT job_id FROM jobs")[0]["job_id"].as_str().unwrap().to_string();
+    let path = format!("/api/v1/public/jobs/{}", job_id.to_lowercase());
+    let j = t.call(t.bot("GET", &path)).body_json();
+    assert_eq!(j["multiplayer"], json!({"kind": "haulmp", "name": "HaulMP", "truckersmp": null}), "{j}");
+    assert_eq!((j["outcome"].as_str(), j["points"].as_f64()), (Some("valid"), Some(22.5)), "{j}");
+    assert_eq!(t.q("SELECT multiplayer FROM jobs")[0]["multiplayer"], "haulmp");
+
+    // The same job by a player in the division since before it: discarded.
+    let other = "223456789012345678";
+    let token = link_other(&t, other, "Division Driver");
+    let r = t.call(t.admin("PATCH", &format!("/api/v1/admin/players/{other}")).with_json(&json!({"singleplayer_division": true, "reason": "Joins the division"})));
+    assert_eq!(r.status, 200, "{}", r.body_json());
+    t.q(&format!("UPDATE users SET division_changed_at = 0 WHERE discord_user_id = '{other}'"));
+    upload(&t, &token, &fixture("ets2-haulmp-ferry-three-sessions.jsonl.gz"), 400);
+    let uid = t.q(&format!("SELECT user_id FROM users WHERE discord_user_id = '{other}'"))[0]["user_id"].as_str().unwrap().to_string();
+    assert_eq!(block_on(t.scorer(&uid, Game::Ets2).process(&t)).unwrap().jobs_stored, 1);
+    let job_id = t.q(&format!("SELECT job_id FROM jobs WHERE user_id = '{uid}'"))[0]["job_id"].as_str().unwrap().to_string();
+    let j = t.call(t.bot("GET", &format!("/api/v1/public/jobs/{}", job_id.to_lowercase()))).body_json();
+    assert_eq!((j["outcome"].as_str(), j["points"].as_f64()), (Some("discarded"), Some(0.0)), "{j}");
+    assert_eq!(
+        j["public_notes"],
+        json!([{"code": "discarded_singleplayer_division", "text": "Discarded: a HaulMP job by a Singleplayer Division player."}])
+    );
+    let a = t.call(t.admin("GET", &format!("/api/v1/admin/jobs/{job_id}"))).body_json();
+    let reason = a["reasons"].as_array().unwrap().iter().find(|r| r["code"] == "singleplayer_division_multiplayer_mod").cloned();
+    assert_eq!(reason.map(|r| r["details"].clone()), Some(json!({"kind": "haulmp", "name": "HaulMP"})), "{a}");
+}
+
 #[test]
 fn moderators_decide_with_etags_and_idempotency() {
     let t = TestHost::new();

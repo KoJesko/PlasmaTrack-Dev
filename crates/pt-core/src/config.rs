@@ -330,6 +330,62 @@ pub struct Multiplayer {
     /// Module file names whose presence in the game process means TruckersMP.
     /// PROVISIONAL: filled in from captures (the SDK cannot identify TruckersMP).
     pub truckersmp_module_names: Vec<String>,
+    /// Other multiplayer mods, each recognised by its own module names (HaulMP,
+    /// 2026-10-22). Absent: none, and the published hash stays as before.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub mods: Vec<MultiplayerMod>,
+}
+
+impl Multiplayer {
+    /// The mod whose `kind` this is.
+    pub fn find_mod(&self, kind: &str) -> Option<&MultiplayerMod> {
+        self.mods.iter().find(|m| m.kind == kind)
+    }
+
+    /// The server clock rate of mod `kind`, if it has one.
+    pub fn mod_clock(&self, kind: Option<&str>) -> Option<f64> {
+        kind.and_then(|k| self.find_mod(k)).and_then(|m| m.game_min_per_real_min)
+    }
+
+    /// The kind of every mod one of whose module names is in `names`
+    /// (case-insensitive), in config order.
+    pub fn mods_matching(&self, names: &[&str]) -> Vec<String> {
+        self.mods
+            .iter()
+            .filter(|m| names.iter().any(|n| m.module_names.iter().any(|w| w.eq_ignore_ascii_case(n))))
+            .map(|m| m.kind.clone())
+            .collect()
+    }
+
+    /// The names in `names` that identify a mod (case-insensitive), as given.
+    pub fn mod_module_matches<'a>(&self, names: &[&'a str]) -> Vec<&'a str> {
+        names
+            .iter()
+            .copied()
+            .filter(|n| self.mods.iter().any(|m| m.module_names.iter().any(|w| w.eq_ignore_ascii_case(n))))
+            .collect()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct MultiplayerMod {
+    /// The job's `multiplayer.kind` (1-32 lowercase letters, digits, `_`).
+    pub kind: String,
+    /// Shown to players, e.g. "HaulMP".
+    pub name: String,
+    /// Any of these module file names loaded in the game process means this
+    /// mod for the rest of the session.
+    pub module_names: Vec<String>,
+    /// The server's game clock, when the mod sets one (TrucklineMP,
+    /// 2026-10-23): it replaces `local.scale` in the game-clock pace check,
+    /// and save loads are matched without the game time, as on TruckersMP.
+    /// Absent: the clock runs as in singleplayer (HaulMP).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub game_min_per_real_min: Option<f64>,
+    /// Jobs on this mod are discarded for Singleplayer Division players, the
+    /// way TruckersMP jobs always are (you, 2026-10-22).
+    pub singleplayer_division_discard: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -440,6 +496,37 @@ impl Config {
         }
         if r.refuel.min_rate_l_per_s > r.refuel.max_rate_l_per_s {
             errs.push("rules.refuel.min_rate_l_per_s must not exceed max_rate_l_per_s".into());
+        }
+        let mp = &self.multiplayer;
+        for (i, m) in mp.mods.iter().enumerate() {
+            let ok_kind = (1..=32).contains(&m.kind.len())
+                && m.kind.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_')
+                && !matches!(m.kind.as_str(), "singleplayer" | "convoy" | "truckersmp" | "unknown");
+            if !ok_kind {
+                errs.push(format!(
+                    "multiplayer.mods[{i}].kind must be 1-32 lowercase letters, digits or _, and not a built-in kind (got {:?})",
+                    m.kind
+                ));
+            }
+            if mp.mods[..i].iter().any(|o| o.kind == m.kind) {
+                errs.push(format!("multiplayer.mods: kind {:?} appears twice", m.kind));
+            }
+            if m.name.trim().is_empty() {
+                errs.push(format!("multiplayer.mods[{i}].name must not be empty"));
+            }
+            if m.module_names.is_empty() {
+                errs.push(format!("multiplayer.mods[{i}].module_names must not be empty"));
+            }
+            if let Some(rate) = m.game_min_per_real_min {
+                positive(&mut errs, &format!("multiplayer.mods[{i}].game_min_per_real_min"), rate);
+            }
+            for n in &m.module_names {
+                let elsewhere = mp.truckersmp_module_names.iter().any(|t| t.eq_ignore_ascii_case(n))
+                    || mp.mods[..i].iter().any(|o| o.module_names.iter().any(|t| t.eq_ignore_ascii_case(n)));
+                if elsewhere {
+                    errs.push(format!("multiplayer: module name {n:?} belongs to more than one kind"));
+                }
+            }
         }
         if self.local.listen_address != "127.0.0.1" && self.local.listen_address != "::1" {
             errs.push("local.listen_address must be a loopback address".into());
@@ -564,12 +651,47 @@ mod tests {
             ("odometer_jump = false", "odometer_jump = true"),
             ("sample_rate_hz = 20.0", "sample_rate_hz = 5.0"),
             ("retry_interval_wall_s = 20.0", "retry_interval_wall_s = 60.0"),
+            ("singleplayer_division_discard = true", "singleplayer_division_discard = false"),
+            ("\"haulmp-telemetry.dll\"]", "\"haulmp-telemetry.dll\", \"haulmp_extra.dll\"]"),
         ] {
             let changed = SAMPLE.replace(from, to);
             assert_ne!(changed, SAMPLE, "fixture did not apply: {from}");
             let c = Config::from_toml_str(&changed).unwrap();
             assert_ne!(c.integrity_hash(), h, "change not detected: {to}");
         }
+    }
+
+    const HAULMP: &str = "[[multiplayer.mods]]\nkind = \"haulmp\"\nname = \"HaulMP\"\nmodule_names = [\"haulmp_stub.dll\", \"haulmp-telemetry.dll\"]\nsingleplayer_division_discard = true\n";
+
+    #[test]
+    fn multiplayer_mods_are_optional_and_checked() {
+        let c = Config::from_toml_str(SAMPLE).unwrap();
+        let m = c.multiplayer.find_mod("haulmp").expect("sample lists HaulMP");
+        assert!(m.singleplayer_division_discard);
+        assert_eq!(c.multiplayer.mods_matching(&["KERNEL32.DLL", "HaulMP_Stub.dll"]), vec!["haulmp".to_string()]);
+
+        // Without mods the canonical JSON has no `mods` key, so configs
+        // published before mods existed keep their hash.
+        assert!(SAMPLE.contains(HAULMP), "sample's HaulMP block changed; update HAULMP");
+        let from = SAMPLE.find("# HaulMP (ETS2)").expect("first mod block");
+        let to = from + SAMPLE[from..].find("# ----").expect("next section");
+        let without = Config::from_toml_str(&format!("{}{}", &SAMPLE[..from], &SAMPLE[to..])).unwrap();
+        assert!(without.multiplayer.mods.is_empty());
+        assert!(!without.integrity_canonical_json().contains("\"mods\""));
+
+        for (from, to) in [
+            ("kind = \"haulmp\"", "kind = \"convoy\""),
+            ("kind = \"haulmp\"", "kind = \"HaulMP\""),
+            ("kind = \"haulmp\"", "kind = \"\""),
+            ("name = \"HaulMP\"", "name = \" \""),
+            ("[\"haulmp_stub.dll\", \"haulmp-telemetry.dll\"]", "[]"),
+            ("[\"haulmp_stub.dll\", \"haulmp-telemetry.dll\"]", "[\"Core_ETS2MP.dll\"]"),
+        ] {
+            let bad = SAMPLE.replace(HAULMP, &HAULMP.replace(from, to));
+            assert!(matches!(Config::from_toml_str(&bad), Err(ConfigError::Invalid(_))), "accepted: {to}");
+        }
+        let twice = SAMPLE.replace(HAULMP, &format!("{HAULMP}{}", HAULMP.replace("haulmp_stub", "other")));
+        assert!(matches!(Config::from_toml_str(&twice), Err(ConfigError::Invalid(_))), "duplicate kind accepted");
     }
 
     #[test]

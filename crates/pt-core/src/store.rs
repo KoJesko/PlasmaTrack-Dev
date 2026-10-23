@@ -176,7 +176,8 @@ pub fn encode_points(points: &[Point]) -> Vec<u8> {
             | (p.trailer_connected as u16) << 5
             | (p.truckersmp as u16) << 6
             | (p.after_teleport as u16) << 7
-            | (p.cargo_damage.is_some() as u16) << 8;
+            | (p.cargo_damage.is_some() as u16) << 8
+            | (p.mp_mod.is_some() as u16) << 9;
         out.extend_from_slice(&flags.to_le_bytes());
         out.extend_from_slice(&p.sess.to_le_bytes());
         out.extend_from_slice(&p.seq.to_le_bytes());
@@ -199,6 +200,12 @@ pub fn encode_points(points: &[Point]) -> Vec<u8> {
         if let Some(d) = p.cargo_damage {
             out.extend_from_slice(&d.to_le_bytes());
         }
+        if let Some(k) = &p.mp_mod {
+            // Config validation keeps kinds to 32 ASCII bytes.
+            let b = &k.as_bytes()[..k.len().min(255)];
+            out.push(b.len() as u8);
+            out.extend_from_slice(b);
+        }
     }
     out
 }
@@ -207,14 +214,17 @@ const CODEC_VERSION: u8 = 1;
 
 pub fn decode_points(bytes: &[u8]) -> Result<Vec<Point>, String> {
     struct R<'a>(&'a [u8]);
-    impl R<'_> {
-        fn take<const N: usize>(&mut self) -> Result<[u8; N], String> {
-            if self.0.len() < N {
+    impl<'a> R<'a> {
+        fn bytes(&mut self, n: usize) -> Result<&'a [u8], String> {
+            if self.0.len() < n {
                 return Err("truncated point data".into());
             }
-            let (a, b) = self.0.split_at(N);
+            let (a, b) = self.0.split_at(n);
             self.0 = b;
-            Ok(a.try_into().expect("length checked"))
+            Ok(a)
+        }
+        fn take<const N: usize>(&mut self) -> Result<[u8; N], String> {
+            self.bytes(N).map(|a| a.try_into().expect("length checked"))
         }
         fn u16(&mut self) -> Result<u16, String> {
             self.take().map(u16::from_le_bytes)
@@ -256,6 +266,13 @@ pub fn decode_points(bytes: &[u8]) -> Result<Vec<Point>, String> {
         let truck = r.u32()?;
         let mp_time_offset = r.i64()?;
         let cargo_damage = if bit(8) { Some(r.f64()?) } else { None };
+        let mp_mod = if bit(9) {
+            let [n] = r.take()?;
+            let kind = r.bytes(n as usize)?.to_vec();
+            Some(String::from_utf8(kind).map_err(|_| "mod kind is not UTF-8".to_string())?)
+        } else {
+            None
+        };
         out.push(Point {
             sess,
             seq,
@@ -273,6 +290,7 @@ pub fn decode_points(bytes: &[u8]) -> Result<Vec<Point>, String> {
             truck,
             mp_time_offset,
             truckersmp: bit(6),
+            mp_mod,
             after_teleport: bit(7),
             cargo_damage,
         });
@@ -299,6 +317,7 @@ mod tests {
         a.truckersmp = true;
         a.after_teleport = true;
         a.cargo_damage = Some(0.125);
+        a.mp_mod = Some("haulmp".into());
         a.speed_mps = -0.0;
         a.mp_time_offset = i64::MIN;
         let mut b = pt(8);
@@ -329,6 +348,7 @@ mod tests {
             truck: 0,
             mp_time_offset: 0,
             truckersmp: false,
+            mp_mod: None,
             after_teleport: false,
             cargo_damage: None,
         }

@@ -133,7 +133,7 @@ impl LiveJobs {
     /// Pushes one stored frame or client note, in stream order. Returns the
     /// alerts it raised.
     pub fn push(&mut self, raw: &str) -> Vec<Alert> {
-        let Ok(f) = parse_frame(raw, &self.cfg.multiplayer.truckersmp_module_names) else { return Vec::new() };
+        let Ok(f) = parse_frame(raw, &self.cfg.multiplayer) else { return Vec::new() };
         if let Body::Init { game: Some(g), .. } = &f.body {
             self.sess_game.insert(f.sess.clone(), *g);
         }

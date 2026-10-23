@@ -223,7 +223,7 @@ async fn run(args: Args, hooks: Hooks) -> Result<(), RunError> {
         batch_interval: Duration::from_secs(10),
         max_frames: 5000,
         max_bytes: 4 << 20,
-        truckersmp_module_names: cfg.multiplayer.truckersmp_module_names.clone(),
+        multiplayer: cfg.multiplayer.clone(),
         config_hash: cfg.integrity_hash(),
         config_canonical_json: cfg.integrity_canonical_json(),
     };

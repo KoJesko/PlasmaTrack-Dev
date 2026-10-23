@@ -1,0 +1,4 @@
+live jobs=2 jobs_sha=a5cf8528ff7260288379c3bac3dca825c4d161f2be7a57552d80a8355839e4ae results_sha=8fa43ebcb35fdba5fd1d93abad76c66e7202ac4f6b51f355319bec1ec84ee577
+final jobs=2 jobs_sha=a5cf8528ff7260288379c3bac3dca825c4d161f2be7a57552d80a8355839e4ae results_sha=8fa43ebcb35fdba5fd1d93abad76c66e7202ac4f6b51f355319bec1ec84ee577
+job c6984760bc2557b6/0 state=Delivered start=Tracked kept=1106 reverted=0 branches=0 gaps=0 events=2 outcome=Valid points=10.2 job_sha=0c1669ff9478eca19cbd55bbf54f2fd32176e6052fdbc9bc85af8c3f7d8b55e3
+job c6984760bc2557b6/1 state=Suspended start=Tracked kept=6 reverted=0 branches=0 gaps=0 events=2 outcome=Incomplete points=0 job_sha=8b628a14fe640f780a7edc5bd95ee3d4c5d274b0212f7f99d95e6121f4a65df5

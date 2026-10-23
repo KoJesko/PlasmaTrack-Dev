@@ -32,11 +32,11 @@ pub fn read_lines(path: &Path) -> std::io::Result<Vec<String>> {
 /// Parses lines into frames. A truncated last line (a capture cut off by a
 /// crash) is skipped and counted.
 pub fn parse_lines(lines: &[String], cfg: &Config) -> (Vec<Frame>, usize) {
-    let names = &cfg.multiplayer.truckersmp_module_names;
+    let mp = &cfg.multiplayer;
     let mut frames = Vec::with_capacity(lines.len());
     let mut bad = 0;
     for l in lines {
-        match parse_frame(l, names) {
+        match parse_frame(l, mp) {
             Ok(f) => frames.push(f),
             Err(_) => bad += 1,
         }
@@ -96,7 +96,7 @@ pub fn sample_config() -> Config {
 /// - heartbeats dropped.
 ///
 /// Distances survive exactly (odometer differences telescope).
-pub fn trim(lines: &[String], every: usize, truckersmp_module_names: &[String]) -> Vec<String> {
+pub fn trim(lines: &[String], every: usize, mp: &pt_core::config::Multiplayer) -> Vec<String> {
     let every = every.max(1);
     // Heartbeats carry nothing the timeline uses; dropping them keeps fixtures small.
     let parsed: Vec<serde_json::Value> = lines
@@ -145,7 +145,7 @@ pub fn trim(lines: &[String], every: usize, truckersmp_module_names: &[String]) 
             v["seq"] = next_seq[slot].1.into();
             next_seq[slot].1 += 1;
         }
-        out.push(pt_core::wire::redact_modules(&v.to_string(), truckersmp_module_names));
+        out.push(pt_core::wire::redact_modules(&v.to_string(), mp));
     }
     out
 }

@@ -410,6 +410,7 @@ mod tests {
             truck: 0,
             mp_time_offset: 0,
             truckersmp: false,
+            mp_mod: None,
             after_teleport: false,
             cargo_damage: None,
         }

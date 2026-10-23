@@ -73,6 +73,8 @@ pub enum DiscardReason {
     Integrity,
     NegativeDistance,
     SingleplayerDivisionTruckersmp,
+    /// A `[[multiplayer.mods]]` job whose mod has `singleplayer_division_discard`.
+    SingleplayerDivisionMultiplayerMod,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -197,6 +199,9 @@ pub struct JobResult {
     pub points: f64,
     pub truckersmp: bool,
     pub convoy: bool,
+    /// The `[[multiplayer.mods]]` kind the job was driven on (never with TruckersMP).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub multiplayer_mod: Option<String>,
 }
 
 fn glob(pat: &str, s: &str) -> bool {
@@ -291,9 +296,13 @@ fn distances<P, R: Resolve<P> + ?Sized>(job: &Job<P>, pts: &R, cfg: &Config) -> 
         d.driven_whole_world_km += km.max(0.0) / b.local_scale;
         d.driven_s += b.sim_us.saturating_sub(a.sim_us) as f64 / 1e6;
         if let (Some(ta), Some(tb)) = (a.game_time_min, b.game_time_min) {
-            let game_min = tb.saturating_sub(ta) as f64;
-            // Singleplayer time runs at local.scale; TruckersMP at its server rate.
-            let rate = if b.truckersmp { cfg.rules.truckersmp_game_min_per_real_min } else { b.local_scale };
+            let mod_clock = if b.truckersmp { None } else { cfg.multiplayer.mod_clock(b.mp_mod.as_deref()) };
+            // A mod's server pulls the game's own steps back by a minute
+            // (TrucklineMP, 2026-10-23: 100 times in 18 min), so its steps
+            // count signed and cancel; elsewhere a step back counts as 0.
+            let game_min = if mod_clock.is_some() { tb as f64 - ta as f64 } else { tb.saturating_sub(ta) as f64 };
+            // Singleplayer time runs at local.scale; TruckersMP and some mods at their server rate.
+            let rate = if b.truckersmp { cfg.rules.truckersmp_game_min_per_real_min } else { mod_clock.unwrap_or(b.local_scale) };
             d.driven_game_min += game_min;
             d.driven_game_clock_min += game_min / rate;
         }
@@ -507,9 +516,11 @@ pub fn evaluate_in<P, R: Resolve<P> + ?Sized>(job: &Job<P>, pts: &R, cfg: &Confi
     let speed = speed(job, pts, cfg);
     let refuels = fuel(job, pts, cfg, &mut review);
     let truckersmp = pts.iter(&job.kept).any(|p| p.truckersmp);
+    // TruckersMP decides first; a job on a mod is that mod, not Convoy.
+    let multiplayer_mod = if truckersmp { None } else { pts.iter(&job.kept).find_map(|p| p.mp_mod) };
     // TruckersMP also reports a multiplayer time offset (2026-09-28 capture), so a
     // non-zero offset means Convoy only when TruckersMP is not loaded.
-    let convoy = !truckersmp && pts.iter(&job.kept).any(|p| p.mp_time_offset != 0);
+    let convoy = !truckersmp && multiplayer_mod.is_none() && pts.iter(&job.kept).any(|p| p.mp_time_offset != 0);
 
     // Distance: the game's figure, cross-checked, minus uncounted legs, to 1:1.
     d.delivered_game_km = job.delivered.as_ref().and_then(|x| x.distance_km);
@@ -626,6 +637,10 @@ pub fn evaluate_in<P, R: Resolve<P> + ?Sized>(job: &Job<P>, pts: &R, cfg: &Confi
         Some(DiscardReason::NegativeDistance)
     } else if ctx.singleplayer_division && truckersmp {
         Some(DiscardReason::SingleplayerDivisionTruckersmp)
+    } else if ctx.singleplayer_division
+        && multiplayer_mod.as_deref().and_then(|k| cfg.multiplayer.find_mod(k)).is_some_and(|m| m.singleplayer_division_discard)
+    {
+        Some(DiscardReason::SingleplayerDivisionMultiplayerMod)
     } else {
         None
     };
@@ -658,6 +673,7 @@ pub fn evaluate_in<P, R: Resolve<P> + ?Sized>(job: &Job<P>, pts: &R, cfg: &Confi
         points,
         truckersmp,
         convoy,
+        multiplayer_mod,
     }
 }
 
