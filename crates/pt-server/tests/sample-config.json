@@ -28,6 +28,16 @@
           ],
           "name": "HaulMP",
           "singleplayer_division_discard": true
+        },
+        {
+          "game_min_per_real_min": 6.667,
+          "kind": "trucklinemp",
+          "module_names": [
+            "trucklineets.dll",
+            "trucklineats.dll"
+          ],
+          "name": "TrucklineMP",
+          "singleplayer_division_discard": true
         }
       ],
       "truckersmp_module_names": [
@@ -124,5 +134,5 @@
       "teleport_min_distance_world_m": 500.0
     }
   },
-  "hash": "1f08d0ad4065c316148024dd1f417bd32ade3222520529a107e933d3e14708b2"
+  "hash": "b55921e71d7c0268c39b287bfc22bc7dba8293f41357603f6bf41fd7328a6203"
 }

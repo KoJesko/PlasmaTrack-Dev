@@ -243,6 +243,7 @@ mod tests {
                 kind: "haulmp".into(),
                 name: "HaulMP".into(),
                 module_names: vec!["haulmp_stub.dll".into(), "haulmp-telemetry.dll".into()],
+                game_min_per_real_min: None,
                 singleplayer_division_discard: true,
             }],
         }

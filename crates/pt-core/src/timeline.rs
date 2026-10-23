@@ -994,6 +994,8 @@ impl Timeline {
     fn match_in<S: PointStore + ?Sized>(&self, pts: TrackId, p: &Point, store: &S) -> Option<usize> {
         let t = &self.cfg.timeline;
         let p_pos = p.pos?;
+        // A server clock (TruckersMP, some mods) does not roll back with a save.
+        let server_clock = p.truckersmp || self.cfg.multiplayer.mod_clock(p.mp_mod.as_deref()).is_some();
         let mut best: Option<(usize, f64)> = None;
         for (i, q) in store.near(pts, p_pos, t.match_position_tolerance_world_m) {
             let Some(q_pos) = q.pos else { continue };
@@ -1014,7 +1016,7 @@ impl Timeline {
                     }
                 }
             }
-            if !p.truckersmp {
+            if !server_clock {
                 if let (Some(a), Some(b)) = (q.game_time_min, p.game_time_min) {
                     if a.abs_diff(b) > t.match_game_time_tolerance_min_game {
                         continue;

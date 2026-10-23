@@ -342,6 +342,11 @@ impl Multiplayer {
         self.mods.iter().find(|m| m.kind == kind)
     }
 
+    /// The server clock rate of mod `kind`, if it has one.
+    pub fn mod_clock(&self, kind: Option<&str>) -> Option<f64> {
+        kind.and_then(|k| self.find_mod(k)).and_then(|m| m.game_min_per_real_min)
+    }
+
     /// The kind of every mod one of whose module names is in `names`
     /// (case-insensitive), in config order.
     pub fn mods_matching(&self, names: &[&str]) -> Vec<String> {
@@ -372,6 +377,12 @@ pub struct MultiplayerMod {
     /// Any of these module file names loaded in the game process means this
     /// mod for the rest of the session.
     pub module_names: Vec<String>,
+    /// The server's game clock, when the mod sets one (TrucklineMP,
+    /// 2026-10-23): it replaces `local.scale` in the game-clock pace check,
+    /// and save loads are matched without the game time, as on TruckersMP.
+    /// Absent: the clock runs as in singleplayer (HaulMP).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub game_min_per_real_min: Option<f64>,
     /// Jobs on this mod are discarded for Singleplayer Division players, the
     /// way TruckersMP jobs always are (you, 2026-10-22).
     pub singleplayer_division_discard: bool,
@@ -505,6 +516,9 @@ impl Config {
             }
             if m.module_names.is_empty() {
                 errs.push(format!("multiplayer.mods[{i}].module_names must not be empty"));
+            }
+            if let Some(rate) = m.game_min_per_real_min {
+                positive(&mut errs, &format!("multiplayer.mods[{i}].game_min_per_real_min"), rate);
             }
             for n in &m.module_names {
                 let elsewhere = mp.truckersmp_module_names.iter().any(|t| t.eq_ignore_ascii_case(n))
@@ -659,7 +673,9 @@ mod tests {
         // Without mods the canonical JSON has no `mods` key, so configs
         // published before mods existed keep their hash.
         assert!(SAMPLE.contains(HAULMP), "sample's HaulMP block changed; update HAULMP");
-        let without = Config::from_toml_str(&SAMPLE.replace(HAULMP, "")).unwrap();
+        let from = SAMPLE.find("# HaulMP (ETS2)").expect("first mod block");
+        let to = from + SAMPLE[from..].find("# ----").expect("next section");
+        let without = Config::from_toml_str(&format!("{}{}", &SAMPLE[..from], &SAMPLE[to..])).unwrap();
         assert!(without.multiplayer.mods.is_empty());
         assert!(!without.integrity_canonical_json().contains("\"mods\""));
 

@@ -232,6 +232,19 @@ name = "HaulMP"
 module_names = ["haulmp_stub.dll", "haulmp-telemetry.dll"]
 singleplayer_division_discard = true
 
+# TrucklineMP (ETS2 and ATS), seen 2026-10-23: its launcher injects
+# trucklineets.dll into ETS2 and trucklineats.dll into ATS (both names are in
+# its injector, gamehelper.exe). multiplayer.time.offset stays 0, but the
+# server keeps the game clock at one game minute per 9.00 real seconds
+# whatever local.scale (it pulls the game's own steps back by a minute).
+# PROVISIONAL: measured on one ETS2 session.
+[[multiplayer.mods]]
+kind = "trucklinemp"
+name = "TrucklineMP"
+module_names = ["trucklineets.dll", "trucklineats.dll"]
+game_min_per_real_min = 6.667
+singleplayer_division_discard = true
+
 # ---------------------------------------------------------------------------
 # Plugin <-> client transport (localhost only).
 # ---------------------------------------------------------------------------

@@ -72,7 +72,7 @@ Oldest first, with `total`. Each item:
 | `integrity` | Rule 0: config or install files match no published version | `config_matched`, `manifest_result` |
 | `negative_distance` | Rule 1 | |
 | `singleplayer_division_truckersmp` | A TruckersMP job by a Singleplayer Division player | |
-| `singleplayer_division_multiplayer_mod` | A job on a `[[multiplayer.mods]]` mod with `singleplayer_division_discard = true` (HaulMP), by a Singleplayer Division player | `kind`, `name` |
+| `singleplayer_division_multiplayer_mod` | A job on a `[[multiplayer.mods]]` mod with `singleplayer_division_discard = true` (HaulMP, TrucklineMP), by a Singleplayer Division player | `kind`, `name` |
 
 **Invalid:** `outcome = invalid`. Its reason is `overspeed_invalid` (rule 2), with `peak_mph`,
 `over_invalid_s` and `invalid_over_mph`. A moderator may approve it, for example after falling

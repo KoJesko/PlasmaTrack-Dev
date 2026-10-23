@@ -296,9 +296,13 @@ fn distances<P, R: Resolve<P> + ?Sized>(job: &Job<P>, pts: &R, cfg: &Config) -> 
         d.driven_whole_world_km += km.max(0.0) / b.local_scale;
         d.driven_s += b.sim_us.saturating_sub(a.sim_us) as f64 / 1e6;
         if let (Some(ta), Some(tb)) = (a.game_time_min, b.game_time_min) {
-            let game_min = tb.saturating_sub(ta) as f64;
-            // Singleplayer time runs at local.scale; TruckersMP at its server rate.
-            let rate = if b.truckersmp { cfg.rules.truckersmp_game_min_per_real_min } else { b.local_scale };
+            let mod_clock = if b.truckersmp { None } else { cfg.multiplayer.mod_clock(b.mp_mod.as_deref()) };
+            // A mod's server pulls the game's own steps back by a minute
+            // (TrucklineMP, 2026-10-23: 100 times in 18 min), so its steps
+            // count signed and cancel; elsewhere a step back counts as 0.
+            let game_min = if mod_clock.is_some() { tb as f64 - ta as f64 } else { tb.saturating_sub(ta) as f64 };
+            // Singleplayer time runs at local.scale; TruckersMP and some mods at their server rate.
+            let rate = if b.truckersmp { cfg.rules.truckersmp_game_min_per_real_min } else { mod_clock.unwrap_or(b.local_scale) };
             d.driven_game_min += game_min;
             d.driven_game_clock_min += game_min / rate;
         }

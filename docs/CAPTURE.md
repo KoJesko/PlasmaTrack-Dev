@@ -77,6 +77,7 @@ in `config.cfg` should make the game write them that way (unverified).
 | C24 | Delivery through a city | A clean delivery that passes through a city. Confirms the scales and the cross-check. | ✅ (C7) | ✅ city 3, road 19, **UK roads 15**; 239 reported vs 238.87 tracked |
 | C25 | TruckersMP with the SDK plugin | Start TruckersMP with the current plugin and join a server for a minute. | n/a: ETS2 settled it | ✅ loaded by the TruckersMP client; connected, server IDs 4 and 30, account ID (briefly 0 while reconnecting) |
 | C26 | HaulMP session | Start through the HaulMP launcher, join a server, accept and deliver a job. | n/a: HaulMP is ETS2 only | ✅ 2026-10-22, HaulMP v814 (Traffic server): `haulmp_stub.dll` and `haulmp-telemetry.dll` loaded, offset 0, game clock at `local.scale`, fuel simulated; Dover → Groningen over three sessions with the ferry, labelled `haulmp` |
+| C27 | TrucklineMP session | Start through the TrucklineMP launcher, join a server, accept and deliver a job. | — | ✅ 2026-10-23, launcher 1.2.3 (from the client database, capture off): `trucklineets.dll`, offset 0, server clock of a game minute per 9.00 s; Calais → Reims, labelled `trucklinemp` |
 
 ## What remains, in order of value
 

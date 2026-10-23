@@ -247,6 +247,31 @@ fn ets2_haulmp_job_across_sessions() {
     assert_eq!(r.result.outcome, Outcome::Valid);
 }
 
+/// The owner's first TrucklineMP job (ETS2 1.61.1.9s, launcher 1.2.3,
+/// 2026-10-23): Calais → Reims, 274 km, from the client's own database (capture
+/// mode was off). The server holds the game clock at a game minute per 9 real
+/// seconds, pulling the game's own steps back a minute about 100 times.
+#[test]
+fn ets2_trucklinemp_server_clock() {
+    let name = "ets2-trucklinemp-calais-reims.jsonl.gz";
+    let jobs = run(name);
+    let r = jobs.iter().find(|r| r.job.state == JobState::Delivered).expect("delivered job");
+    assert_eq!(r.job.info.fingerprint.cargo.cargo_id, "frozen_hake");
+    assert_eq!(r.result.multiplayer_mod.as_deref(), Some("trucklinemp"));
+    assert!(!r.result.truckersmp && !r.result.convoy);
+    assert_eq!(r.result.distances.delivered_game_km, Some(274.0));
+    assert_eq!((r.result.outcome, r.result.points), (Outcome::Valid, 10.2), "{:?}", r.result.review);
+    // The pullbacks cancel: 91 game minutes at the server rate are the 13.7
+    // real minutes driven, not 191 minutes counted one step at a time.
+    let d = &r.result.distances;
+    assert_eq!(d.driven_game_min, 91.0);
+    assert!(close(d.driven_game_clock_min, d.driven_s / 60.0, 0.3), "{} vs {}", d.driven_game_clock_min, d.driven_s / 60.0);
+
+    let sp = Context { singleplayer_division: true, ..Context::default() };
+    let r = run_with(name, &sample_config(), &sp).into_iter().find(|r| r.job.state == JobState::Delivered).unwrap();
+    assert_eq!(r.result.discard, Some(DiscardReason::SingleplayerDivisionMultiplayerMod));
+}
+
 /// The server snapshots the timeline between batches (PLAN §7a): stopping
 /// anywhere, serialising and continuing must give exactly the same jobs.
 #[test]
