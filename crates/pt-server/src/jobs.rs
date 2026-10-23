@@ -1142,6 +1142,16 @@ pub async fn persist<H: Host, P, R: Resolve<P> + ?Sized>(
     if job.delivered.is_none() && existing.is_none() {
         return Ok(None);
     }
+    // Once uploaded, a delivery stays as it was scored: a rebuild (a new
+    // scorer format, a rule change) does not re-score it. Moderators
+    // recalculate on purpose (ADMIN_API §8).
+    if let Some(e) = existing.as_ref().filter(|e| trigger == Trigger::Rebuild && e.s("state") == "delivered") {
+        let job_id = e.s("job_id");
+        if !has_job_data(h, &job_id).await? {
+            write_job_data(h, &job_id, job, pts, &facts.sess_ids).await?;
+        }
+        return Ok(Some(job_id));
+    }
     let now = h.now_ms();
     let delivered_at = facts.delivered_at.or_else(|| existing.as_ref().and_then(|r| r.opt_i("delivered_at")));
     let at = delivered_at.unwrap_or(now);

@@ -299,6 +299,10 @@ The server then emits `job.scored` (WEBHOOKS §4).
 
 ## 8. Recalculation (§4.29)
 
+**Past jobs change only on purpose.** A new config version, or a new server version, does not
+re-score jobs already stored as delivered: they keep what they were scored with when uploaded,
+and players are not notified again. A recalculation is how new rules reach them.
+
 **Moderator decisions stick.** `approved`, `rejected` and `voided` keep their outcome through a
 recalculation; their points are recomputed (for example a new bonus applies to an approved job).
 Every other outcome is re-derived from the raw trace with the **current** config version and

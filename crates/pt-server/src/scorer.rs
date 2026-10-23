@@ -28,7 +28,8 @@ use crate::store::{self, User};
 use crate::util;
 
 /// Part of the state key: state of another format is not loaded, so every
-/// scorer rebuilds once from the raw data. 2 (2026-10-15): job memos know when
+/// scorer rebuilds once from the raw data (since 2026-10-23 a rebuild keeps
+/// stored deliveries as they are, [`jobs::persist`]). 2 (2026-10-15): job memos know when
 /// a job was stored, and finished jobs wait in `unstored`. 3 (2026-10-16): road
 /// trips (`car_job`) are tracked, so past ones appear. 4 (2026-10-20): points
 /// and state in the scorer's own database.
@@ -169,12 +170,19 @@ impl<D: LocalSql + Clone> Scorer<D> {
 
     /// Loads the state if not in memory. Returns true when there was none
     /// usable and a new, empty one was started.
-    fn load(&mut self, key: &str, cfg: &pt_core::Config) -> ApiResult<bool> {
+    ///
+    /// `replayed`: the player has raw data already. A state replaced because
+    /// its key changed (a new [`SNAPSHOT_FORMAT`], a timeline config change)
+    /// then catches up as a rebuild: stored jobs stay as they were, and nobody
+    /// is told again (2026-10-23: every deploy re-sent the same speed-penalty
+    /// DMs, and re-scored old jobs with the new rules).
+    fn load(&mut self, key: &str, cfg: &pt_core::Config, replayed: bool) -> ApiResult<bool> {
         if self.snap.as_ref().is_some_and(|s| s.key == key) {
             return Ok(false);
         }
         points::ensure_schema(&self.db);
         let rows = self.db.exec("SELECT v FROM pt_kv WHERE k = 'state'", &[]).map_err(|e| ApiError::internal(&e.0))?;
+        let had_state = !rows.is_empty() || self.snap.is_some();
         let stored = rows.into_iter().next().and_then(|mut r| serde_json::from_slice::<Snapshot<D>>(&r.remove(0).into_bytes()).ok());
         match stored {
             Some(mut s) if s.key == key => {
@@ -184,6 +192,7 @@ impl<D: LocalSql + Clone> Scorer<D> {
             }
             _ => {
                 let mut s = Snapshot::new(key.to_string(), cfg.clone(), &self.db);
+                s.rebuilding = had_state && replayed;
                 s.commit(&self.db)?;
                 self.snap = Some(s);
                 Ok(true)
@@ -212,10 +221,6 @@ impl<D: LocalSql + Clone> Scorer<D> {
         let user = store::user_by_id(h, &self.user_id).await?.ok_or_else(|| ApiError::not_found("user"))?;
         let scoring = config::scoring(h).await?;
         let key = format!("{SNAPSHOT_FORMAT}:{}", config::timeline_key(&scoring.cfg));
-        if self.load(&key, &scoring.cfg)? {
-            // The state before 2026-10-20 is not needed any more.
-            h.blob_delete(&legacy_snapshot_key(&self.user_id, self.game)).await?;
-        }
         let sessions = h
             .all(
                 "SELECT sess, chunk_count FROM plugin_sessions WHERE user_id = ?1 AND game = ?2 ORDER BY first_wall_ms, sess",
@@ -223,11 +228,16 @@ impl<D: LocalSql + Clone> Scorer<D> {
             )
             .await?;
         let sessions: Vec<(String, i64)> = sessions.iter().map(|r| (r.s("sess"), r.i("chunk_count"))).collect();
+        let mut report = Report::default();
+        if self.load(&key, &scoring.cfg, !sessions.is_empty())? {
+            report.rebuilt = self.snap.as_ref().is_some_and(|s| s.rebuilding);
+            // The state before 2026-10-20 is not needed any more.
+            h.blob_delete(&legacy_snapshot_key(&self.user_id, self.game)).await?;
+        }
 
         let Scorer { db, snap: snap_slot, user_id, game } = self;
         // Data in order: the processed sessions are a prefix of the list, and only
         // the last of them may still grow. Anything else rebuilds from scratch.
-        let mut report = Report::default();
         let in_order = {
             let snap = snap_slot.as_ref().expect("loaded");
             let n = snap.sessions.len();
