@@ -271,3 +271,8 @@ These answer the bot's open questions "(Q)". **The project owner confirmed all o
   over 500,000 in all (config version 3, `review_over_income_per_game_mi` and `review_over_income`).
 - 2026-10-16: uploads from clients below `MIN_CLIENT_VERSION` (0.2.4) are refused with
   `426 client_too_old`; the client keeps the data and retries after updating.
+- 2026-10-23: a rule or config change no longer re-scores past jobs by itself. When a scorer
+  rebuilds from raw data (a new scorer format, a change to the timeline config), a job already
+  stored as delivered keeps its outcome, points and data, and sends no `job.scored` and no
+  `player.notification` again. New rules apply to jobs not stored yet, to jobs still being
+  driven, and to jobs a moderator recalculates (ADMIN_API §8) or edits.
