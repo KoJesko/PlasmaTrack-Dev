@@ -73,6 +73,8 @@ pub enum DiscardReason {
     Integrity,
     NegativeDistance,
     SingleplayerDivisionTruckersmp,
+    /// A `[[multiplayer.mods]]` job whose mod has `singleplayer_division_discard`.
+    SingleplayerDivisionMultiplayerMod,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -197,6 +199,9 @@ pub struct JobResult {
     pub points: f64,
     pub truckersmp: bool,
     pub convoy: bool,
+    /// The `[[multiplayer.mods]]` kind the job was driven on (never with TruckersMP).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub multiplayer_mod: Option<String>,
 }
 
 fn glob(pat: &str, s: &str) -> bool {
@@ -507,9 +512,11 @@ pub fn evaluate_in<P, R: Resolve<P> + ?Sized>(job: &Job<P>, pts: &R, cfg: &Confi
     let speed = speed(job, pts, cfg);
     let refuels = fuel(job, pts, cfg, &mut review);
     let truckersmp = pts.iter(&job.kept).any(|p| p.truckersmp);
+    // TruckersMP decides first; a job on a mod is that mod, not Convoy.
+    let multiplayer_mod = if truckersmp { None } else { pts.iter(&job.kept).find_map(|p| p.mp_mod) };
     // TruckersMP also reports a multiplayer time offset (2026-09-28 capture), so a
     // non-zero offset means Convoy only when TruckersMP is not loaded.
-    let convoy = !truckersmp && pts.iter(&job.kept).any(|p| p.mp_time_offset != 0);
+    let convoy = !truckersmp && multiplayer_mod.is_none() && pts.iter(&job.kept).any(|p| p.mp_time_offset != 0);
 
     // Distance: the game's figure, cross-checked, minus uncounted legs, to 1:1.
     d.delivered_game_km = job.delivered.as_ref().and_then(|x| x.distance_km);
@@ -626,6 +633,10 @@ pub fn evaluate_in<P, R: Resolve<P> + ?Sized>(job: &Job<P>, pts: &R, cfg: &Confi
         Some(DiscardReason::NegativeDistance)
     } else if ctx.singleplayer_division && truckersmp {
         Some(DiscardReason::SingleplayerDivisionTruckersmp)
+    } else if ctx.singleplayer_division
+        && multiplayer_mod.as_deref().and_then(|k| cfg.multiplayer.find_mod(k)).is_some_and(|m| m.singleplayer_division_discard)
+    {
+        Some(DiscardReason::SingleplayerDivisionMultiplayerMod)
     } else {
         None
     };
@@ -658,6 +669,7 @@ pub fn evaluate_in<P, R: Resolve<P> + ?Sized>(job: &Job<P>, pts: &R, cfg: &Confi
         points,
         truckersmp,
         convoy,
+        multiplayer_mod,
     }
 }
 

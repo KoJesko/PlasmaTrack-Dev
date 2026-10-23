@@ -39,7 +39,7 @@ fn main() {
         lines.extend(read_lines(f).unwrap_or_else(|e| panic!("{}: {e}", f.display())));
     }
     if let Some(out) = trim_to {
-        let trimmed = pt_replay::trim(&lines, every, &cfg.multiplayer.truckersmp_module_names);
+        let trimmed = pt_replay::trim(&lines, every, &cfg.multiplayer);
         pt_replay::write_gz(&out, &trimmed).expect("write fixture");
         eprintln!("wrote {} ({} of {} lines)", out.display(), trimmed.len(), lines.len());
         return;
@@ -103,13 +103,14 @@ fn main() {
             d.world_mi
         );
         println!(
-            "  speed: peak {:.1} mph, over penalty {:.1}s, over invalid {:.1}s; refuels {}; truckersmp={} convoy={}",
+            "  speed: peak {:.1} mph, over penalty {:.1}s, over invalid {:.1}s; refuels {}; truckersmp={} convoy={} mod={}",
             r.result.speed.peak_mph,
             r.result.speed.over_penalty_s,
             r.result.speed.over_invalid_s,
             r.result.refuels.len(),
             r.result.truckersmp,
-            r.result.convoy
+            r.result.convoy,
+            r.result.multiplayer_mod.as_deref().unwrap_or("-")
         );
         println!(
             "  => {:?}{} points {:.1} (raw {:.3}); review {:?}",

@@ -5,6 +5,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use crate::config::Multiplayer;
 use crate::game::Game;
 
 /// One plugin message, in the order the plugin produced it.
@@ -29,7 +30,12 @@ pub enum Body {
     Sample(Sample),
     Scale { local_scale: Option<f64> },
     /// Module list, raw (capture mode, local client) or redacted (uploads).
-    Modules { truckersmp: bool },
+    /// `mods`: the kinds of `[[multiplayer.mods]]` whose module names it has.
+    Modules {
+        truckersmp: bool,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        mods: Vec<String>,
+    },
     /// TruckersMP client SDK state (plugin >= this change): authoritative for
     /// "on a TruckersMP server" once seen in a session. `account_id` is the
     /// player's TruckersMP account (0 = unknown); uploaded for the bot to link
@@ -113,8 +119,9 @@ fn parse_sample(ch: &Value) -> Sample {
     }
 }
 
-/// Parses one frame. `truckersmp_module_names` is used for raw module lists.
-pub fn parse_frame(json: &str, truckersmp_module_names: &[String]) -> Result<Frame, TraceError> {
+/// Parses one frame. `mp` names the modules that mean multiplayer, for raw
+/// module lists and for the mod matches a redacted one keeps.
+pub fn parse_frame(json: &str, mp: &Multiplayer) -> Result<Frame, TraceError> {
     let v: Value = serde_json::from_str(json).map_err(|e| TraceError::Json(e.to_string()))?;
     if !v.is_object() {
         return Err(TraceError::Json("not an object".into()));
@@ -149,12 +156,18 @@ pub fn parse_frame(json: &str, truckersmp_module_names: &[String]) -> Result<Fra
         "sample" => Body::Sample(parse_sample(&v["ch"])),
         "scale" => Body::Scale { local_scale: v["local_scale"].as_f64() },
         "modules" => {
-            let wanted: Vec<String> = truckersmp_module_names.iter().map(|n| n.to_ascii_lowercase()).collect();
+            let wanted: Vec<String> = mp.truckersmp_module_names.iter().map(|n| n.to_ascii_lowercase()).collect();
             let raw_hit = v["modules"]
                 .as_array()
                 .is_some_and(|m| m.iter().filter_map(Value::as_str).any(|n| wanted.contains(&n.to_ascii_lowercase())));
             let redacted_hit = v["truckersmp_matches"].as_array().is_some_and(|m| !m.is_empty());
-            Body::Modules { truckersmp: raw_hit || redacted_hit }
+            let names: Vec<&str> = [&v["modules"], &v["mod_matches"]]
+                .into_iter()
+                .filter_map(Value::as_array)
+                .flatten()
+                .filter_map(Value::as_str)
+                .collect();
+            Body::Modules { truckersmp: raw_hit || redacted_hit, mods: mp.mods_matching(&names) }
         }
         "truckersmp" => Body::Truckersmp {
             loaded: v["loaded"].as_bool().unwrap_or(false),
@@ -181,7 +194,7 @@ mod tests {
         let line = format!(
             r#"{{"v":1,"kind":"sample","sess":"{SESS}","seq":390,"wall_ms":1790600226175,"frame":20851,"sim_us":33332,"simulation_us":347502766,"render_us":347472939,"ch":{{"truck.speed":-0.00019482193,"truck.odometer":12844.921,"truck.fuel.amount":642.4152,"truck.world.placement":{{"position":{{"x":-103988.59376907349,"y":11.977951049804688,"z":-66894.78128051758}},"orientation":{{"heading":0.92525786,"pitch":2.5044026e-06,"roll":-1.3015305e-05}}}},"game.time":10401482,"local.scale":3,"multiplayer.time.offset":0,"job.cargo.damage":null,"trailer.0.connected":true}},"stale":[]}}"#
         );
-        let f = parse_frame(&line, &[]).unwrap();
+        let f = parse_frame(&line, &mp(&[])).unwrap();
         assert_eq!((f.seq, f.sim_us), (390, Some(33332)));
         let Body::Sample(s) = f.body else { panic!("not a sample") };
         assert_eq!(s.odometer_km, Some(12844.921));
@@ -196,21 +209,50 @@ mod tests {
         let cfg = format!(
             r#"{{"v":1,"kind":"config","sess":"{SESS}","seq":5,"wall_ms":1,"id":"job","attrs":[{{"name":"cargo.id","index":null,"type":"string","value":"tyres"}},{{"name":"planned_distance.km","index":null,"type":"u32","value":235}}]}}"#
         );
-        let Body::Config { id, attrs } = parse_frame(&cfg, &[]).unwrap().body else { panic!() };
+        let Body::Config { id, attrs } = parse_frame(&cfg, &mp(&[])).unwrap().body else { panic!() };
         assert_eq!(id, "job");
         assert_eq!(attr(&attrs, "planned_distance.km").and_then(Value::as_u64), Some(235));
         let raw = format!(r#"{{"v":1,"kind":"modules","sess":"{SESS}","seq":3,"modules":["KERNEL32.DLL","core_atsmp.dll"]}}"#);
-        assert_eq!(parse_frame(&raw, &["core_atsmp.dll".into()]).unwrap().body, Body::Modules { truckersmp: true });
-        assert_eq!(parse_frame(&raw, &[]).unwrap().body, Body::Modules { truckersmp: false });
+        let tmp = mp(&["core_atsmp.dll"]);
+        assert_eq!(parse_frame(&raw, &tmp).unwrap().body, Body::Modules { truckersmp: true, mods: vec![] });
+        assert_eq!(parse_frame(&raw, &mp(&[])).unwrap().body, Body::Modules { truckersmp: false, mods: vec![] });
         let red = format!(r#"{{"v":1,"kind":"modules","sess":"{SESS}","seq":3,"module_count":2,"truckersmp_matches":["core_atsmp.dll"],"redacted":true}}"#);
-        assert_eq!(parse_frame(&red, &[]).unwrap().body, Body::Modules { truckersmp: true });
+        assert_eq!(parse_frame(&red, &mp(&[])).unwrap().body, Body::Modules { truckersmp: true, mods: vec![] });
+    }
+
+    #[test]
+    fn modules_name_a_multiplayer_mod_raw_or_redacted() {
+        let cfg = haulmp();
+        let raw = format!(r#"{{"v":1,"kind":"modules","sess":"{SESS}","seq":3,"modules":["KERNEL32.DLL","HaulMP_Stub.dll"]}}"#);
+        assert_eq!(parse_frame(&raw, &cfg).unwrap().body, Body::Modules { truckersmp: false, mods: vec!["haulmp".into()] });
+        // The redacted list keeps the matched names; the kind is looked up again.
+        let red = format!(r#"{{"v":1,"kind":"modules","sess":"{SESS}","seq":3,"module_count":2,"truckersmp_matches":[],"mod_matches":["haulmp-telemetry.dll"],"redacted":true}}"#);
+        assert_eq!(parse_frame(&red, &cfg).unwrap().body, Body::Modules { truckersmp: false, mods: vec!["haulmp".into()] });
+        // A config without the mod does not know the name.
+        assert_eq!(parse_frame(&red, &mp(&[])).unwrap().body, Body::Modules { truckersmp: false, mods: vec![] });
+    }
+
+    fn mp(truckersmp: &[&str]) -> Multiplayer {
+        Multiplayer { truckersmp_module_names: truckersmp.iter().map(|s| s.to_string()).collect(), mods: vec![] }
+    }
+
+    fn haulmp() -> Multiplayer {
+        Multiplayer {
+            truckersmp_module_names: vec![],
+            mods: vec![crate::config::MultiplayerMod {
+                kind: "haulmp".into(),
+                name: "HaulMP".into(),
+                module_names: vec!["haulmp_stub.dll".into(), "haulmp-telemetry.dll".into()],
+                singleplayer_division_discard: true,
+            }],
+        }
     }
 
     #[test]
     fn parses_truckersmp_state_with_account() {
         let line = format!(r#"{{"v":1,"kind":"truckersmp","sess":"{SESS}","seq":7,"loaded":true,"connected":true,"server_id":42,"account_id":5557777}}"#);
         assert_eq!(
-            parse_frame(&line, &[]).unwrap().body,
+            parse_frame(&line, &mp(&[])).unwrap().body,
             Body::Truckersmp { loaded: true, connected: true, server_id: 42, account_id: 5557777 }
         );
     }

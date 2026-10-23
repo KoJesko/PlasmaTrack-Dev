@@ -245,7 +245,7 @@ impl<D: LocalSql + Clone> Scorer<D> {
         let snap = snap_slot.as_mut().expect("loaded");
         let trigger = if snap.rebuilding { Trigger::Rebuild } else { Trigger::Upload };
 
-        let names = scoring.cfg.multiplayer.truckersmp_module_names.clone();
+        let mp = scoring.cfg.multiplayer.clone();
         let mut penalties: Vec<(String, u32, i64)> = Vec::new();
         'sessions: for (i, (sess, count)) in sessions.iter().enumerate() {
             let done = snap.sessions.get(i).map_or(0, |(_, d)| *d);
@@ -281,7 +281,7 @@ impl<D: LocalSql + Clone> Scorer<D> {
                 // the state that counts it commit together.
                 for line in text.split(|b| *b == b'\n').filter(|l| !l.is_empty()) {
                     let Ok(line) = std::str::from_utf8(line) else { continue };
-                    let Ok(f) = parse_frame(line, &names) else { continue };
+                    let Ok(f) = parse_frame(line, &mp) else { continue };
                     if let Body::Truckersmp { connected: true, server_id, account_id, .. } = f.body {
                         if account_id > 0 {
                             snap.truckersmp.insert(f.sess.clone(), (server_id, account_id));

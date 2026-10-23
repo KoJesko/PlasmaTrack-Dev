@@ -9,6 +9,7 @@ use std::time::Duration;
 
 use flate2::write::GzEncoder;
 use flate2::Compression;
+use pt_core::config::Multiplayer;
 use pt_core::upload::{ManifestEntry, UploadAck, UploadChunk, CHUNKS_PATH, UPLOAD_PROTOCOL};
 use pt_core::wire::redact_modules;
 use serde_json::value::RawValue;
@@ -31,7 +32,8 @@ pub struct UploaderConfig {
     pub batch_interval: Duration,
     pub max_frames: usize,
     pub max_bytes: usize,
-    pub truckersmp_module_names: Vec<String>,
+    /// What `modules` messages keep when they are redacted.
+    pub multiplayer: Multiplayer,
     pub config_hash: String,
     pub config_canonical_json: String,
 }
@@ -55,7 +57,7 @@ pub fn build_chunk(cfg: &UploaderConfig, pending: &PendingChunk, manifest: &[Man
         frames: pending
             .frames
             .iter()
-            .map(|f| raw(redact_modules(f, &cfg.truckersmp_module_names)))
+            .map(|f| raw(redact_modules(f, &cfg.multiplayer)))
             .collect::<Result<_, _>>()?,
         config_hash: cfg.config_hash.clone(),
         config: raw(cfg.config_canonical_json.clone())?,

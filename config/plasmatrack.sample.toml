@@ -212,11 +212,25 @@ delay_max_wall_s = 30.0
 # TruckersMP, so the plugin reports whether any of these module file names is
 # loaded in the game process. PROVISIONAL: empty until confirmed by capture.
 # Users with the "Singleplayer Division" flag have TruckersMP jobs discarded.
+# Other multiplayer mods are listed under [[multiplayer.mods]], each with the
+# module names that identify it; a job on one has multiplayer.kind = its kind,
+# and singleplayer_division_discard decides whether the Singleplayer Division
+# discards it too.
 # ---------------------------------------------------------------------------
 [multiplayer]
 # Confirmed: core_atsmp.dll (ATS, 2026-09-28) and core_ets2mp.dll (ETS2,
 # 2026-10-13). Only a fallback: the TruckersMP SDK messages decide (PLAN §6b).
 truckersmp_module_names = ["core_atsmp.dll", "core_ets2mp.dll"]
+
+# HaulMP (ETS2), captured 2026-10-22: its launcher injects haulmp_stub.dll and
+# arms its own telemetry plugin haulmp-telemetry.dll. Its game clock runs at
+# local.scale and multiplayer.time.offset stays 0, so without these names a
+# HaulMP job looks like singleplayer.
+[[multiplayer.mods]]
+kind = "haulmp"
+name = "HaulMP"
+module_names = ["haulmp_stub.dll", "haulmp-telemetry.dll"]
+singleplayer_division_discard = true
 
 # ---------------------------------------------------------------------------
 # Plugin <-> client transport (localhost only).

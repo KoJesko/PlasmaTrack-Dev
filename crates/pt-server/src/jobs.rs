@@ -595,6 +595,7 @@ fn reason_text(code: &str) -> &'static str {
         "manual_submission" => "Submitted by hand: a moderator checks the evidence.",
         "negative_distance" => "The odometer ran backwards.",
         "singleplayer_division_truckersmp" => "A TruckersMP job by a Singleplayer Division player.",
+        "singleplayer_division_multiplayer_mod" => "A job on a multiplayer mod the Singleplayer Division leaves out, by a Singleplayer Division player.",
         _ => "",
     }
 }
@@ -664,11 +665,16 @@ pub fn public_notes(outcome: &str, summary: &Value, discard: Option<&str>, cfg_f
         "voided" => notes.push(json!({"code": "voided", "text": "Voided by a moderator."})),
         "discarded" => {
             let (code, text) = match discard {
-                Some("negative_distance") => ("discarded_negative_distance", "Discarded: the odometer ran backwards."),
+                Some("negative_distance") => ("discarded_negative_distance", "Discarded: the odometer ran backwards.".to_string()),
                 Some("singleplayer_division_truckersmp") => {
-                    ("discarded_singleplayer_division", "Discarded: a TruckersMP job by a Singleplayer Division player.")
+                    ("discarded_singleplayer_division", "Discarded: a TruckersMP job by a Singleplayer Division player.".to_string())
                 }
-                _ => ("discarded_integrity", "Discarded: the tracker's files or settings were not recognised."),
+                Some("singleplayer_division_multiplayer_mod") => {
+                    let m = &summary["multiplayer"];
+                    let name = m["name"].as_str().or(m["kind"].as_str()).unwrap_or("multiplayer mod");
+                    ("discarded_singleplayer_division", format!("Discarded: a {name} job by a Singleplayer Division player."))
+                }
+                _ => ("discarded_integrity", "Discarded: the tracker's files or settings were not recognised.".to_string()),
             };
             notes.push(json!({"code": code, "text": text}));
         }
@@ -759,6 +765,8 @@ fn build<P, R: Resolve<P> + ?Sized>(
     let multiplayer = if r.truckersmp {
         let (server_id, account_id) = facts.truckersmp.unwrap_or((0, 0));
         json!({"kind": "truckersmp", "truckersmp": {"server_id": server_id, "account_id": account_id}})
+    } else if let Some(m) = r.multiplayer_mod.as_deref().and_then(|k| cfg.multiplayer.find_mod(k)) {
+        json!({"kind": m.kind, "name": m.name, "truckersmp": null})
     } else if r.convoy {
         json!({"kind": "convoy", "truckersmp": null})
     } else {
@@ -812,10 +820,13 @@ fn build<P, R: Resolve<P> + ?Sized>(
         DiscardReason::Integrity => "integrity",
         DiscardReason::NegativeDistance => "negative_distance",
         DiscardReason::SingleplayerDivisionTruckersmp => "singleplayer_division_truckersmp",
+        DiscardReason::SingleplayerDivisionMultiplayerMod => "singleplayer_division_multiplayer_mod",
     });
     if let Some(code) = discard {
         let details = if code == "integrity" {
             json!({"config_matched": integrity.json["config_matched_version"], "manifest_result": integrity.json["manifest_result"]})
+        } else if code == "singleplayer_division_multiplayer_mod" {
+            json!({"kind": summary["multiplayer"]["kind"], "name": summary["multiplayer"]["name"]})
         } else {
             json!({})
         };
@@ -1389,7 +1400,7 @@ pub fn detail_json(row: &Row, user: &User, cfg: &Config) -> Value {
         .as_array()
         .into_iter()
         .flatten()
-        .find_map(|r| r["code"].as_str().filter(|c| matches!(*c, "integrity" | "negative_distance" | "singleplayer_division_truckersmp")).map(str::to_string));
+        .find_map(|r| r["code"].as_str().filter(|c| matches!(*c, "integrity" | "negative_distance" | "singleplayer_division_truckersmp" | "singleplayer_division_multiplayer_mod")).map(str::to_string));
     v["player"] = user.brief();
     v["planned_distance_km"] = s["planned_distance_km"].clone();
     v["speed_penalty_applied"] = s["speed_penalty_applied"].clone();

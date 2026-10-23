@@ -174,8 +174,10 @@ comma-separated outcomes. Each item is a **job summary**:
   `pending_review`.
 - **`world_*`** is the scored 1:1 distance. **`game_*`** is the in-game distance of the same
   scored part. Both are 0 for `discarded`.
-- **`multiplayer.kind`** is `singleplayer`, `truckersmp` or `convoy`. `truckersmp` is `null`
-  unless the kind is `truckersmp`.
+- **`multiplayer.kind`** is `singleplayer`, `truckersmp`, `convoy`, or the `kind` of a multiplayer
+  mod listed in the config's `[[multiplayer.mods]]` (today `haulmp`). For a mod, `multiplayer.name`
+  is its display name (`HaulMP`); other kinds have no `name`. `truckersmp` is `null` unless the
+  kind is `truckersmp`.
 - **`delivered_at`** is the **server's** clock when the delivery reached it. Leaderboard periods
   and bonus windows use it, so a player's PC clock cannot move a job into another period.
   **`reported_delivered_at`** is the player's PC clock at the delivery, for display only. They
@@ -258,7 +260,8 @@ The job summary plus:
   - `invalid_overspeed`: sustained speed over the invalid limit;
   - `discarded_integrity`: the tracker's files or settings were not recognised (rule 0);
   - `discarded_negative_distance`;
-  - `discarded_singleplayer_division`: a TruckersMP job by a Singleplayer Division player;
+  - `discarded_singleplayer_division`: a TruckersMP job by a Singleplayer Division player, or a
+    job on a multiplayer mod the division leaves out (HaulMP; the text names the mod);
   - `rejected`: rejected by a moderator. The moderator's reason is admin-only;
   - `voided`: voided by a moderator.
 

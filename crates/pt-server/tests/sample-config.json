@@ -19,6 +19,17 @@
       }
     },
     "multiplayer": {
+      "mods": [
+        {
+          "kind": "haulmp",
+          "module_names": [
+            "haulmp_stub.dll",
+            "haulmp-telemetry.dll"
+          ],
+          "name": "HaulMP",
+          "singleplayer_division_discard": true
+        }
+      ],
       "truckersmp_module_names": [
         "core_atsmp.dll",
         "core_ets2mp.dll"
@@ -113,5 +124,5 @@
       "teleport_min_distance_world_m": 500.0
     }
   },
-  "hash": "926bdb606597732c50917e414d5ec4b49cc30bbe7efcc9903465cce3687661a5"
+  "hash": "1f08d0ad4065c316148024dd1f417bd32ade3222520529a107e933d3e14708b2"
 }

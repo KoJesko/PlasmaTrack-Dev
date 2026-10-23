@@ -22,7 +22,7 @@ This is the contract the stage-4 server implements. The Rust types are
 | `sess` | plugin session id (32 hex) |
 | `hello` | latest `hello` message of that session (docs/WIRE.md), or null |
 | `seq_from`, `seq_to` | seq range covered by `frames` (inclusive) |
-| `frames` | raw plugin messages of that session, in seq order. Seq gaps are plugin-side drops. `modules` messages are redacted: `modules` is replaced by `module_count`, `truckersmp_matches` and `redacted: true` |
+| `frames` | raw plugin messages of that session, in seq order. Seq gaps are plugin-side drops. `modules` messages are redacted: `modules` is replaced by `module_count`, `truckersmp_matches`, `mod_matches` (the `[[multiplayer.mods]]` names found; only when the config lists mods) and `redacted: true` |
 | | plus **client notes**, which have no `seq`: `{"v":1,"kind":"profile","sess","wall_ms","profile_key","after_seq"}`. Each sits right after plugin frame `after_seq` (or before the next frame when that one was dropped or sent in an earlier chunk). The server keeps the array order |
 | `config_hash` | `Config::integrity_hash()` of the client's effective config |
 | `config` | `Config::integrity_canonical_json()`: everything except `[local]` |

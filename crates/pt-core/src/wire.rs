@@ -5,6 +5,8 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::config::Multiplayer;
+
 /// Largest frame the client accepts from the plugin. A capture-mode snapshot is
 /// well below this.
 pub const MAX_FRAME_BYTES: usize = 64 << 20;
@@ -100,8 +102,10 @@ pub fn ack_json(sess: &str, seq: u64) -> String {
 
 /// Privacy: a `modules` message lists every DLL loaded in the game process.
 /// Before anything leaves the player's PC it is reduced to the TruckersMP
-/// matches (case-insensitive) and a count. Other messages are returned as-is.
-pub fn redact_modules(json: &str, truckersmp_module_names: &[String]) -> String {
+/// matches (case-insensitive), the matches of `[[multiplayer.mods]]` names
+/// (`mod_matches`, only when mods are configured) and a count. Other messages
+/// are returned as-is.
+pub fn redact_modules(json: &str, mp: &Multiplayer) -> String {
     let Ok(mut v) = serde_json::from_str::<serde_json::Value>(json) else {
         return json.to_string();
     };
@@ -113,13 +117,17 @@ pub fn redact_modules(json: &str, truckersmp_module_names: &[String]) -> String 
         .remove("modules")
         .and_then(|m| serde_json::from_value(m).ok())
         .unwrap_or_default();
-    let wanted: Vec<String> = truckersmp_module_names.iter().map(|n| n.to_ascii_lowercase()).collect();
+    let wanted: Vec<String> = mp.truckersmp_module_names.iter().map(|n| n.to_ascii_lowercase()).collect();
     let matches: Vec<&String> = modules
         .iter()
         .filter(|m| wanted.contains(&m.to_ascii_lowercase()))
         .collect();
     obj.insert("module_count".into(), modules.len().into());
     obj.insert("truckersmp_matches".into(), serde_json::json!(matches));
+    if !mp.mods.is_empty() {
+        let names: Vec<&str> = modules.iter().map(String::as_str).collect();
+        obj.insert("mod_matches".into(), serde_json::json!(mp.mod_module_matches(&names)));
+    }
     obj.insert("redacted".into(), true.into());
     v.to_string()
 }
@@ -127,6 +135,7 @@ pub fn redact_modules(json: &str, truckersmp_module_names: &[String]) -> String 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::MultiplayerMod;
 
     const SESS: &str = "0123456789abcdef0123456789abcdef";
 
@@ -180,16 +189,40 @@ mod tests {
         let raw = format!(
             "{{\"v\":1,\"kind\":\"modules\",\"sess\":\"{SESS}\",\"seq\":3,\"modules\":[\"KERNEL32.DLL\",\"Core_ATSMP.dll\",\"secret-mod.dll\"]}}"
         );
-        let out = redact_modules(&raw, &["core_atsmp.dll".to_string()]);
+        let tmp = Multiplayer { truckersmp_module_names: vec!["core_atsmp.dll".into()], mods: vec![] };
+        let out = redact_modules(&raw, &tmp);
         let v: serde_json::Value = serde_json::from_str(&out).unwrap();
         assert!(v.get("modules").is_none());
         assert_eq!(v["module_count"], 3);
         assert_eq!(v["truckersmp_matches"], serde_json::json!(["Core_ATSMP.dll"]));
+        assert!(v.get("mod_matches").is_none(), "no mods configured: the message is as before");
         assert_eq!(v["seq"], 3);
         assert!(!out.contains("secret-mod"));
         // Non-module messages pass through unchanged.
         let sample = format!("{{\"kind\":\"sample\",\"sess\":\"{SESS}\",\"seq\":4}}");
-        assert_eq!(redact_modules(&sample, &[]), sample);
+        assert_eq!(redact_modules(&sample, &tmp), sample);
+    }
+
+    #[test]
+    fn modules_keep_multiplayer_mod_matches() {
+        let raw = format!(
+            "{{\"v\":1,\"kind\":\"modules\",\"sess\":\"{SESS}\",\"seq\":3,\"modules\":[\"KERNEL32.DLL\",\"haulmp_stub.dll\",\"secret-mod.dll\"]}}"
+        );
+        let mp = Multiplayer {
+            truckersmp_module_names: vec!["core_ets2mp.dll".into()],
+            mods: vec![MultiplayerMod {
+                kind: "haulmp".into(),
+                name: "HaulMP".into(),
+                module_names: vec!["haulmp_stub.dll".into(), "haulmp-telemetry.dll".into()],
+                singleplayer_division_discard: true,
+            }],
+        };
+        let out = redact_modules(&raw, &mp);
+        let v: serde_json::Value = serde_json::from_str(&out).unwrap();
+        assert_eq!(v["truckersmp_matches"], serde_json::json!([]));
+        assert_eq!(v["mod_matches"], serde_json::json!(["haulmp_stub.dll"]));
+        assert_eq!(v["module_count"], 3);
+        assert!(!out.contains("secret-mod"));
     }
 
     #[test]

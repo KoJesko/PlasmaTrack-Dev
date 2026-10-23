@@ -129,7 +129,7 @@ Per-frame order (:82-89): configuration → paused/started → frame_start → g
 - **Every config is re-sent when a save loads into the world** (job, bus_job, car_job, controls, hshifter, truck, trailer, trailer.0–9). On the *first* world load after launch a **`timer_restart` flag** follows in the first frame; later loads do not raise it (see the capture below).
 - At `scs_telemetry_init` the configs arrive once, empty, before any frame. They are sent again when the world loads.
 - The plugin runs alongside TruckyTelemetry, an ETS shared-memory plugin and others without conflict.
-- **Privacy note for stage 2:** the `modules` message lists every loaded DLL (155 here). The client keeps that list local and uploads only the matches against `[multiplayer] truckersmp_module_names`, never the full list.
+- **Privacy note for stage 2:** the `modules` message lists every loaded DLL (155 here). The client keeps that list local and uploads only the matches against `[multiplayer] truckersmp_module_names` and the `[[multiplayer.mods]]` module names, never the full list.
 
 **Second capture** (ATS 1.61.2.0s, 2026-09-28 10:13–10:40, sessions `01719a0c…` and `0ae3404d…`, plugin with `scale` messages):
 
@@ -468,7 +468,7 @@ The fingerprint has two parts:
 - Frames before the first note go to the `unknown` profile.
 
 **Multiplayer is tracked** in every form: TruckersMP, other multiplayer mods, and Convoy.
-- **Convoy** is detected from `multiplayer.time.offset ≠ 0` (common_channels.h:287-300) **while no TruckersMP module is loaded**. The Sioux Falls TruckersMP session reported an offset of about 24,136,737, while the first TruckersMP capture reported 0, so the offset alone does not mean Convoy.
+- **Convoy** is detected from `multiplayer.time.offset ≠ 0` (common_channels.h:287-300) **while neither TruckersMP nor a listed multiplayer mod is loaded**. The Sioux Falls TruckersMP session reported an offset of about 24,136,737, while the first TruckersMP capture reported 0, so the offset alone does not mean Convoy.
 - **TruckersMP (decided 2026-09-28: use the TruckersMP client SDK).** `plasmatrack.dll` is also a TruckersMP client plugin.
   - It exports `truckersmp_init` / `truckersmp_shutdown` (vendored SDK 1.1.0, MIT, C layer only).
   - It reports `truckersmp` messages: `connected` (`TruckersMP_Network::IsConnected`, updated on the connect/disconnect events), `server_id` and `account_id`.
@@ -477,7 +477,9 @@ The fingerprint has two parts:
   - Fallback for plugins without the SDK side: a module named in `[multiplayer] truckersmp_module_names` is loaded (confirmed for ATS: `core_atsmp.dll`).
   - TruckersMP supports an SDK version for about a year, so the plugin must be rebuilt against newer headers yearly.
   - Not yet verified in the real TruckersMP client: that it loads our DLL as a plugin next to the telemetry role, and what `server_id` values look like.
-- **Singleplayer Division:** a user flag, set through the admin API. For these users, jobs detected as TruckersMP are **discarded**, with the reason shown. Convoy and other multiplayer remain allowed.
+- **Other multiplayer mods** (decided 2026-10-22) are listed in `[[multiplayer.mods]]`: a `kind` (the job's `multiplayer.kind`), a display `name`, the `module_names` that identify it, and `singleplayer_division_discard`. Any of those names in a session's `modules` message means that mod for the session. Redacted uploads keep the matches as `mod_matches`, and the server looks the kind up in the job's config version.
+  - **HaulMP** (ETS2, captured 2026-10-22, HaulMP v814): its launcher injects `haulmp_stub.dll` and arms its own telemetry plugin `haulmp-telemetry.dll`. It has no SDK we can call. `multiplayer.time.offset` stays 0 and the game clock runs at `local.scale`, exactly as in singleplayer, so the module names are the only signal, and no time-rate setting is needed. Fuel is simulated. A 79 km spawn teleport happens when joining, before any job. Regression: `ets2-haulmp-ferry-three-sessions` (Dover → Groningen across three game sessions, with the ferry).
+- **Singleplayer Division:** a user flag, set through the admin API. For these users, jobs detected as TruckersMP are **discarded**, with the reason shown. A multiplayer mod is discarded too when its `singleplayer_division_discard` is true (HaulMP: true, decided 2026-10-22); otherwise it is allowed, like Convoy.
 - Each job stores its multiplayer kind.
 
 **Player notifications** (desktop notification from the client: a notification from its tray icon, which Windows 10/11 shows as a toast; no extra dependency. The console client and Linux only log them):
@@ -592,7 +594,7 @@ The contracts are `docs/API_CONVENTIONS.md`, `docs/PUBLIC_API.md`, `docs/ADMIN_A
 - Reverted material is never exposed publicly.
 - **TruckersMP accounts (decision 24):**
   - Per player: every TruckersMP `account_id` seen while connected to a server, each with first seen, last seen and job count.
-  - Per job: `multiplayer` (`singleplayer` / `truckersmp` / `convoy`), and for TruckersMP the `account_id` and `server_id`.
+  - Per job: `multiplayer` (`singleplayer` / `truckersmp` / `convoy` / a `[[multiplayer.mods]]` kind such as `haulmp`), and for TruckersMP the `account_id` and `server_id`.
   - `0` means unknown and is never listed.
   - The admin API adds two flags for moderators:
     - a player whose jobs come from more than one TruckersMP account;

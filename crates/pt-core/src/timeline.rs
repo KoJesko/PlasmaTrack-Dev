@@ -51,6 +51,9 @@ pub struct Point {
     pub truck: u32,
     pub mp_time_offset: i64,
     pub truckersmp: bool,
+    /// The `[[multiplayer.mods]]` kind loaded in this session, if any.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mp_mod: Option<String>,
     /// First point after a teleport (ferry, train, F7): overspeed episodes end
     /// here, but distance carries on (the odometer does not move on a teleport).
     #[serde(default)]
@@ -328,6 +331,9 @@ pub struct Timeline {
     /// TruckersMP SDK state, once reported in this session.
     truckersmp_sdk: Option<bool>,
     truckersmp: bool,
+    /// A `[[multiplayer.mods]]` kind seen in this session's module lists.
+    #[serde(default)]
+    mp_mod: Option<String>,
     last: Option<Point>,
     next_run: u32,
     watch: Vec<OverspeedWatch>,
@@ -358,6 +364,7 @@ impl Timeline {
             truckersmp_module: false,
             truckersmp_sdk: None,
             truckersmp: false,
+            mp_mod: None,
             last: None,
             next_run: 0,
             watch: Vec::new(),
@@ -440,6 +447,7 @@ impl Timeline {
             self.truckersmp_module = false;
             self.truckersmp_sdk = None;
             self.truckersmp = false;
+            self.mp_mod = None;
             self.sess = Some(sess);
         } else if f.seq > 0 && f.seq != self.last_seq + 1 && f.seq > self.last_seq {
             // Frames missing inside one session: a data gap.
@@ -518,8 +526,11 @@ impl Timeline {
                 }
                 _ => {}
             },
-            Body::Modules { truckersmp } => {
+            Body::Modules { truckersmp, mods } => {
                 self.truckersmp_module |= *truckersmp;
+                if self.mp_mod.is_none() {
+                    self.mp_mod = mods.first().cloned();
+                }
                 self.truckersmp = self.truckersmp_sdk.unwrap_or(self.truckersmp_module);
             }
             Body::Truckersmp { connected, .. } => {
@@ -549,6 +560,7 @@ impl Timeline {
             truck: self.truck,
             mp_time_offset: s.mp_time_offset.unwrap_or(0),
             truckersmp: self.truckersmp,
+            mp_mod: self.mp_mod.clone(),
             after_teleport: false,
             cargo_damage: s.cargo_damage,
         }
