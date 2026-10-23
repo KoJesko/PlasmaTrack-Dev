@@ -1,7 +1,7 @@
 {
   "name": "plasmatrack-setup",
   "productName": "PlasmaTrack Setup",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "private": true,
   "description": "Installs the PlasmaTrack game plugin and background client for ETS2/ATS.",
   "license": "SEE LICENSE IN LICENSE.md",

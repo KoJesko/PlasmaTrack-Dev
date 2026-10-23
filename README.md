@@ -5,7 +5,7 @@ records telemetry, a background client uploads it, and the server rebuilds each 
 and scores it, with anti-cheat checks done server-side. ETS2 and ATS jobs are kept
 fully separate.
 
-Status: beta (client 0.2.4).
+Status: beta (client 0.2.5).
 
 ## How it fits together
 
