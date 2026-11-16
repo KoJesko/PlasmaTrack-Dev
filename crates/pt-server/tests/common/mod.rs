@@ -179,7 +179,7 @@ impl TestHost {
 
     pub fn q(&self, sql: &str) -> Vec<Value> {
         let mut st = self.db.prepare(sql).unwrap();
-        let names: Vec<String> = st.column_names().iter().map(|s| s.to_string()).collect();
+        let names: Vec<String> = st.column_names().map(|s| s.to_string()).collect();
         let rows = st
             .query_map([], |r| {
                 let mut o = serde_json::Map::new();
@@ -228,7 +228,7 @@ impl Host for TestHost {
 
     async fn all(&self, sql: &str, params: Vec<P>) -> HostResult<Vec<Row>> {
         let mut st = self.db.prepare(sql).map_err(err)?;
-        let names: Vec<String> = st.column_names().iter().map(|s| s.to_string()).collect();
+        let names: Vec<String> = st.column_names().map(|s| s.to_string()).collect();
         let vals: Vec<rusqlite::types::Value> = params.iter().map(bind).collect();
         let rows = st
             .query_map(rusqlite::params_from_iter(vals), |r| {
