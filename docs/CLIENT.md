@@ -28,6 +28,11 @@ plasmatrack-client run
 
 Both can be overridden with `--config PATH` and `--data-dir PATH`.
 
+On Linux the config is written owner-only (0600), since it holds the player token (0.2.6).
+Linux has no installer or self-update: run `plasmatrack-client run` yourself, for example as a
+systemd user service. The Windows plugin DLL runs under Proton and reaches the native client
+over loopback.
+
 **Only `[local]` may be edited per driver.** Every other key must match a config version the
 server published. Otherwise the server discards the job (rule 0, PLAN §6a).
 
@@ -57,6 +62,11 @@ server published. Otherwise the server discards the job (rule 0, PLAN §6a).
 5. **Follows the game logs** (`Documents/<game>/game.log.txt`) to tell profiles apart. Each
    time a save loads, it records which profile it belongs to: a hash of the profile folder,
    never the profile name.
+   - On Linux (0.2.6) the log is looked for in each Steam library's Proton prefix
+     (`compatdata/<appid>/pfx/drive_c/users/steamuser/Documents/<game>/`), and for TruckersMP's
+     native Linux launcher (TLM) in the game's `-homedir` from
+     `~/.config/TruckersMP/launcher-options.json` and the launcher's default
+     `~/.config/TruckersMP/homedir`. The game uses `-homedir` as its home directly.
 6. **Runs the job rules live** on what it stores, the same code the server runs. Results are
    provisional; the server's are the ones that count.
    - **Alerts:** a desktop notification when a delivery is Invalid, or when the speed penalty
