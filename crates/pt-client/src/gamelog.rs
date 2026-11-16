@@ -70,8 +70,57 @@ pub fn log_paths(game: Game, steam_libraries: &[PathBuf]) -> Vec<PathBuf> {
                     .join(LOG_FILE),
             );
         }
+        if let Some(config) = dirs::config_dir() {
+            out.extend(tlm_homedirs(game, &config.join("TruckersMP")).into_iter().map(|d| d.join(LOG_FILE)));
+        }
     }
     out
+}
+
+/// TruckersMP's native Linux launcher (run by TLM, the Steam compatibility tool)
+/// starts the game with `-homedir`, which the game mounts as its home: the log,
+/// `config.cfg` and `profiles/` sit directly in it, not in a `<game>` subfolder.
+/// It is the game's `-homedir` from `launcher-options.json` when the player set
+/// one, and the launcher's default `homedir` (shared by both games) either way.
+pub fn tlm_homedirs(game: Game, tmp_dir: &Path) -> Vec<PathBuf> {
+    let mut out = Vec::new();
+    if let Ok(json) = std::fs::read_to_string(tmp_dir.join("launcher-options.json")) {
+        out.extend(homedir_from_launcher_options(&json, game, &tmp_dir.join("protonprefix")));
+    }
+    out.push(tmp_dir.join("homedir"));
+    out
+}
+
+/// The `-homedir` argument in the launcher's per-game console options, as a
+/// Linux path. Options before a `%command%` entry are environment variables.
+pub fn homedir_from_launcher_options(json: &str, game: Game, prefix: &Path) -> Option<PathBuf> {
+    let v: serde_json::Value = serde_json::from_str(json).ok()?;
+    let key = match game {
+        Game::Ets2 => "ets2",
+        Game::Ats => "ats",
+    };
+    let opts = v["games"][key]["consoleOpts"].as_array()?;
+    let at = opts.iter().position(|o| o.as_str() == Some("-homedir"))?;
+    let raw = opts.get(at + 1)?.as_str()?.trim_matches('"');
+    wine_to_unix(raw, prefix)
+}
+
+/// A Windows path inside a Wine prefix (`Z:\home\me\x`, `C:\users\steamuser\x`)
+/// as a Linux path, through the prefix's own drive table: `dosdevices/z:` links
+/// to `/`, `dosdevices/c:` to `../drive_c`, and any other drive to wherever the
+/// player mapped it. `None` for paths that are not drive-absolute.
+pub fn wine_to_unix(path: &str, prefix: &Path) -> Option<PathBuf> {
+    let mut chars = path.chars();
+    let drive = chars.next().filter(char::is_ascii_alphabetic)?.to_ascii_lowercase();
+    let rest = chars.as_str().strip_prefix(':')?;
+    let mut out = prefix.join("dosdevices").join(format!("{drive}:"));
+    if drive == 'z' && !out.exists() {
+        // Every Wine prefix maps Z: to the filesystem root; this holds before
+        // the prefix exists, too.
+        out = PathBuf::from("/");
+    }
+    out.extend(rest.split(['\\', '/']).filter(|p| !p.is_empty()));
+    Some(out)
 }
 
 /// Follows a log file that the game rewrites at every start. The first line
@@ -232,6 +281,38 @@ mod tests {
         assert_eq!(profile_key_from_line(&HOME.replace("4E616D65", "4e616d65")), Some(home), "hex case does not matter");
         assert_eq!(profile_key_from_line("00:00:15.928 : New profile selected: 'Name'"), None);
         assert_eq!(profile_key_from_line("Loading save. path: /home/profiles/not-hex/save/x"), None);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn tlm_homedir_comes_from_console_opts() {
+        let dir = tempfile::tempdir().unwrap();
+        let prefix = dir.path().join("protonprefix");
+        std::fs::create_dir_all(prefix.join("dosdevices")).unwrap();
+        std::fs::create_dir_all(prefix.join("drive_c")).unwrap();
+        std::os::unix::fs::symlink("/", prefix.join("dosdevices/z:")).unwrap();
+        std::os::unix::fs::symlink("../drive_c", prefix.join("dosdevices/c:")).unwrap();
+        let json = r#"{"games":{
+            "ets2":{"game":"ets2","path":"x","consoleOpts":["WINEDLLOVERRIDES=dxgi=n,b","%command%","-homedir","Z:\\home\\me\\.config\\TruckersMP\\homedir\\ets2"]},
+            "ats":{"game":"ats","path":"x","consoleOpts":["-homedir","\"C:\\users\\steamuser\\Documents\\ATS\""]}}}"#;
+        assert_eq!(
+            homedir_from_launcher_options(json, Game::Ets2, &prefix).unwrap(),
+            prefix.join("dosdevices/z:").join("home/me/.config/TruckersMP/homedir/ets2"),
+        );
+        assert_eq!(
+            homedir_from_launcher_options(json, Game::Ats, &prefix).unwrap(),
+            prefix.join("dosdevices/c:").join("users/steamuser/Documents/ATS"),
+            "quotes are stripped and C: goes through the prefix",
+        );
+        assert_eq!(homedir_from_launcher_options(r#"{"games":{"ets2":{"consoleOpts":[]}}}"#, Game::Ets2, &prefix), None);
+        assert_eq!(wine_to_unix(r"Z:\a\b", Path::new("/nonexistent")), Some(PathBuf::from("/a/b")), "Z: is / before the prefix exists");
+        assert_eq!(wine_to_unix(r"relative\path", &prefix), None);
+
+        let tmp = dir.path();
+        std::fs::write(tmp.join("launcher-options.json"), json).unwrap();
+        let dirs = tlm_homedirs(Game::Ats, tmp);
+        assert_eq!(dirs.last(), Some(&tmp.join("homedir")), "the launcher default is always a candidate");
+        assert_eq!(dirs.len(), 2);
     }
 
     #[test]

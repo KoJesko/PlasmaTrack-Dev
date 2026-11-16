@@ -148,19 +148,39 @@ pub fn rebase_config(existing: Option<&str>, shipped: &str) -> Result<String, St
 }
 
 /// Writes `text` to `path` through a temporary file, so a crash never leaves a
-/// half-written config.
+/// half-written config. The config holds the player token: on Unix the file is
+/// owner-only (0600), since `~/.config` is not private the way `%APPDATA%` is.
 pub fn write_atomically(path: &Path, text: &str) -> std::io::Result<()> {
+    use std::io::Write;
     if let Some(dir) = path.parent() {
         std::fs::create_dir_all(dir)?;
     }
     let tmp = path.with_extension("toml.tmp");
-    std::fs::write(&tmp, text)?;
+    let _ = std::fs::remove_file(&tmp); // `mode` below only applies to a new file
+    let mut open = std::fs::OpenOptions::new();
+    open.write(true).create_new(true);
+    #[cfg(unix)]
+    std::os::unix::fs::OpenOptionsExt::mode(&mut open, 0o600);
+    open.open(&tmp)?.write_all(text.as_bytes())?;
     std::fs::rename(&tmp, path)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn config_is_written_owner_only() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("plasmatrack.toml");
+        std::fs::write(&path, "old").unwrap();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o644)).unwrap();
+        write_atomically(&path, "token = \"x\"\n").unwrap();
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "token = \"x\"\n");
+        assert_eq!(std::fs::metadata(&path).unwrap().permissions().mode() & 0o777, 0o600);
+    }
     use crate::paths::SAMPLE_CONFIG;
 
     fn fake_installs(root: &Path) -> Vec<GameInstall> {

@@ -205,9 +205,44 @@ pub fn processes(names: &[&str]) -> Option<Vec<u32>> {
     }
 }
 
+/// Linux: the same question asked of `/proc`. Under Proton the games are Wine
+/// processes, so the Windows file name has to be recognised in a Linux process.
+/// Per process, `/proc/<pid>/comm` is the kernel name (Wine sets it to the .exe
+/// name, cut to 15 bytes: "eurotrucks2.exe" just fits) and `/proc/<pid>/cmdline`
+/// is NUL-separated argv, where Wine's argv[0] is a Windows path such as
+/// `Z:\home\me\...\bin\win_x64\eurotrucks2.exe` (backslashes, any letter case).
 #[cfg(not(windows))]
-pub fn processes(_names: &[&str]) -> Option<Vec<u32>> {
-    None
+pub fn processes(names: &[&str]) -> Option<Vec<u32>> {
+    let me = std::process::id();
+    let mut found = Vec::new();
+    for entry in std::fs::read_dir("/proc").ok()? {
+        let Some(pid) = entry.ok().and_then(|e| e.file_name().to_str()?.parse::<u32>().ok()) else { continue };
+        if pid == me {
+            continue;
+        }
+        let dir = Path::new("/proc").join(pid.to_string());
+        // A process can exit between read_dir and these reads; it then just doesn't match.
+        let comm = std::fs::read_to_string(dir.join("comm")).unwrap_or_default();
+        let cmdline = std::fs::read(dir.join("cmdline")).unwrap_or_default();
+        if process_matches(&comm, &cmdline, names) {
+            found.push(pid);
+        }
+    }
+    Some(found)
+}
+
+/// Whether a process with this `comm` and raw `cmdline` is one of `names`: by the
+/// last component of argv[0] (split on `/` and `\`), or by the kernel name, which
+/// is a prefix of a longer name when the kernel cut it to 15 bytes. Never by a
+/// later argument, so `grep eurotrucks2.exe` is not the game.
+#[cfg(not(windows))]
+fn process_matches(comm: &str, cmdline: &[u8], names: &[&str]) -> bool {
+    let argv0 = String::from_utf8_lossy(cmdline.split(|&b| b == 0).next().unwrap_or_default());
+    let exe = argv0.rsplit(['/', '\\']).next().unwrap_or_default().to_ascii_lowercase();
+    let comm = comm.trim_end_matches('\n').to_ascii_lowercase();
+    names.iter().map(|n| n.to_ascii_lowercase()).any(|n| {
+        (!exe.is_empty() && exe == n) || comm == n || (comm.len() == 15 && n.len() > 15 && n.starts_with(&comm))
+    })
 }
 
 /// True while ETS2 or ATS runs (their plugin DLL cannot be replaced then).
@@ -335,6 +370,29 @@ pub fn failed_recently(data_dir: &Path, version: &str, now_ms: i64) -> Option<St
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(not(windows))]
+    #[test]
+    fn linux_process_names_match_wine_games() {
+        let games = ["eurotrucks2.exe", "amtrucks.exe"];
+        let wine_argv = b"Z:\\home\\me\\Euro Truck Simulator 2\\bin\\win_x64\\eurotrucks2.exe\0-homedir\0x\0";
+        assert!(process_matches("eurotrucks2.exe\n", wine_argv, &games));
+        // Seen live 2026-11-15 (tinkergame + proton-cachyos): Proton's S: game drive, and
+        // /proc/<pid>/exe is Wine's preloader, so only argv[0] / comm name the game.
+        let seen = b"S:\\steamapps\\common\\Euro Truck Simulator 2\\bin\\win_x64\\eurotrucks2.exe\0";
+        assert!(process_matches("eurotrucks2.exe\n", seen, &games));
+        assert!(process_matches("wine-preloader\n", seen, &games), "argv[0] alone is enough");
+        assert!(process_matches("wine64-preload\n", b"C:\\Games\\AMTRUCKS.EXE\0", &games), "argv[0], any case");
+        assert!(process_matches("amtrucks.exe\n", b"", &games), "kernel name alone (cmdline unreadable)");
+        assert!(!process_matches("grep\n", b"/usr/bin/grep\0eurotrucks2.exe\0", &games), "a later argument is not the process");
+        assert!(!process_matches("eurotrucks2.ex\n", b"", &games), "a shorter kernel name is not a cut one");
+        assert!(process_matches("plasmatrack-cli\n", b"", &["plasmatrack-client"]), "15-byte kernel names are prefixes");
+        // Whatever names GAME_PROCESSES holds must match their own (cut) kernel name.
+        for n in GAME_PROCESSES {
+            let comm: String = n.chars().take(15).collect();
+            assert!(process_matches(&format!("{comm}\n"), b"", &[n]), "{n}");
+        }
+    }
 
     #[test]
     fn compares_versions() {
