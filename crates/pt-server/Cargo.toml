@@ -17,7 +17,7 @@ flate2 = "1"
 futures-util = { version = "0.3", default-features = false, features = ["alloc"] }
 
 [dev-dependencies]
-rusqlite = { version = "0.32", features = ["bundled"] }
+rusqlite = { version = "0.41", features = ["bundled"] }
 tokio = { version = "1", features = ["rt", "macros"] }
 pt-replay = { path = "../pt-replay" }
 ed25519-dalek = { version = "2", default-features = false, features = ["std"] }
