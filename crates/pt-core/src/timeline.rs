@@ -726,10 +726,11 @@ impl Timeline {
     fn deliver(&mut self, d: Delivered, wall: i64) {
         let Some(i) = self.current else { return };
         let job = &mut self.jobs[i];
+        // A failed job is not watched (no points, no overspeed), so a completion
+        // without a load in between must not turn it back into a scoring job.
+        // Only a save load (on_load) undoes a failure.
         if job.state == JobState::Failed {
-            // The game completed it after all: the failure did not stick.
-            job.state = JobState::Tracking;
-            job.events.push(JobEvent::FailureReverted { wall_ms: wall });
+            return;
         }
         match job.state {
             JobState::Tracking => {

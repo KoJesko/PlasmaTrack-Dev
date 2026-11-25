@@ -419,3 +419,46 @@ fn a_failed_coach_job_stays_local_and_a_load_undoes_it() {
     assert!(ev.iter().position(|e| matches!(e, JobEvent::Failed { .. })).unwrap() < reverted);
     no_clock_flags(r);
 }
+
+/// The failure fixture with its client note changed by `edit`, plus `extra`
+/// lines right after it.
+fn run_failed_with(edit: impl Fn(&str) -> String, extra: &[String]) -> Vec<Replayed> {
+    let cfg = sample_config();
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/real/ets2-coach-failed-sideswipe.jsonl.gz");
+    let mut lines = Vec::new();
+    for l in read_lines(&path).expect("fixture") {
+        if l.contains("\"kind\":\"job_failed\"") {
+            lines.push(edit(&l));
+            lines.extend(extra.iter().cloned());
+        } else {
+            lines.push(l);
+        }
+    }
+    let (mut frames, bad) = parse_lines(&lines, &cfg);
+    assert_eq!(bad, 0);
+    order_sessions(&mut frames);
+    replay(&frames, &cfg, &Context::default())
+}
+
+/// Security: a failed job is not watched for overspeed. Only the client's own
+/// local note (no `seq`, never uploaded) may fail a job, so an uploaded
+/// plugin-stream frame claiming `job_failed` cannot switch the checks off.
+#[test]
+fn a_sequenced_job_failed_frame_is_ignored() {
+    let jobs = run_failed_with(|l| l.replacen("{\"after_seq\":172934,", "{\"seq\":172935,", 1), &[]);
+    assert_eq!(jobs.len(), 1);
+    assert_ne!(jobs[0].job.state, JobState::Failed);
+    assert!(!jobs[0].job.events.iter().any(|e| matches!(e, JobEvent::Failed { .. })));
+}
+
+/// Security: a completion after a failure with no save load in between does
+/// not revive the job (it was unwatched while failed). Only a load undoes it.
+#[test]
+fn a_completion_after_a_failure_without_a_load_does_not_score() {
+    let done = r#"{"attrs":[{"index":null,"name":"revenue","type":"s64","value":12390},{"index":null,"name":"earned.xp","type":"s32","value":639},{"index":null,"name":"passenger.satisfaction","type":"float","value":1},{"index":null,"name":"distance.km","type":"float","value":393},{"index":null,"name":"delivery.time","type":"u32","value":136}],"frame":1,"id":"bus_job.completed","kind":"gameplay","seq":172935,"sess":"3ee5afa7404af20962014a33d85bb5ce","sim_us":1,"v":1,"wall_ms":1795190499960}"#;
+    let jobs = run_failed_with(|l| l.to_string(), &[done.to_string()]);
+    assert_eq!(jobs.len(), 1);
+    assert_eq!(jobs[0].job.state, JobState::Failed);
+    assert!(!jobs[0].job.events.iter().any(|e| matches!(e, JobEvent::Delivered { .. })));
+    assert_eq!(jobs[0].result.outcome, Outcome::Incomplete);
+}

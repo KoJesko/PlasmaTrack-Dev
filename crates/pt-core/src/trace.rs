@@ -181,7 +181,12 @@ pub fn parse_frame(json: &str, mp: &Multiplayer) -> Result<Frame, TraceError> {
         },
         "shutdown" => Body::Shutdown,
         "profile" => Body::Profile { key: v["profile_key"].as_str().unwrap_or("unknown").to_string() },
-        "job_failed" => Body::JobFailed { reason: v["reason"].as_str().unwrap_or_default().to_string() },
+        // Only the client writes this, as a local note (no `seq`). A plugin-stream
+        // frame claiming it is forged: a failed job stops the overspeed watch, so
+        // honouring one would let an upload switch the checks off.
+        "job_failed" if v.get("seq").is_none() => {
+            Body::JobFailed { reason: v["reason"].as_str().unwrap_or_default().to_string() }
+        }
         other => Body::Other(other.to_string()),
     };
     Ok(Frame { sess, seq, wall_ms, sim_us, body })
