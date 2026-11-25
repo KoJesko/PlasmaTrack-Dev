@@ -78,6 +78,10 @@ pub enum JobState {
     Cancelled,
     /// A save of this already-delivered job was loaded; nothing is recorded.
     Stopped,
+    /// The game failed the job (a coach job after extreme acceleration). The
+    /// client learns it from the game's log and keeps it locally: the note is
+    /// never uploaded. Nothing is recorded; a save load brings the job back.
+    Failed,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -150,6 +154,10 @@ pub enum JobEvent {
     Delivered { wall_ms: i64 },
     Cancelled { penalty: Option<i64>, wall_ms: i64 },
     CancellationReverted { wall_ms: i64 },
+    /// The game failed the job: `reason` is what its log said.
+    Failed { reason: String, wall_ms: i64 },
+    /// A load (or the job's completion) undid a failure.
+    FailureReverted { wall_ms: i64 },
     /// A load reopened a delivery that had been Invalid (falling under the map).
     InvalidDeliveryReopened { wall_ms: i64 },
     /// A save of this delivered job was loaded; tracking stopped.
@@ -318,12 +326,14 @@ pub struct Timeline {
     sess: Option<u32>,
     last_seq: u64,
     bracket: Bracket,
-    /// The current job: freight, else a road trip.
+    /// The current job: freight, else a road trip, else a coach job.
     job_cfg: Option<JobInfo>,
     #[serde(default)]
     freight_cfg: Option<JobInfo>,
     #[serde(default)]
     car_cfg: Option<JobInfo>,
+    #[serde(default)]
+    bus_cfg: Option<JobInfo>,
     truck_ids: Vec<String>,
     truck: u32,
     /// Loaded-module heuristic (fallback for plugins without the TruckersMP SDK side).
@@ -359,6 +369,7 @@ impl Timeline {
             job_cfg: None,
             freight_cfg: None,
             car_cfg: None,
+            bus_cfg: None,
             truck_ids: Vec::new(),
             truck: 0,
             truckersmp_module: false,
@@ -403,7 +414,7 @@ impl Timeline {
             let job = &self.jobs[k];
             let ended = matches!(
                 job.state,
-                JobState::Delivered | JobState::Cancelled | JobState::Stopped | JobState::Suspended
+                JobState::Delivered | JobState::Cancelled | JobState::Stopped | JobState::Suspended | JobState::Failed
             );
             let last = job.events.last().map(event_wall).unwrap_or(0);
             if self.current == Some(k) || !ended || now_wall - last <= window_ms {
@@ -474,8 +485,12 @@ impl Timeline {
                 match job_type {
                     JobType::Freight => self.freight_cfg = info,
                     JobType::Car => self.car_cfg = info,
+                    // Sent twice at accept, again at every stop (stage + 1) and
+                    // EMPTY for a while at every load or menu visit: none of
+                    // that ends the job, only `bus_job.completed`/`.cancelled`.
+                    JobType::Bus => self.bus_cfg = info,
                 }
-                self.job_cfg = self.freight_cfg.clone().or_else(|| self.car_cfg.clone());
+                self.job_cfg = self.freight_cfg.clone().or_else(|| self.car_cfg.clone()).or_else(|| self.bus_cfg.clone());
                 if self.job_cfg.is_none() {
                     self.bracket.job_emptied = true;
                 } else if !attrs.is_empty() && self.bracket.no_job_state {
@@ -511,13 +526,15 @@ impl Timeline {
                 // stop before another sample arrives (captured deliveries). Both belong
                 // to the job that was current (PLAN §5).
                 "job.delivered" => self.deliver(Delivered::from_attrs(attrs), f.wall_ms),
-                "car_job.delivered" => {
+                "car_job.delivered" | "bus_job.completed" => {
                     if self.current.is_none() {
                         self.resume_lost_road_trip(f.wall_ms, store);
                     }
                     self.deliver(Delivered::from_attrs(attrs), f.wall_ms)
                 }
-                "job.cancelled" | "car_job.cancelled" => {
+                // A coach job's abandon costs the player the game's flat 12000;
+                // the job is kept as cancelled and scores nothing, like freight.
+                "job.cancelled" | "car_job.cancelled" | "bus_job.cancelled" => {
                     self.cancel(attr(attrs, "cancel.penalty").and_then(|v| v.as_i64()), f.wall_ms)
                 }
                 "player.use.ferry" | "player.use.train" => {
@@ -537,6 +554,7 @@ impl Timeline {
                 self.truckersmp_sdk = Some(*connected);
                 self.truckersmp = *connected;
             }
+            Body::JobFailed { reason } => self.fail(reason, f.wall_ms),
             Body::Sample(s) => self.on_sample(sess, f, s, store),
             _ => {}
         }
@@ -597,9 +615,9 @@ impl Timeline {
         let disc = prev.as_ref().is_some_and(|a| self.discontinuity(a, &p, jump_m));
         let is_load = world_reload || (session && disc);
 
-        // A stopped (already-delivered) job ignores everything until the job changes.
+        // A stopped (already-delivered) or failed job ignores everything until the job changes.
         if let Some(i) = self.current {
-            if self.jobs[i].state == JobState::Stopped
+            if matches!(self.jobs[i].state, JobState::Stopped | JobState::Failed)
                 && self.job_cfg.as_ref().map(|j| &j.fingerprint) != Some(&self.jobs[i].info.fingerprint)
             {
                 self.current = None;
@@ -708,6 +726,11 @@ impl Timeline {
     fn deliver(&mut self, d: Delivered, wall: i64) {
         let Some(i) = self.current else { return };
         let job = &mut self.jobs[i];
+        if job.state == JobState::Failed {
+            // The game completed it after all: the failure did not stick.
+            job.state = JobState::Tracking;
+            job.events.push(JobEvent::FailureReverted { wall_ms: wall });
+        }
         match job.state {
             JobState::Tracking => {
                 job.state = JobState::Delivered;
@@ -722,6 +745,27 @@ impl Timeline {
         self.current = None;
     }
 
+    /// The game's log says it failed the job. It is the current job, or the
+    /// last job when the game already dropped its config (a coach job goes
+    /// empty at every load and menu visit) and nothing replaced it.
+    fn fail(&mut self, reason: &str, wall: i64) {
+        let k = match self.current {
+            Some(i) => i,
+            None => match self.jobs.len().checked_sub(1) {
+                Some(k) if self.jobs[k].state == JobState::Suspended && self.job_cfg.is_none() => k,
+                _ => return,
+            },
+        };
+        let job = &mut self.jobs[k];
+        if !matches!(job.state, JobState::Tracking | JobState::Suspended) {
+            return;
+        }
+        job.state = JobState::Failed;
+        job.events.push(JobEvent::Failed { reason: reason.to_string(), wall_ms: wall });
+        // Still current: a failed job ignores its own config until it changes.
+        self.current = Some(k);
+    }
+
     /// The game can drop a road trip's config at a load and never send it
     /// again, then still deliver the trip (the owner's ATS road trip,
     /// 2026-10-16: three loads, the config back after the first only). The
@@ -731,7 +775,8 @@ impl Timeline {
     fn resume_lost_road_trip<S: PointStore + ?Sized>(&mut self, wall: i64, store: &mut S) {
         let Some(k) = self.jobs.len().checked_sub(1) else { return };
         let job = &self.jobs[k];
-        if job.state != JobState::Suspended || job.info.fingerprint.route.job_type != JobType::Car || self.job_cfg.is_some() {
+        // A coach job too: its config goes empty at loads like a road trip's.
+        if job.state != JobState::Suspended || job.info.fingerprint.route.job_type == JobType::Freight || self.job_cfg.is_some() {
             return;
         }
         let Some(mut p) = self.last.clone() else { return };
@@ -854,6 +899,11 @@ impl Timeline {
                     self.current = Some(k);
                     return;
                 }
+                // The failed job's config again, without a load: still failed.
+                JobState::Failed => {
+                    self.current = Some(k);
+                    return;
+                }
                 JobState::Delivered | JobState::Stopped | JobState::Cancelled => {}
             }
         }
@@ -904,6 +954,8 @@ impl Timeline {
             JobState::Cancelled => {
                 self.jobs[k].events.push(JobEvent::CancellationReverted { wall_ms: wall })
             }
+            // Loading a save to undo a failure is allowed (owner, 2026-11-25).
+            JobState::Failed => self.jobs[k].events.push(JobEvent::FailureReverted { wall_ms: wall }),
             JobState::Suspended | JobState::Tracking => {}
         }
         self.jobs[k].state = JobState::Tracking;
@@ -1268,6 +1320,8 @@ fn event_wall(e: &JobEvent) -> i64 {
         | JobEvent::Delivered { wall_ms }
         | JobEvent::Cancelled { wall_ms, .. }
         | JobEvent::CancellationReverted { wall_ms }
+        | JobEvent::Failed { wall_ms, .. }
+        | JobEvent::FailureReverted { wall_ms }
         | JobEvent::InvalidDeliveryReopened { wall_ms }
         | JobEvent::StoppedAfterDelivery { wall_ms }
         | JobEvent::DuplicateDelivery { wall_ms } => *wall_ms,

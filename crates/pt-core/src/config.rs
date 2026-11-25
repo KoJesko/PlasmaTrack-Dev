@@ -61,11 +61,25 @@ pub struct Rules {
     pub review_over_income: Option<f64>,
     pub speed_penalty_factor: f64,
     pub points_per_world_mi: f64,
+    /// Coach jobs (`bus_job`): points = distance points x this x the
+    /// passengers' satisfaction. Absent: [`DEFAULT_COACH_POINTS_FACTOR`]. Not
+    /// serialised when absent, so existing configs keep their integrity hash.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub coach_points_factor: Option<f64>,
     pub points_decimals: u32,
     pub speed: SpeedRules,
     pub distance: DistanceRules,
     pub fuel: FuelRules,
     pub refuel: RefuelHeuristic,
+}
+
+/// The owner's coach factor (2026-11-25).
+pub const DEFAULT_COACH_POINTS_FACTOR: f64 = 1.0725;
+
+impl Rules {
+    pub fn coach_points_factor(&self) -> f64 {
+        self.coach_points_factor.unwrap_or(DEFAULT_COACH_POINTS_FACTOR)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

@@ -52,6 +52,9 @@ speed_penalty_factor = 0.85
 # Rule 6: points per accepted WORLD mile (physical 1:1 distance = odometer /
 # local.scale, PLAN §6).
 points_per_world_mi = 1.0
+# Coach jobs (ETS2 Coaches DLC): distance points x this x the passengers'
+# satisfaction (0-1, from the game's bus_job.completed). Default 1.0725.
+# coach_points_factor = 1.0725
 # The job total is floored once, at the end, to this many decimals
 # (3.79 -> 3.7 with 1). Never rounds up.
 points_decimals = 1

@@ -1,0 +1,6 @@
+frame 5000 jobs=3 jobs_sha=4b10bfc39f2610c202c8744624b41535c0d8f95a2a1b4f57e9b702d39d297675 results_sha=9751144dd7c8af40436730f15d1d7f2ff3d8d3a5ed9c5288b0fcb9a42bb482ef
+live jobs=3 jobs_sha=a69b835cb4896ccea80c84b162f795c34a4f66c38fd99e1513abee3c0decc7ff results_sha=4cbc6a9bf4b15ffab8a6b3cc537d82878661078a765574c4ee401fb68b7a2d57
+final jobs=3 jobs_sha=a69b835cb4896ccea80c84b162f795c34a4f66c38fd99e1513abee3c0decc7ff results_sha=4cbc6a9bf4b15ffab8a6b3cc537d82878661078a765574c4ee401fb68b7a2d57
+job unknown/0 state=Cancelled start=LateStart kept=304 reverted=0 branches=0 gaps=0 events=2 outcome=Incomplete points=0.1 job_sha=edfbb56e960d0ba26de99cf4fa6096132caec5246ee30248af5f8d8f95351f43
+job unknown/1 state=Cancelled start=Tracked kept=260 reverted=0 branches=0 gaps=0 events=2 outcome=Incomplete points=0 job_sha=b5252d5e453eee1e25529159fe00d1d5ca93a22ee04efd5da2be51dec6b3cf5b
+job unknown/2 state=Delivered start=Tracked kept=5431 reverted=0 branches=0 gaps=0 events=2 outcome=Valid points=15.3 job_sha=65e2dfaca42e44d7f5286228ea41529dfbf53c7151ea422accca5b5093e6a432

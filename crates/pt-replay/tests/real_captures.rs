@@ -299,3 +299,123 @@ fn a_snapshot_mid_capture_replays_identically() {
         }
     }
 }
+
+// ---------------------------------------------------------------------------
+// Coach jobs (ETS2 1.62 Coaches DLC, TruckersMP, a Volvo 9700; owner's
+// captures of 2026-11-20 to 2026-11-24, trimmed the same way with --every 15
+// to 60). docs/PLAN.md has no section yet; the findings are in the commit.
+
+/// Several captures of one stream, in session order.
+fn run_files(names: &[&str]) -> Vec<Replayed> {
+    let cfg = sample_config();
+    let mut lines = Vec::new();
+    for name in names {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/real").join(name);
+        lines.extend(read_lines(&path).expect("fixture"));
+    }
+    let (mut frames, bad) = parse_lines(&lines, &cfg);
+    assert_eq!(bad, 0);
+    order_sessions(&mut frames);
+    replay(&frames, &cfg, &Context::default())
+}
+
+fn route<'a>(jobs: &'a [Replayed], from: &str, to: &str) -> &'a Replayed {
+    jobs.iter()
+        .find(|r| r.job.info.fingerprint.route.source_city == from && r.job.info.fingerprint.route.destination_city == to)
+        .expect("job present")
+}
+
+/// No coach clock skip (accept, every stop, the ferry) is ever a review.
+fn no_clock_flags(r: &Replayed) {
+    assert!(
+        !r.result.review.iter().any(|x| matches!(
+            x,
+            ReviewReason::TimeWarp { .. } | ReviewReason::FastAverage { .. } | ReviewReason::FastAverageGame { .. }
+        )),
+        "{:?}",
+        r.result.review
+    );
+}
+
+/// 2026-11-23: the Athens → Akureyri job (from a save, so a late start) and a
+/// Reykjavík loop abandoned, then Reykjavík → Höfn delivered. Each accept sent
+/// the config twice, 1.4-2 s apart; accepting skipped the clock 60 min ahead.
+#[test]
+fn coach_abandons_duplicate_accepts_and_a_delivery() {
+    let jobs = run("ets2-coach-abandons-and-delivery.jsonl.gz");
+    assert_eq!(jobs.len(), 3, "a duplicate accept is the same job");
+    assert!(jobs.iter().all(|r| r.job.info.fingerprint.route.job_type == JobType::Bus));
+
+    for (from, to, start) in [("athens", "akureyri", StartKind::LateStart), ("reykjavik", "reykjavik", StartKind::Tracked)] {
+        let r = route(&jobs, from, to);
+        // Abandoned: kept, and it costs nothing (the game charged a flat 12000).
+        assert_eq!((r.job.state, r.job.start), (JobState::Cancelled, start));
+        assert!(r.job.events.iter().any(|e| matches!(e, JobEvent::Cancelled { penalty: Some(12000), .. })));
+        assert_eq!(r.result.outcome, Outcome::Incomplete);
+        assert!(r.result.points_raw >= 0.0);
+    }
+
+    let r = route(&jobs, "reykjavik", "hofn");
+    assert_eq!((r.job.state, r.job.start), (JobState::Delivered, StartKind::Tracked));
+    assert_eq!(r.job.info.names.destination_city, "Höfn í Hornafirði");
+    assert_eq!(r.job.info.fingerprint.cargo.income, Some(12390));
+    let d = r.job.delivered.as_ref().expect("bus_job.completed");
+    assert_eq!((d.revenue, d.earned_xp, d.delivery_time_min), (Some(12390), Some(639), Some(136)));
+    assert_eq!(d.passenger_satisfaction, Some(1.0));
+    // The distance really driven: the odometer moved 392.5 km.
+    assert_eq!(d.distance_km, Some(393.0));
+    assert!(close(r.result.distances.tracked_whole_game_km, 392.47, 0.02));
+    assert_eq!(r.result.outcome, Outcome::Valid, "{:?}", r.result.review);
+    no_clock_flags(r);
+    // Distance points x the coach rule (rules.rs `coach_points`, TODO(Ari)).
+    let cfg = sample_config();
+    let base = r.result.accepted_world_mi * cfg.rules.points_per_world_mi;
+    assert!(close(base, 15.373, 0.001));
+    assert_eq!(r.result.points_raw, pt_core::rules::coach_points(base, Some(1.0), cfg.rules.coach_points_factor()));
+}
+
+/// 2026-11-24: one Reykjavík loop over three sessions: accepted (config sent
+/// twice), a menu/load (config empty for 19 s, then back), the first stop
+/// (stage 0 → 1, clock skipped to the departure), a game restart, two
+/// more loads, and the abandon.
+#[test]
+fn coach_job_across_sessions_loads_and_a_stop() {
+    let jobs = run_files(&["ets2-coach-loop-loads-stop-cancel.jsonl.gz"]);
+    assert_eq!(jobs.len(), 1, "loads, an empty config and a stop never split a coach job");
+    let r = &jobs[0];
+    assert_eq!((r.job.state, r.job.start), (JobState::Cancelled, StartKind::Tracked));
+    assert_eq!(r.job.info.fingerprint.cargo.cargo_unit_count, Some(5), "five stages");
+    assert_eq!(count(&r.job.events, |e| matches!(e, JobEvent::SessionContinue { .. })), 2);
+    assert_eq!(count(&r.job.events, |e| matches!(e, JobEvent::LoadTruncate { .. })), 2);
+    assert!(r.job.gaps.is_empty());
+    assert!(r.result.review.is_empty(), "{:?}", r.result.review);
+    // 444.27 km on the full capture: decimation moves where the loads cut in.
+    assert!(close(r.result.distances.tracked_whole_game_km, 444.40, 0.02));
+}
+
+/// 2026-11-20 11:01: the coach was sideswiped and hit at 58 mph on the way to
+/// Odense; the game's log said `[player_bus_job] Job failed due to extreme
+/// acceleration (3.08; 0.15; 25.31)` and the SDK sent nothing. The capture
+/// predates the client's failure note, so the note was inserted by hand right
+/// after the pause the crash caused, where the client puts it. That afternoon
+/// the owner loaded an autosave from before the crash and drove on through
+/// two more stops (Odense, Stockholm).
+#[test]
+fn a_failed_coach_job_stays_local_and_a_load_undoes_it() {
+    let failed = run_files(&["ets2-coach-failed-sideswipe.jsonl.gz"]);
+    assert_eq!(failed.len(), 1);
+    let r = &failed[0];
+    assert_eq!(r.job.state, JobState::Failed);
+    assert!(r.job.events.iter().any(|e| matches!(e, JobEvent::Failed { reason, .. } if reason.starts_with("extreme acceleration"))));
+    assert_eq!(r.result.outcome, Outcome::Incomplete);
+
+    let jobs = run_files(&["ets2-coach-failed-sideswipe.jsonl.gz", "ets2-coach-autosave-after-failure.jsonl.gz"]);
+    assert_eq!(jobs.len(), 1, "the autosave brings back the same job, through two stops");
+    let r = &jobs[0];
+    assert_eq!(r.job.state, JobState::Tracking);
+    let ev = &r.job.events;
+    let reverted = ev.iter().position(|e| matches!(e, JobEvent::FailureReverted { .. })).expect("reverted");
+    assert!(matches!(ev[reverted + 1], JobEvent::LoadTruncate { .. }), "{ev:?}");
+    assert!(ev.iter().position(|e| matches!(e, JobEvent::Failed { .. })).unwrap() < reverted);
+    no_clock_flags(r);
+}

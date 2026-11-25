@@ -6,6 +6,15 @@
 //! Road trips (a car or pickup, ATS 2026-10-16) arrive as a `car_job` config
 //! and `car_job.delivered` / `car_job.cancelled`, with the same attributes
 //! except the market (`car_job.market`); they are tracked like freight.
+//!
+//! Coach jobs (ETS2 Coaches DLC, 2026-11) arrive as an undocumented `bus_job`
+//! config: the stops come indexed per stage (`source_stop.id[i]`,
+//! `destination_stop.id[i]`, ...) next to `bus.stages.count` / `.current`,
+//! `income`, `planned_distance.km` and `bus_job.market`. Serving a stop sends
+//! the config again with `bus.stages.current` + 1 and the actual times; no
+//! event. The job ends with `bus_job.completed` (revenue, earned.xp,
+//! passenger.satisfaction 0-1, distance.km as a float: the distance really
+//! driven, delivery.time) or `bus_job.cancelled` (cancel.penalty, a flat 12000).
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -22,6 +31,8 @@ pub enum JobType {
     Freight,
     /// `car_job`: a road trip in a car or pickup.
     Car,
+    /// `bus_job`: a coach line with stops (ETS2 Coaches DLC).
+    Bus,
 }
 
 impl JobType {
@@ -30,6 +41,7 @@ impl JobType {
         match self {
             JobType::Freight => "job",
             JobType::Car => "car_job",
+            JobType::Bus => "bus_job",
         }
     }
 
@@ -37,6 +49,7 @@ impl JobType {
         match id {
             "job" => Some(JobType::Freight),
             "car_job" => Some(JobType::Car),
+            "bus_job" => Some(JobType::Bus),
             _ => None,
         }
     }
@@ -97,6 +110,14 @@ pub struct JobNames {
     pub destination_company: String,
 }
 
+/// The `cargo_id` of every coach job (it carries no cargo of its own).
+pub const BUS_CARGO_ID: &str = "passengers";
+
+/// An attribute of one index (a coach stop), e.g. `destination_stop.id[3]`.
+fn indexed<'a>(attrs: &'a [Attr], name: &str, index: u32) -> Option<&'a Value> {
+    attrs.iter().find(|a| a.name == name && a.index.unwrap_or(0) == index).map(|a| &a.value)
+}
+
 /// `job.market` values (configs.h:627-641).
 pub fn is_world_of_trucks_market(market: &str) -> bool {
     matches!(market, "external_contracts" | "external_market")
@@ -108,10 +129,13 @@ impl JobInfo {
         JobInfo::from_config_of(game, JobType::Freight, attrs)
     }
 
-    /// The same for a `job_type` config (`job` or `car_job`).
+    /// The same for a `job_type` config (`job`, `car_job` or `bus_job`).
     pub fn from_config_of(game: Game, job_type: JobType, attrs: &[Attr]) -> Option<JobInfo> {
         if attrs.is_empty() {
             return None;
+        }
+        if job_type == JobType::Bus {
+            return JobInfo::from_bus_config(game, attrs);
         }
         let s = |k: &str| attr(attrs, k).and_then(Value::as_str).unwrap_or_default().to_string();
         let u = |k: &str| attr(attrs, k).and_then(Value::as_u64);
@@ -152,6 +176,50 @@ impl JobInfo {
         })
     }
 
+    /// A coach job: first stop to last stop. Only what stays the same from
+    /// accept to completion is identity: the stops, income, planned distance
+    /// and market. `bus.stages.current` and every planned or actual time change
+    /// at each stop, and TruckersMP jobs made before 2026-11-20 carry planned
+    /// times hundreds of days out, so no time is part of it (or used at all).
+    fn from_bus_config(game: Game, attrs: &[Attr]) -> Option<JobInfo> {
+        let s = |k: &str, i: u32| indexed(attrs, k, i).and_then(Value::as_str).unwrap_or_default().to_string();
+        let u = |k: &str| attr(attrs, k).and_then(Value::as_u64);
+        let last = u("bus.stages.count").unwrap_or(1).max(1) as u32 - 1;
+        Some(JobInfo {
+            fingerprint: Fingerprint {
+                route: RouteKey {
+                    game,
+                    source_city: s("source_stop.id", 0),
+                    source_company: s("source_stop.type", 0),
+                    destination_city: s("destination_stop.id", last),
+                    destination_company: s("destination_stop.type", last),
+                    delivery_time: None,
+                    planned_distance_km: u("planned_distance.km"),
+                    job_market: attr(attrs, "bus_job.market").and_then(Value::as_str).unwrap_or_default().to_string(),
+                    is_special_job: None,
+                    job_type: JobType::Bus,
+                },
+                cargo: CargoKey {
+                    // The bonus table matches this, like a cargo id.
+                    cargo_id: BUS_CARGO_ID.to_string(),
+                    cargo_mass_bits: None,
+                    cargo_unit_count: u("bus.stages.count"),
+                    income: u("income"),
+                },
+            },
+            cargo_name: "Passengers".to_string(),
+            cargo_mass_kg: None,
+            // Passengers board at the first stop, which is where the job starts.
+            cargo_loaded: true,
+            names: JobNames {
+                source_city: s("source_stop.name", 0),
+                source_company: String::new(),
+                destination_city: s("destination_stop.name", last),
+                destination_company: String::new(),
+            },
+        })
+    }
+
     pub fn is_world_of_trucks(&self) -> bool {
         is_world_of_trucks_market(&self.fingerprint.route.job_market)
     }
@@ -170,6 +238,10 @@ pub struct Delivered {
     pub delivery_time_min: Option<u64>,
     pub auto_park_used: Option<bool>,
     pub auto_load_used: Option<bool>,
+    /// `bus_job.completed` only: how happy the passengers were, 0-1. Every
+    /// rough moment of the trip lowers it (the SDK reports nothing else).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub passenger_satisfaction: Option<f64>,
 }
 
 impl Delivered {
@@ -182,6 +254,7 @@ impl Delivered {
             delivery_time_min: attr(attrs, "delivery.time").and_then(Value::as_u64),
             auto_park_used: attr(attrs, "auto.park.used").and_then(Value::as_bool),
             auto_load_used: attr(attrs, "auto.load.used").and_then(Value::as_bool),
+            passenger_satisfaction: attr(attrs, "passenger.satisfaction").and_then(Value::as_f64),
         }
     }
 }
@@ -239,6 +312,63 @@ mod tests {
         assert!(car.cargo_loaded);
         let freight = JobInfo::from_config(Game::Ats, &attrs).unwrap();
         assert_ne!(freight.fingerprint.route, car.fingerprint.route);
+    }
+
+    fn ai(name: &str, i: u32, value: Value) -> Attr {
+        Attr { name: name.into(), index: Some(i), value }
+    }
+
+    /// The owner's two-stage test shape of a real config (2026-11-23):
+    /// `stage` is `bus.stages.current`, `dep` a stop's actual departure.
+    fn coach(stage: u64, dep: Option<u64>) -> Vec<Attr> {
+        let mut v = vec![
+            a("bus.stages.count", json!(2)),
+            a("bus.stages.current", json!(stage)),
+            a("income", json!(45833)),
+            a("planned_distance.km", json!(1471)),
+            a("bus_job.market", json!("company_job")),
+        ];
+        for (i, (from, to)) in [("reykjavik", "hofn"), ("hofn", "akureyri")].into_iter().enumerate() {
+            let i = i as u32;
+            v.push(ai("source_stop.type", i, json!("city")));
+            v.push(ai("source_stop.id", i, json!(from)));
+            v.push(ai("destination_stop.type", i, json!("city")));
+            v.push(ai("destination_stop.id", i, json!(to)));
+            v.push(ai("destination_stop.name", i, json!(if to == "hofn" { "Höfn í Hornafirði" } else { "Akureyri" })));
+            v.push(ai("source_stop.departure_time.planned", i, json!(1981536 + 300 * i as u64)));
+            if let Some(d) = dep.filter(|_| i == 0) {
+                v.push(ai("source_stop.departure_time.actual", i, json!(d)));
+            }
+        }
+        v
+    }
+
+    #[test]
+    fn a_coach_job_is_first_stop_to_last_and_ignores_stages_and_times() {
+        let accepted = JobInfo::from_config_of(Game::Ets2, JobType::Bus, &coach(0, None)).unwrap();
+        let after_a_stop = JobInfo::from_config_of(Game::Ets2, JobType::Bus, &coach(1, Some(1981540))).unwrap();
+        assert_eq!(accepted.fingerprint, after_a_stop.fingerprint);
+        let r = &accepted.fingerprint.route;
+        assert_eq!((r.source_city.as_str(), r.destination_city.as_str()), ("reykjavik", "akureyri"));
+        assert_eq!((r.job_type, r.job_market.as_str(), r.delivery_time), (JobType::Bus, "company_job", None));
+        assert_eq!(accepted.names.destination_city, "Akureyri");
+        assert_eq!(accepted.fingerprint.cargo.cargo_id, BUS_CARGO_ID);
+        assert!(accepted.cargo_loaded);
+        assert!(JobInfo::from_config_of(Game::Ets2, JobType::Bus, &[]).is_none(), "empty = no job (for now)");
+    }
+
+    #[test]
+    fn completed_coach_job_attributes() {
+        // bus_job.completed, 2026-11-23 17:24:47 (Reykjavík → Höfn).
+        let d = Delivered::from_attrs(&[
+            a("revenue", json!(12390)),
+            a("earned.xp", json!(639)),
+            a("passenger.satisfaction", json!(1.0)),
+            a("distance.km", json!(393.0)),
+            a("delivery.time", json!(136)),
+        ]);
+        assert_eq!((d.revenue, d.earned_xp, d.passenger_satisfaction), (Some(12390), Some(639), Some(1.0)));
+        assert_eq!((d.distance_km, d.delivery_time_min), (Some(393.0), Some(136)));
     }
 
     #[test]
