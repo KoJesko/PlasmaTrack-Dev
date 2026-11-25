@@ -99,16 +99,24 @@ impl SpeedRules {
         }
     }
 
-    /// (penalty, invalid) mph for a job: a road trip's own limits when the
-    /// game has them, else the game's.
+    /// (penalty, invalid) mph for a job: a road trip's or coach's own limits
+    /// when the game has them, else the game's. Coaches always have limits:
+    /// [`DEFAULT_COACH_SPEED`] when the config names none.
     pub fn limits_for(&self, game: Game, job_type: JobType) -> (f64, f64) {
         let l = self.limits(game);
-        match (&l.road_trip, job_type) {
-            (Some(r), JobType::Car) => (r.penalty_over_mph, r.invalid_over_mph),
+        match (job_type, &l.road_trip, &l.coach) {
+            (JobType::Car, Some(r), _) => (r.penalty_over_mph, r.invalid_over_mph),
+            (JobType::Bus, _, Some(c)) => (c.penalty_over_mph, c.invalid_over_mph),
+            (JobType::Bus, _, None) => DEFAULT_COACH_SPEED,
             _ => (l.penalty_over_mph, l.invalid_over_mph),
         }
     }
 }
+
+/// Coach jobs (owner, 2026-11-25): the speed penalty (x speed_penalty_factor)
+/// over 81 mph, about 130 km/h, where the game's passengers start screaming;
+/// no points over 100 mph. (penalty_over_mph, invalid_over_mph).
+pub const DEFAULT_COACH_SPEED: (f64, f64) = (81.0, 100.0);
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -119,6 +127,10 @@ pub struct SpeedLimits {
     /// Absent: they use the limits above.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub road_trip: Option<RoadTripSpeed>,
+    /// Coach jobs (`bus_job`). Absent: [`DEFAULT_COACH_SPEED`]. Not serialised
+    /// when absent, so existing configs keep their integrity hash.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub coach: Option<RoadTripSpeed>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -477,7 +489,10 @@ impl Config {
         }
         for (g, l) in [("ats", &r.speed.ats), ("ets2", &r.speed.ets2)] {
             let road_trip = l.road_trip.as_ref().map(|t| (format!("{g}.road_trip"), t.penalty_over_mph, t.invalid_over_mph));
-            for (name, penalty, invalid) in std::iter::once((g.to_string(), l.penalty_over_mph, l.invalid_over_mph)).chain(road_trip) {
+            let coach = l.coach.as_ref().map(|t| (format!("{g}.coach"), t.penalty_over_mph, t.invalid_over_mph));
+            for (name, penalty, invalid) in
+                std::iter::once((g.to_string(), l.penalty_over_mph, l.invalid_over_mph)).chain(road_trip).chain(coach)
+            {
                 positive(&mut errs, &format!("rules.speed.{name}.penalty_over_mph"), penalty);
                 if invalid <= penalty {
                     errs.push(format!(
@@ -572,6 +587,14 @@ mod tests {
         assert_eq!(c.rules.speed.limits_for(Game::Ats, JobType::Car), (155.0, 200.0));
         assert_eq!(c.rules.speed.limits_for(Game::Ats, JobType::Freight), (105.0, 125.0));
         assert_eq!(c.rules.speed.limits_for(Game::Ets2, JobType::Car), (100.0, 150.0));
+        // Coaches (owner, 2026-11-25): 81 / 100 mph unless configured.
+        assert_eq!(c.rules.speed.limits_for(Game::Ets2, JobType::Bus), (81.0, 100.0));
+        assert_eq!(c.rules.speed.limits_for(Game::Ets2, JobType::Freight), (100.0, 150.0));
+        let mut d = c.clone();
+        d.rules.speed.ets2.coach = Some(RoadTripSpeed { penalty_over_mph: 70.0, invalid_over_mph: 90.0 });
+        assert_eq!(d.rules.speed.limits_for(Game::Ets2, JobType::Bus), (70.0, 90.0));
+        d.rules.speed.ets2.coach = Some(RoadTripSpeed { penalty_over_mph: 90.0, invalid_over_mph: 90.0 });
+        assert!(d.validate().is_err(), "invalid must be above penalty");
         assert_eq!(c.rules.manual_review_over_world_km, 150.0);
         assert_eq!(c.rules.speed_penalty_factor, 0.85);
         assert_eq!(c.rules.speed.sustained_window_s, 3.0);

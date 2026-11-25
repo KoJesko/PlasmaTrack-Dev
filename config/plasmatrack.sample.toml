@@ -81,6 +81,13 @@ invalid_over_mph = 200.0
 penalty_over_mph = 100.0   # rule 5
 invalid_over_mph = 150.0   # rule 2
 
+# Coach jobs (bus_job, ETS2 Coaches DLC; you, 2026-11-25): the penalty over
+# 81 mph (about 130 km/h, where the passengers start screaming), no points over
+# 100 mph. Absent: these values.
+# [rules.speed.ets2.coach]
+# penalty_over_mph = 81.0
+# invalid_over_mph = 100.0
+
 [rules.distance]
 # Distances are compared after rounding to this precision (150.0 km is not
 # "over 150"; 150.1 km is). Distance thresholds are in km, so this is in km too.
