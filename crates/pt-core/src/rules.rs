@@ -653,7 +653,7 @@ pub fn evaluate_in<P, R: Resolve<P> + ?Sized>(job: &Job<P>, pts: &R, cfg: &Confi
     let mut base = accepted * r.points_per_world_mi;
     if job.info.fingerprint.route.job_type == JobType::Bus {
         // The VTC bonus (below) then applies on top of the coach points, the
-        // same as on freight points. Assumed, not yet confirmed by the owner.
+        // same as on freight points (owner, 2026-11-25).
         let satisfaction = job.delivered.as_ref().and_then(|x| x.passenger_satisfaction);
         base = coach_points(base, satisfaction, r.coach_points_factor());
     }
