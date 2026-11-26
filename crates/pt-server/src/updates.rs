@@ -287,7 +287,7 @@ pub async fn file<H: Host>(h: &H, req: &Request, parts: &[&str]) -> ApiResult<Re
         let bad = || ApiError::forbidden("This link is not valid. Ask the Discord bot for a new one.");
         let (Some(exp), Some(sig)) = (req.q("exp"), req.q("sig")) else { return Err(bad()) };
         let exp_s: i64 = exp.parse().map_err(|_| bad())?;
-        if !util::constant_eq(sig.as_bytes(), release_sig(h, &key, exp_s).as_bytes()) {
+        if h.settings().download_secret.is_empty() || !util::constant_eq(sig.as_bytes(), release_sig(h, &key, exp_s).as_bytes()) {
             return Err(bad());
         }
         if h.now_ms() / 1000 > exp_s {

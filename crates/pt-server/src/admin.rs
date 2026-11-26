@@ -599,7 +599,7 @@ pub async fn download_trace<H: Host>(h: &H, req: &Request, job_id: &str) -> ApiR
     let (Ok(version), Ok(exp_s)) = (v.parse::<i64>(), exp.parse::<i64>()) else {
         return Err(ApiError::forbidden("This link is not valid."));
     };
-    if !util::constant_eq(sig.as_bytes(), trace_sig(h, job_id, version, exp_s).as_bytes()) {
+    if h.settings().download_secret.is_empty() || !util::constant_eq(sig.as_bytes(), trace_sig(h, job_id, version, exp_s).as_bytes()) {
         return Err(ApiError::forbidden("This link is not valid."));
     }
     if h.now_ms() / 1000 > exp_s {
