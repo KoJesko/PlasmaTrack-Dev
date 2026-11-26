@@ -44,6 +44,7 @@
     "electron-winstaller": false
   },
   "overrides": {
-    "global-agent": "^4.1.3"
+    "global-agent": "^4.1.3",
+    "minimatch@>=7.0.0 <11.0.1": "^11.0.1"
   }
 }

@@ -96,7 +96,8 @@ pub struct Settings {
     pub webhook_secrets: Vec<String>,
     /// This server's public origin, for signed download URLs.
     pub public_url: String,
-    /// Key for signed download URLs.
+    /// Key for signed download URLs. Empty: every signed link is refused
+    /// (an empty HMAC key would let anyone mint them).
     pub download_secret: String,
     /// Where this server's backups go in the backup bucket, ending in `/`
     /// (docs/SERVER.md).

@@ -138,7 +138,7 @@ pub async fn download<H: Host>(h: &H, req: &Request, id: &str) -> ApiResult<Resp
     let bad = || ApiError::forbidden("This link is not valid.");
     let (Some(exp), Some(sig)) = (req.q("exp"), req.q("sig")) else { return Err(bad()) };
     let exp_s: i64 = exp.parse().map_err(|_| bad())?;
-    if !util::constant_eq(sig.as_bytes(), evidence_sig(h, id, exp_s).as_bytes()) {
+    if h.settings().download_secret.is_empty() || !util::constant_eq(sig.as_bytes(), evidence_sig(h, id, exp_s).as_bytes()) {
         return Err(bad());
     }
     if h.now_ms() / 1000 > exp_s {

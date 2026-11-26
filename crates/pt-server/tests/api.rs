@@ -434,3 +434,20 @@ fn admins_can_be_added_but_never_all_removed() {
     assert_eq!(r.status, 200);
     assert_eq!(r.body_json()["pending_review"], 0);
 }
+
+#[test]
+fn signed_links_are_refused_without_a_download_secret() {
+    let mut t = TestHost::new();
+    t.settings.download_secret = String::new();
+    let exp = t.now.get() / 1000 + 3600;
+    let sig = |msg: String| util::hex(&util::hmac_sha256(b"", msg.as_bytes()));
+    let paths = [
+        format!("/dl/evidence/evd_x?exp={exp}&sig={}", sig(format!("evidence.evd_x.{exp}"))),
+        format!("/dl/trace/ABCDEFGH?v=1&exp={exp}&sig={}", sig(format!("trace.ABCDEFGH.1.{exp}"))),
+        format!("/dl/releases/windows/0.1.0/Setup.exe?exp={exp}&sig={}", sig(format!("release.windows/0.1.0/Setup.exe.{exp}"))),
+    ];
+    for p in paths {
+        let r = t.call(Request::new("GET", &p));
+        assert_eq!(r.status, 403, "{p}: {}", r.body_json());
+    }
+}
