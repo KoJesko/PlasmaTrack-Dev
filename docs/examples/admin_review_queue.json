@@ -15,6 +15,8 @@
       "game_km": 1.0,
       "held_points": 0.2,
       "job_id": "1XW08CFJ",
+      "job_type": "freight",
+      "market": "quick_job",
       "origin": "tracked",
       "outcome": "pending_review",
       "player": {
@@ -40,6 +42,7 @@
         "city_id": "cagliari",
         "city_name": "Cagliari"
       },
+      "via": null,
       "world_km": 0.33
     },
     {
@@ -57,6 +60,8 @@
       "game_km": 2512.0,
       "held_points": 90.3,
       "job_id": "2RG8X3RX",
+      "job_type": "freight",
+      "market": "cargo_market",
       "origin": "tracked",
       "outcome": "pending_review",
       "player": {
@@ -75,6 +80,7 @@
         "city_id": "honningsvag",
         "city_name": "Honningsvåg"
       },
+      "via": null,
       "world_km": 145.33
     },
     {
@@ -92,6 +98,8 @@
       "game_km": 171.0,
       "held_points": null,
       "job_id": "Y1SEMGH2",
+      "job_type": "freight",
+      "market": "cargo_market",
       "origin": "tracked",
       "outcome": "invalid",
       "player": {
@@ -114,6 +122,7 @@
         "city_id": "chicago",
         "city_name": "Chicago"
       },
+      "via": null,
       "world_km": 8.55
     }
   ],

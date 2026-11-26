@@ -143,7 +143,7 @@ comma-separated outcomes. Each item is a **job summary**:
   "reported_delivered_at": "2026-10-13T21:25:00.070Z",
   "multiplayer": {"kind": "truckersmp", "truckersmp": {"server_id": 4, "account_id": 1234567}},
   "fuel_used_l": 41.2, "damage_pct": 0.4, "income": 6767, "currency": "EUR",
-  "passenger_satisfaction": null
+  "passenger_satisfaction": null, "via": null
 }
 ```
 
@@ -212,10 +212,14 @@ differently:
 - **Stops, not companies.** `source` is the **first stop** and `destination` the **last stop**:
   `city_id` is the stop's id (`umea`), `city_name` its name (`Umeå`, `Höfn í Hornafirði`),
   `company_id` the stop's type (`city`; a tourist stop is `viewpoints`) and `company_name` is
-  `""`. Stops in between are not listed.
+  `""`.
+- **`via`** lists the stops in between, in driving order, in the same shape:
+  `[{"city_id": "scmabodalen", "city_name": "Måbødalen Valley", "company_id": "viewpoints", "company_name": ""}]`.
+  It is `[]` for a coach job with no stop in between, and `null` for every other job. A coach
+  line can have several (a five-stage line has four).
 - **Round trips.** A tourist trip often ends where it began (Umeå → Måbødalen Valley → Umeå), so
-  `source` and `destination` can be the same stop. Show it as a round trip from that stop rather
-  than "Umeå → Umeå".
+  `source` and `destination` can be the same stop. Show it as a round trip from that stop, with
+  `via`, rather than "Umeå → Umeå": "round trip from Umeå via Måbødalen Valley".
 - **Cargo** is always `{"id": "passengers", "name": "Passengers"}`. A bonus can match the cargo
   id `passengers`.
 - **`damage_pct`** is `null`: a coach carries no cargo. Use `passenger_satisfaction` instead.

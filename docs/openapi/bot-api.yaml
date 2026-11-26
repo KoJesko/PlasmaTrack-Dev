@@ -1402,6 +1402,7 @@
                             "start":
                               "type": "string"
                             "via":
+                              "description": "Coach jobs (job_type bus) only: the stops between the first (source) and the last (destination), in driving order, shaped like source; [] when there are none. Null for every other job. PUBLIC_API §3."
                               "type": "string"
                             "world_m":
                               "type": "number"
@@ -1410,6 +1411,9 @@
                           "type": "string"
                       "type": "object"
                     "type": "array"
+                  "via":
+                    "description": "Coach jobs (job_type bus) only: the stops between the first (source) and the last (destination), in driving order, shaped like source; [] when there are none. Null for every other job. PUBLIC_API §3."
+                    "type": "null"
                   "world_km":
                     "type": "number"
                   "world_mi":
@@ -2819,6 +2823,12 @@
                           - "null"
                         "job_id":
                           "type": "string"
+                        "job_type":
+                          "description": "freight (truck), car (ATS road trip) or bus (ETS2 coach job); null for manual jobs. Treat unknown values as other (API_CONVENTIONS §1). PUBLIC_API §3."
+                          "type": "string"
+                        "market":
+                          "description": "The game's market. Freight: job.market (cargo_market, freight_market, quick_job, external_contracts...). Road trip: car_job.market. Coach: bus_job.market, company_job (a coach line) or tourist_job (a tourist trip, often a round trip). Null for manual jobs. PUBLIC_API §3."
+                          "type": "string"
                         "origin":
                           "type": "string"
                         "outcome":
@@ -2869,6 +2879,9 @@
                             "city_name":
                               "type": "string"
                           "type": "object"
+                        "via":
+                          "description": "Coach jobs (job_type bus) only: the stops between the first (source) and the last (destination), in driving order, shaped like source; [] when there are none. Null for every other job. PUBLIC_API §3."
+                          "type": "null"
                         "world_km":
                           "type": "number"
                       "type": "object"
@@ -3754,6 +3767,9 @@
                     "type": "object"
                   "speed_penalty_applied":
                     "type": "boolean"
+                  "via":
+                    "description": "Coach jobs (job_type bus) only: the stops between the first (source) and the last (destination), in driving order, shaped like source; [] when there are none. Null for every other job. PUBLIC_API §3."
+                    "type": "null"
                   "world_km":
                     "type": "number"
                   "world_mi":
@@ -4181,6 +4197,22 @@
                     "type": "object"
                   "speed_penalty_applied":
                     "type": "boolean"
+                  "via":
+                    "description": "Coach jobs (job_type bus) only: the stops between the first (source) and the last (destination), in driving order, shaped like source; [] when there are none. Null for every other job. PUBLIC_API §3."
+                    "items":
+                      "properties":
+                        "city_id":
+                          "type": "string"
+                        "city_name":
+                          "type": "string"
+                        "company_id":
+                          "type": "string"
+                        "company_name":
+                          "type": "string"
+                      "type": "object"
+                    "type":
+                    - "null"
+                    - "array"
                   "world_km":
                     "type": "number"
                   "world_mi":
@@ -4757,6 +4789,9 @@
                             "company_name":
                               "type": "string"
                           "type": "object"
+                        "via":
+                          "description": "Coach jobs (job_type bus) only: the stops between the first (source) and the last (destination), in driving order, shaped like source; [] when there are none. Null for every other job. PUBLIC_API §3."
+                          "type": "null"
                         "world_km":
                           "type": "number"
                         "world_mi":
@@ -5165,6 +5200,9 @@
                             "company_name":
                               "type": "string"
                           "type": "object"
+                        "via":
+                          "description": "Coach jobs (job_type bus) only: the stops between the first (source) and the last (destination), in driving order, shaped like source; [] when there are none. Null for every other job. PUBLIC_API §3."
+                          "type": "null"
                         "world_km":
                           "type": "number"
                         "world_mi":

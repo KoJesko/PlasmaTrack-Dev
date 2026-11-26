@@ -108,6 +108,19 @@ pub struct JobNames {
     pub source_company: String,
     pub destination_city: String,
     pub destination_company: String,
+    /// Coach jobs only: the stops between the first and the last, in order
+    /// (each stage's destination but the last). Empty, and not serialised, for
+    /// every other job, so their stored timelines stay the same.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub via: Vec<Stop>,
+}
+
+/// A coach stop: `*_stop.id`, `.name` and `.type` (`city`, `viewpoints`...).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Stop {
+    pub id: String,
+    pub name: String,
+    pub kind: String,
 }
 
 /// The `cargo_id` of every coach job (it carries no cargo of its own).
@@ -172,6 +185,7 @@ impl JobInfo {
                 source_company: s("source.company"),
                 destination_city: s("destination.city"),
                 destination_company: s("destination.company"),
+                via: Vec::new(),
             },
         })
     }
@@ -216,6 +230,9 @@ impl JobInfo {
                 source_company: String::new(),
                 destination_city: s("destination_stop.name", last),
                 destination_company: String::new(),
+                via: (0..last)
+                    .map(|i| Stop { id: s("destination_stop.id", i), name: s("destination_stop.name", i), kind: s("destination_stop.type", i) })
+                    .collect(),
             },
         })
     }

@@ -282,6 +282,9 @@ These answer the bot's open questions "(Q)". **The project owner confirmed all o
     `company_job` (a coach line) or `tourist_job` (a tourist trip).
   - **`source` / `destination`** are the first and last stop (`company_name` is `""`,
     `company_id` the stop type). A tourist round trip has the same stop at both ends.
+  - **New field `via`** on every job summary and detail: the stops in between, in order, shaped
+    like `source`; `[]` when there are none, `null` on every job but a coach job.
+  - **Review-queue items** (ADMIN_API §1) gain `job_type`, `market` and `via`.
   - **New field `passenger_satisfaction`** on every job summary and detail: 0–1 on a coach job,
     `null` on every other job. Cargo is `passengers` / `Passengers` and `damage_pct` is `null`.
   - **Points:** distance points × 1.0725 (`coach_points_factor`) × `passenger_satisfaction`, then

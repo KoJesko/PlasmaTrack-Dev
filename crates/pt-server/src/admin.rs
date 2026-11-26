@@ -68,6 +68,9 @@ pub async fn review_queue<H: Host>(h: &H, req: &Request) -> ApiResult<Response> 
             "job_id": r.s("job_id"), "game": r.s("game"), "origin": r.s("origin"), "outcome": r.s("outcome"), "player": user.brief(),
             "held_points": r.opt_f("held_points"), "world_km": s["world_km"], "game_km": s["game_km"],
             "cargo": s["cargo"], "source": brief(&s["source"]), "destination": brief(&s["destination"]),
+            // Coach jobs (PUBLIC_API §3): what kind of job, and the stops between.
+            "job_type": s["job_type"], "market": s["market"],
+            "via": s["via"].as_array().map(|v| v.iter().map(brief).collect::<Vec<_>>()),
             "delivered_at": util::opt_rfc3339(r.opt_i("delivered_at")),
             "age_s": r.opt_i("delivered_at").map(|d| (now - d) / 1000),
             "reasons": r.json("reasons"),

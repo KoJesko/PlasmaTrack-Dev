@@ -86,6 +86,7 @@
     "company_name": "Tradeaux"
   },
   "speed_penalty_applied": false,
+  "via": null,
   "world_km": 22.75,
   "world_mi": 14.14
 }

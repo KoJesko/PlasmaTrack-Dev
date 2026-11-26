@@ -31,7 +31,7 @@ fn upload_score_and_read_a_real_delivery() {
     assert!(j["distance_by_scale_class"]["road"]["world_mi"].as_f64().unwrap() > 0.0);
     assert!(j["source"]["city_name"].as_str().is_some_and(|s| !s.is_empty()), "{j}");
     assert!(j["delivered_at"].as_str().unwrap().ends_with('Z'));
-    assert_eq!((j["job_type"].as_str(), j["passenger_satisfaction"].clone()), (Some("freight"), Value::Null), "only coaches have one");
+    assert_eq!((j["job_type"].as_str(), j["passenger_satisfaction"].clone(), j["via"].clone()), (Some("freight"), Value::Null, Value::Null), "only coaches have them");
     for hidden in ["reasons", "detail", "segments", "timeline"] {
         assert!(j.get(hidden).is_none(), "{hidden} must stay admin-only");
     }
@@ -122,6 +122,7 @@ fn coach_jobs_read_as_coach_jobs() {
     assert_eq!(j["source"], json!({"city_id": "umea", "city_name": "Umeå", "company_id": "city", "company_name": ""}));
     assert_eq!(j["destination"], j["source"], "a round trip");
     assert_eq!(j["passenger_satisfaction"], 1.0);
+    assert_eq!(j["via"], json!([{"city_id": "scmabodalen", "city_name": "Måbødalen Valley", "company_id": "viewpoints", "company_name": ""}]));
     assert_eq!(j["speed_penalty_applied"], false);
     // The list carries it too.
     let l = t.call(t.bot("GET", &format!("/api/v1/public/ets2/players/{PLAYER}/jobs"))).body_json();
@@ -132,6 +133,13 @@ fn coach_jobs_read_as_coach_jobs() {
     assert_eq!((a["speed"]["penalty_over_mph"].as_f64(), a["speed"]["invalid_over_mph"].as_f64()), (Some(81.0), Some(100.0)), "{}", a["speed"]);
     let s = t.call(t.bot("GET", &format!("/api/v1/public/jobs/{job_id}/series?max_points=20"))).body_json();
     assert_eq!((s["penalty_over_mph"].as_f64(), s["invalid_over_mph"].as_f64()), (Some(81.0), Some(100.0)));
+
+    // In the review queue it says it is a coach job, not just "Passengers".
+    t.exec("UPDATE jobs SET outcome = 'pending_review'");
+    let q = t.call(t.admin("GET", "/api/v1/admin/review-queue")).body_json();
+    let item = &q["items"][0];
+    assert_eq!((item["job_type"].as_str(), item["market"].as_str()), (Some("bus"), Some("tourist_job")), "{q}");
+    assert_eq!(item["via"], json!([{"city_id": "scmabodalen", "city_name": "Måbødalen Valley"}]));
 }
 
 #[test]

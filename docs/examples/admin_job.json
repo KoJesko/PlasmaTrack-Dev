@@ -281,6 +281,7 @@
       "event": "duplicate_delivery"
     }
   ],
+  "via": null,
   "world_km": 145.33,
   "world_mi": 90.3
 }

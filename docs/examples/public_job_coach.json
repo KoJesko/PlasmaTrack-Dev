@@ -78,6 +78,14 @@
     "company_name": ""
   },
   "speed_penalty_applied": false,
+  "via": [
+    {
+      "city_id": "scmabodalen",
+      "city_name": "Måbødalen Valley",
+      "company_id": "viewpoints",
+      "company_name": ""
+    }
+  ],
   "world_km": 134.36,
   "world_mi": 83.49
 }

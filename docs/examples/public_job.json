@@ -78,6 +78,7 @@
     "company_name": "Chicago International Airport"
   },
   "speed_penalty_applied": false,
+  "via": null,
   "world_km": 5.89,
   "world_mi": 3.66
 }

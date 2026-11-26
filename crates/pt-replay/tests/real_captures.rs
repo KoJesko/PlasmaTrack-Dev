@@ -385,6 +385,7 @@ fn coach_job_across_sessions_loads_and_a_stop() {
     let r = &jobs[0];
     assert_eq!((r.job.state, r.job.start), (JobState::Cancelled, StartKind::Tracked));
     assert_eq!(r.job.info.fingerprint.cargo.cargo_unit_count, Some(5), "five stages");
+    assert_eq!(r.job.info.names.via.len(), 4, "four stops between the first and the last");
     assert_eq!(count(&r.job.events, |e| matches!(e, JobEvent::SessionContinue { .. })), 2);
     assert_eq!(count(&r.job.events, |e| matches!(e, JobEvent::LoadTruncate { .. })), 2);
     assert!(r.job.gaps.is_empty());
@@ -477,6 +478,8 @@ fn a_singleplayer_tourist_round_trip() {
     assert_eq!(route.job_type, JobType::Bus);
     assert_eq!(route.job_market, "tourist_job");
     assert_eq!((route.source_city.as_str(), route.destination_city.as_str()), ("umea", "umea"));
+    let via: Vec<_> = r.job.info.names.via.iter().map(|v| (v.id.as_str(), v.name.as_str(), v.kind.as_str())).collect();
+    assert_eq!(via, [("scmabodalen", "Måbødalen Valley", "viewpoints")], "the stop between");
     assert_eq!(r.job.state, JobState::Delivered);
     assert_eq!(count(&r.job.events, |e| matches!(e, JobEvent::LoadTruncate { .. })), 3);
     let d = r.job.delivered.as_ref().expect("delivered");

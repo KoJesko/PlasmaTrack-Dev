@@ -807,6 +807,9 @@ fn build<P, R: Resolve<P> + ?Sized>(
         // clamped into 0..=1, NaN as 0; `null` until `bus_job.completed`.
         let s = job.delivered.as_ref().and_then(|x| x.passenger_satisfaction);
         summary["passenger_satisfaction"] = s.map(|s| if s.is_nan() { 0.0 } else { s.clamp(0.0, 1.0) }).into();
+        // The stops between the first and the last, in order, shaped like
+        // `source` (the stop type as `company_id`).
+        summary["via"] = names.via.iter().map(|v| place(&v.id, &v.name, &v.kind, "")).collect::<Vec<_>>().into();
     }
 
     // Reasons: review reasons, then invalid and discard.
@@ -1385,7 +1388,7 @@ pub fn summary_json(row: &Row) -> Value {
     out.insert("outcome".into(), outcome.clone().into());
     out.insert("points".into(), row.opt_f("points").map_or(Value::Null, Value::from));
     out.insert("held_points".into(), row.opt_f("held_points").map_or(Value::Null, Value::from));
-    for k in ["world_km", "world_mi", "game_km", "game_mi", "cargo", "source", "destination", "market", "job_type"] {
+    for k in ["world_km", "world_mi", "game_km", "game_mi", "cargo", "source", "destination", "via", "market", "job_type"] {
         out.insert(k.into(), o.remove(k).unwrap_or(Value::Null));
     }
     if matches!(outcome.as_str(), "discarded") {

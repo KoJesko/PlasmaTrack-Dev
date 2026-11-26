@@ -127,6 +127,7 @@ fn infer(v: &Value) -> Value {
 const FIELD_NOTES: &[(&str, &str)] = &[
     ("job_type", "freight (truck), car (ATS road trip) or bus (ETS2 coach job); null for manual jobs. Treat unknown values as other (API_CONVENTIONS §1). PUBLIC_API §3."),
     ("market", "The game's market. Freight: job.market (cargo_market, freight_market, quick_job, external_contracts...). Road trip: car_job.market. Coach: bus_job.market, company_job (a coach line) or tourist_job (a tourist trip, often a round trip). Null for manual jobs. PUBLIC_API §3."),
+    ("via", "Coach jobs (job_type bus) only: the stops between the first (source) and the last (destination), in driving order, shaped like source; [] when there are none. Null for every other job. PUBLIC_API §3."),
     ("passenger_satisfaction", "Coach jobs (job_type bus) only: the passengers' satisfaction at the end, 0-1 (show as a percentage). Coach points = distance points x the coach factor (1.0725) x this, then any bonus. Null for every other job and until the coach job is completed. PUBLIC_API §3."),
 ];
 

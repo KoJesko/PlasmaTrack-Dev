@@ -87,6 +87,7 @@
     "company_name": "Renar Logistik"
   },
   "speed_penalty_applied": false,
+  "via": null,
   "world_km": 145.33,
   "world_mi": 90.3
 }
