@@ -560,7 +560,6 @@ pub fn class_name(c: ScaleClass) -> &'static str {
         ScaleClass::City => "city",
         ScaleClass::Road => "road",
         ScaleClass::OneToOne => "one_to_one",
-        ScaleClass::Multiplayer => "multiplayer",
         ScaleClass::Nonstandard => "nonstandard",
         ScaleClass::Unknown => "unknown",
     }

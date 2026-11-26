@@ -298,9 +298,8 @@ These answer the bot's open questions "(Q)". **The project owner confirmed all o
     player's PC. Neither is listed.
   - New example `docs/examples/public_job_coach.json`; `bot-api.yaml` describes `job_type`,
     `market` and `passenger_satisfaction`.
-- 2026-11-25 (owner): **new scale class `multiplayer`** in `distance_by_scale_class` (every job
-  summary, detail and player stats) and in route `scale_class`. It is a multiplayer session's own
-  scale: Convoy holds one scale for the whole session, cities included (ETS2 15.56, ATS 16.34),
-  and TrucklineMP holds ATS at 19. Before, these read as `nonstandard`. World distances and
-  points do not change (the odometer counts 3D distance x that same scale). Jobs stored before
-  the change keep `nonstandard` until they are rescored. Suggested colour: purple.
+- 2026-11-25 (owner): **a multiplayer session's own scale reads as `road`**, not `nonstandard`,
+  in `distance_by_scale_class` and route `scale_class`. Convoy holds one scale for the whole
+  session, cities included (ETS2 15.56, ATS 16.34), and TrucklineMP holds ATS at 19; it only
+  paces time. World distances and points do not change. (A short-lived `multiplayer` class from
+  earlier the same day is withdrawn; the bot ignores classes it does not know.)
