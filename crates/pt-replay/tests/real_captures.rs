@@ -462,3 +462,30 @@ fn a_completion_after_a_failure_without_a_load_does_not_score() {
     assert!(!jobs[0].job.events.iter().any(|e| matches!(e, JobEvent::Delivered { .. })));
     assert_eq!(jobs[0].result.outcome, Outcome::Incomplete);
 }
+
+/// 2026-11-25, singleplayer: a tourist job (`bus_job.market` = tourist_job),
+/// a round trip Umeå -> Måbødalen Valley (stop type `viewpoints`) -> Umeå over
+/// two sessions. The owner took a shortcut after the viewpoint (the game paid
+/// 1991 of the planned 2152 km), loaded saves three times on the way back and
+/// restarted the game before delivering. Satisfaction 1.0, peak 76.7 mph.
+#[test]
+fn a_singleplayer_tourist_round_trip() {
+    let jobs = run_files(&["ets2-coach-tourist-job-sp.jsonl.gz"]);
+    assert_eq!(jobs.len(), 1, "one job through the stop, three loads and a restart");
+    let r = &jobs[0];
+    let route = &r.job.info.fingerprint.route;
+    assert_eq!(route.job_type, JobType::Bus);
+    assert_eq!(route.job_market, "tourist_job");
+    assert_eq!((route.source_city.as_str(), route.destination_city.as_str()), ("umea", "umea"));
+    assert_eq!(r.job.state, JobState::Delivered);
+    assert_eq!(count(&r.job.events, |e| matches!(e, JobEvent::LoadTruncate { .. })), 3);
+    let d = r.job.delivered.as_ref().expect("delivered");
+    assert_eq!(d.passenger_satisfaction, Some(1.0));
+    // The game's driven distance and the odometer trace agree (the shortcut
+    // is in both), so nothing is held for review.
+    assert!(close(d.distance_km.expect("distance"), 1991.0, 0.5));
+    assert_eq!(r.result.outcome, Outcome::Valid);
+    assert!(r.result.review.is_empty(), "{:?}", r.result.review);
+    assert!(!r.result.speed.penalty, "peak 76.7 mph is under the coach limit of 81");
+    no_clock_flags(r);
+}
