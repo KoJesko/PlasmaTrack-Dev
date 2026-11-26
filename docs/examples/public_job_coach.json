@@ -1,0 +1,97 @@
+{
+  "bonus": null,
+  "cargo": {
+    "id": "passengers",
+    "name": "Passengers"
+  },
+  "currency": "EUR",
+  "custom_map": null,
+  "damage_pct": null,
+  "delivered_at": "2026-10-14T09:01:05.000Z",
+  "destination": {
+    "city_id": "umea",
+    "city_name": "Umeå",
+    "company_id": "city",
+    "company_name": ""
+  },
+  "distance_by_scale_class": {
+    "city": {
+      "game_km": 105.37,
+      "game_mi": 65.47,
+      "world_km": 35.12,
+      "world_mi": 21.82
+    },
+    "multiplayer": {
+      "game_km": 0.0,
+      "game_mi": 0.0,
+      "world_km": 0.0,
+      "world_mi": 0.0
+    },
+    "nonstandard": {
+      "game_km": 0.0,
+      "game_mi": 0.0,
+      "world_km": 0.0,
+      "world_mi": 0.0
+    },
+    "one_to_one": {
+      "game_km": 0.0,
+      "game_mi": 0.0,
+      "world_km": 0.0,
+      "world_mi": 0.0
+    },
+    "road": {
+      "game_km": 1885.93,
+      "game_mi": 1171.86,
+      "world_km": 99.26,
+      "world_mi": 61.68
+    },
+    "unknown": {
+      "game_km": 0.0,
+      "game_mi": 0.0,
+      "world_km": 0.0,
+      "world_mi": 0.0
+    }
+  },
+  "fuel_used_l": 639.87,
+  "game": "ets2",
+  "game_km": 1991.0,
+  "game_mi": 1237.15,
+  "held_points": null,
+  "income": 74844,
+  "job_id": "MXN61AMC",
+  "job_type": "bus",
+  "market": "tourist_job",
+  "multiplayer": {
+    "kind": "singleplayer",
+    "truckersmp": null
+  },
+  "origin": "tracked",
+  "outcome": "valid",
+  "passenger_satisfaction": 1.0,
+  "planned_distance_km": 2152,
+  "player": {
+    "discord_user_id": "567890123456789012",
+    "display_name": "Coach Driver",
+    "user_id": "usr_vrfjbgbv43"
+  },
+  "points": 89.5,
+  "public_notes": [],
+  "reported_delivered_at": "2026-11-26T00:10:45.154Z",
+  "source": {
+    "city_id": "umea",
+    "city_name": "Umeå",
+    "company_id": "city",
+    "company_name": ""
+  },
+  "speed_penalty_applied": false,
+  "via": [
+    {
+      "city_id": "scmabodalen",
+      "city_name": "Måbødalen Valley",
+      "company_id": "viewpoints",
+      "company_name": ""
+    }
+  ],
+  "world_km": 134.36,
+  "world_mi": 83.49
+}

@@ -52,6 +52,9 @@ speed_penalty_factor = 0.85
 # Rule 6: points per accepted WORLD mile (physical 1:1 distance = odometer /
 # local.scale, PLAN §6).
 points_per_world_mi = 1.0
+# Coach jobs (ETS2 Coaches DLC): distance points x this x the passengers'
+# satisfaction (0-1, from the game's bus_job.completed). Default 1.0725.
+# coach_points_factor = 1.0725
 # The job total is floored once, at the end, to this many decimals
 # (3.79 -> 3.7 with 1). Never rounds up.
 points_decimals = 1
@@ -77,6 +80,13 @@ invalid_over_mph = 200.0
 [rules.speed.ets2]
 penalty_over_mph = 100.0   # rule 5
 invalid_over_mph = 150.0   # rule 2
+
+# Coach jobs (bus_job, ETS2 Coaches DLC; you, 2026-11-25): the penalty over
+# 81 mph (about 130 km/h, where the passengers start screaming), no points over
+# 100 mph. Absent: these values.
+# [rules.speed.ets2.coach]
+# penalty_over_mph = 81.0
+# invalid_over_mph = 100.0
 
 [rules.distance]
 # Distances are compared after rounding to this precision (150.0 km is not
@@ -179,7 +189,9 @@ reopen_window_wall_h = 48.0
 # ---------------------------------------------------------------------------
 # Route map scale classes (PLAN §8). Each stretch of a route is coloured by the
 # local.scale it was driven at: 1 = one_to_one (1:1 mod), these vanilla values =
-# city / road, anything else = nonstandard (modded). Display only: scale never
+# city / road, anything else = multiplayer on a multiplayer job (the session's
+# own scale: Convoy 15.56 / 16.34, TrucklineMP ATS 19), else nonstandard
+# (modded). Display only: scale never
 # sends a job to review by itself. A game can have several road scales; the
 # first is the main one. Measured: ATS 3 / 20 (2026-09-28); ETS2 3 / 19, and 15
 # on UK roads (2026-10-13; the UK is "currently" 1:15 per the maintainer, so

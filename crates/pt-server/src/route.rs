@@ -238,6 +238,7 @@ pub fn geojson(job: &Job, cfg: &Config, job_id: &str, admin: bool) -> Value {
     }
 
     let vanilla = cfg.map.scale.vanilla(job.game);
+    let mp = job.kept.iter().any(|p| p.truckersmp || p.mp_mod.is_some() || p.mp_time_offset != 0);
     let local = local_centre(job, &shapes);
     let project = |p: &[f64; 2]| match local {
         Some([cx, cz]) => [(p[0] - cx) / LOCAL_M_PER_DEG, -(p[1] - cz) / LOCAL_M_PER_DEG],
@@ -259,7 +260,7 @@ pub fn geojson(job: &Job, cfg: &Config, job_id: &str, admin: bool) -> Value {
         vertices += coords.len();
         let mut props = json!({
             "index": i, "segment": s.kind, "local_scale": s.scale,
-            "scale_class": class_name(vanilla.classify(s.scale)),
+            "scale_class": class_name(vanilla.classify_in(s.scale, mp)),
             "start_at": rfc3339(s.start), "end_at": rfc3339(s.end),
             "counted": s.counted, "world_km": round2(s.world_km), "game_km": round2(s.game_km),
         });

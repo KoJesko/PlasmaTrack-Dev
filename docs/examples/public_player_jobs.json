@@ -32,6 +32,7 @@
       },
       "origin": "tracked",
       "outcome": "pending_review",
+      "passenger_satisfaction": null,
       "points": null,
       "reported_delivered_at": "2026-10-14T01:29:53.859Z",
       "source": {
@@ -40,6 +41,7 @@
         "company_id": "eolo_lines",
         "company_name": "Eolo Lines"
       },
+      "via": null,
       "world_km": 0.33,
       "world_mi": 0.21
     },
@@ -76,6 +78,7 @@
       },
       "origin": "tracked",
       "outcome": "pending_review",
+      "passenger_satisfaction": null,
       "points": null,
       "reported_delivered_at": "2026-10-14T01:03:43.006Z",
       "source": {
@@ -84,6 +87,7 @@
         "company_id": "renar",
         "company_name": "Renar Logistik"
       },
+      "via": null,
       "world_km": 145.33,
       "world_mi": 90.3
     }

@@ -61,11 +61,25 @@ pub struct Rules {
     pub review_over_income: Option<f64>,
     pub speed_penalty_factor: f64,
     pub points_per_world_mi: f64,
+    /// Coach jobs (`bus_job`): points = distance points x this x the
+    /// passengers' satisfaction. Absent: [`DEFAULT_COACH_POINTS_FACTOR`]. Not
+    /// serialised when absent, so existing configs keep their integrity hash.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub coach_points_factor: Option<f64>,
     pub points_decimals: u32,
     pub speed: SpeedRules,
     pub distance: DistanceRules,
     pub fuel: FuelRules,
     pub refuel: RefuelHeuristic,
+}
+
+/// The owner's coach factor (2026-11-25).
+pub const DEFAULT_COACH_POINTS_FACTOR: f64 = 1.0725;
+
+impl Rules {
+    pub fn coach_points_factor(&self) -> f64 {
+        self.coach_points_factor.unwrap_or(DEFAULT_COACH_POINTS_FACTOR)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -85,16 +99,24 @@ impl SpeedRules {
         }
     }
 
-    /// (penalty, invalid) mph for a job: a road trip's own limits when the
-    /// game has them, else the game's.
+    /// (penalty, invalid) mph for a job: a road trip's or coach's own limits
+    /// when the game has them, else the game's. Coaches always have limits:
+    /// [`DEFAULT_COACH_SPEED`] when the config names none.
     pub fn limits_for(&self, game: Game, job_type: JobType) -> (f64, f64) {
         let l = self.limits(game);
-        match (&l.road_trip, job_type) {
-            (Some(r), JobType::Car) => (r.penalty_over_mph, r.invalid_over_mph),
+        match (job_type, &l.road_trip, &l.coach) {
+            (JobType::Car, Some(r), _) => (r.penalty_over_mph, r.invalid_over_mph),
+            (JobType::Bus, _, Some(c)) => (c.penalty_over_mph, c.invalid_over_mph),
+            (JobType::Bus, _, None) => DEFAULT_COACH_SPEED,
             _ => (l.penalty_over_mph, l.invalid_over_mph),
         }
     }
 }
+
+/// Coach jobs (owner, 2026-11-25): the speed penalty (x speed_penalty_factor)
+/// over 81 mph, about 130 km/h, where the game's passengers start screaming;
+/// no points over 100 mph. (penalty_over_mph, invalid_over_mph).
+pub const DEFAULT_COACH_SPEED: (f64, f64) = (81.0, 100.0);
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -105,6 +127,10 @@ pub struct SpeedLimits {
     /// Absent: they use the limits above.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub road_trip: Option<RoadTripSpeed>,
+    /// Coach jobs (`bus_job`). Absent: [`DEFAULT_COACH_SPEED`]. Not serialised
+    /// when absent, so existing configs keep their integrity hash.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub coach: Option<RoadTripSpeed>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -281,8 +307,25 @@ pub enum ScaleClass {
     City,
     Road,
     OneToOne,
+    /// A multiplayer session's own scale: Convoy holds one scale for the whole
+    /// session, cities included (ETS2 15.56, ATS 16.34; owner, 2026-11-25:
+    /// SCS's oversight), and TrucklineMP holds ATS at 19. The odometer still
+    /// counts 3D distance x that scale, so 1:1 distances stay exact.
+    Multiplayer,
     Nonstandard,
     Unknown,
+}
+
+impl ScaleClass {
+    /// Every class, in the order the API lists them.
+    pub const ALL: [ScaleClass; 6] = [
+        ScaleClass::City,
+        ScaleClass::Road,
+        ScaleClass::OneToOne,
+        ScaleClass::Multiplayer,
+        ScaleClass::Nonstandard,
+        ScaleClass::Unknown,
+    ];
 }
 
 impl VanillaScale {
@@ -292,6 +335,13 @@ impl VanillaScale {
     }
 
     pub fn classify(&self, local_scale: Option<f64>) -> ScaleClass {
+        self.classify_in(local_scale, false)
+    }
+
+    /// [`Self::classify`] for a job played in multiplayer (TruckersMP, a
+    /// multiplayer mod or Convoy): a scale the map does not use is then the
+    /// session's own, [`ScaleClass::Multiplayer`], not nonstandard.
+    pub fn classify_in(&self, local_scale: Option<f64>, multiplayer: bool) -> ScaleClass {
         let Some(s) = local_scale else { return ScaleClass::Unknown };
         if s == self.city_local_scale {
             ScaleClass::City
@@ -299,6 +349,8 @@ impl VanillaScale {
             ScaleClass::Road
         } else if s == 1.0 {
             ScaleClass::OneToOne
+        } else if multiplayer {
+            ScaleClass::Multiplayer
         } else {
             ScaleClass::Nonstandard
         }
@@ -463,7 +515,10 @@ impl Config {
         }
         for (g, l) in [("ats", &r.speed.ats), ("ets2", &r.speed.ets2)] {
             let road_trip = l.road_trip.as_ref().map(|t| (format!("{g}.road_trip"), t.penalty_over_mph, t.invalid_over_mph));
-            for (name, penalty, invalid) in std::iter::once((g.to_string(), l.penalty_over_mph, l.invalid_over_mph)).chain(road_trip) {
+            let coach = l.coach.as_ref().map(|t| (format!("{g}.coach"), t.penalty_over_mph, t.invalid_over_mph));
+            for (name, penalty, invalid) in
+                std::iter::once((g.to_string(), l.penalty_over_mph, l.invalid_over_mph)).chain(road_trip).chain(coach)
+            {
                 positive(&mut errs, &format!("rules.speed.{name}.penalty_over_mph"), penalty);
                 if invalid <= penalty {
                     errs.push(format!(
@@ -558,6 +613,14 @@ mod tests {
         assert_eq!(c.rules.speed.limits_for(Game::Ats, JobType::Car), (155.0, 200.0));
         assert_eq!(c.rules.speed.limits_for(Game::Ats, JobType::Freight), (105.0, 125.0));
         assert_eq!(c.rules.speed.limits_for(Game::Ets2, JobType::Car), (100.0, 150.0));
+        // Coaches (owner, 2026-11-25): 81 / 100 mph unless configured.
+        assert_eq!(c.rules.speed.limits_for(Game::Ets2, JobType::Bus), (81.0, 100.0));
+        assert_eq!(c.rules.speed.limits_for(Game::Ets2, JobType::Freight), (100.0, 150.0));
+        let mut d = c.clone();
+        d.rules.speed.ets2.coach = Some(RoadTripSpeed { penalty_over_mph: 70.0, invalid_over_mph: 90.0 });
+        assert_eq!(d.rules.speed.limits_for(Game::Ets2, JobType::Bus), (70.0, 90.0));
+        d.rules.speed.ets2.coach = Some(RoadTripSpeed { penalty_over_mph: 90.0, invalid_over_mph: 90.0 });
+        assert!(d.validate().is_err(), "invalid must be above penalty");
         assert_eq!(c.rules.manual_review_over_world_km, 150.0);
         assert_eq!(c.rules.speed_penalty_factor, 0.85);
         assert_eq!(c.rules.speed.sustained_window_s, 3.0);
@@ -586,6 +649,15 @@ mod tests {
         assert_eq!(ats.classify(Some(1.0)), ScaleClass::OneToOne);
         assert_eq!(ats.classify(Some(10.0)), ScaleClass::Nonstandard);
         assert_eq!(ats.classify(None), ScaleClass::Unknown);
+        // Multiplayer sessions (2026-11-25): Convoy 16.34 (ATS) / 15.56
+        // (ETS2), TrucklineMP ATS 19. The map's own scales keep their class.
+        assert_eq!(ats.classify_in(Some(16.34), true), ScaleClass::Multiplayer);
+        assert_eq!(ets2.classify_in(Some(15.560001), true), ScaleClass::Multiplayer);
+        assert_eq!(ats.classify_in(Some(19.0), true), ScaleClass::Multiplayer);
+        assert_eq!(ats.classify_in(Some(20.0), true), ScaleClass::Road);
+        assert_eq!(ats.classify_in(Some(3.0), true), ScaleClass::City);
+        assert_eq!(ats.classify_in(Some(1.0), true), ScaleClass::OneToOne);
+        assert_eq!(ats.classify_in(Some(16.34), false), ScaleClass::Nonstandard);
     }
 
     #[test]

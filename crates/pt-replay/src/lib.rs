@@ -45,7 +45,8 @@ pub fn parse_lines(lines: &[String], cfg: &Config) -> (Vec<Frame>, usize) {
 }
 
 /// Orders frames of several sessions: sessions by their first wall-clock time,
-/// frames within a session by seq (the plugin's order).
+/// frames within a session by seq (the plugin's order). Client notes carry no
+/// seq (0): each stays right after the plugin frame it followed in the input.
 pub fn order_sessions(frames: &mut [Frame]) {
     let mut first: Vec<(String, i64)> = Vec::new();
     for f in frames.iter() {
@@ -60,7 +61,30 @@ pub fn order_sessions(frames: &mut [Frame]) {
     }
     first.sort_by_key(|(_, w)| *w);
     let rank: Vec<String> = first.iter().map(|(s, _)| s.clone()).collect();
-    frames.sort_by_key(|f| (rank.iter().position(|s| *s == f.sess).unwrap_or(usize::MAX), f.seq));
+    let mut last_seq: Vec<(String, u64)> = Vec::new();
+    let keys: Vec<(usize, u64, bool)> = frames
+        .iter()
+        .map(|f| {
+            let r = rank.iter().position(|s| *s == f.sess).unwrap_or(usize::MAX);
+            let slot = match last_seq.iter().position(|(s, _)| *s == f.sess) {
+                Some(i) => i,
+                None => {
+                    last_seq.push((f.sess.clone(), 0));
+                    last_seq.len() - 1
+                }
+            };
+            if f.seq > 0 {
+                last_seq[slot].1 = f.seq;
+                (r, f.seq, false)
+            } else {
+                (r, last_seq[slot].1, true)
+            }
+        })
+        .collect();
+    let mut order: Vec<usize> = (0..frames.len()).collect();
+    order.sort_by_key(|&i| keys[i]);
+    let sorted: Vec<Frame> = order.iter().map(|&i| frames[i].clone()).collect();
+    frames.clone_from_slice(&sorted);
 }
 
 pub struct Replayed {

@@ -560,6 +560,7 @@ pub fn class_name(c: ScaleClass) -> &'static str {
         ScaleClass::City => "city",
         ScaleClass::Road => "road",
         ScaleClass::OneToOne => "one_to_one",
+        ScaleClass::Multiplayer => "multiplayer",
         ScaleClass::Nonstandard => "nonstandard",
         ScaleClass::Unknown => "unknown",
     }
@@ -754,7 +755,7 @@ fn build<P, R: Resolve<P> + ?Sized>(
     let names = &job.info.names;
     let d = &r.distances;
     let mut by_class = Map::new();
-    for c in [ScaleClass::City, ScaleClass::Road, ScaleClass::OneToOne, ScaleClass::Nonstandard, ScaleClass::Unknown] {
+    for c in ScaleClass::ALL {
         let g = d.game_km_by_scale.iter().find(|(k, _)| *k == c).map_or(0.0, |(_, v)| *v);
         let w = d.world_km_by_scale.iter().find(|(k, _)| *k == c).map_or(0.0, |(_, v)| *v);
         by_class.insert(
@@ -801,6 +802,16 @@ fn build<P, R: Resolve<P> + ?Sized>(
         // Only on such jobs, so other jobs' stored summaries stay the same.
         summary["fuel_readable"] = false.into();
     }
+    if route.job_type == JobType::Bus {
+        // Coach jobs only, for the same reason; `summary_json` gives every
+        // other job `null`. The value the scoring used (`coach_points`):
+        // clamped into 0..=1, NaN as 0; `null` until `bus_job.completed`.
+        let s = job.delivered.as_ref().and_then(|x| x.passenger_satisfaction);
+        summary["passenger_satisfaction"] = s.map(|s| if s.is_nan() { 0.0 } else { s.clamp(0.0, 1.0) }).into();
+        // The stops between the first and the last, in order, shaped like
+        // `source` (the stop type as `company_id`).
+        summary["via"] = names.via.iter().map(|v| place(&v.id, &v.name, &v.kind, "")).collect::<Vec<_>>().into();
+    }
 
     // Reasons: review reasons, then invalid and discard.
     let mut reasons: Vec<Value> = r.review.iter().map(|x| reason(x.code(), review_details(x, job, cfg))).collect();
@@ -809,11 +820,12 @@ fn build<P, R: Resolve<P> + ?Sized>(
         let failed: Vec<Value> = trace_list.iter().filter(|c| c["ok"] == false).cloned().collect();
         reasons.push(reason("trace_check", json!({"checks": failed})));
     }
-    let limits = cfg.rules.speed.limits(job.game);
+    // The job's own limits: a road trip's or a coach's (`limits_for`).
+    let (penalty_over_mph, invalid_over_mph) = cfg.rules.speed.limits_for(job.game, route.job_type);
     if r.speed.invalid {
         reasons.push(reason(
             "overspeed_invalid",
-            json!({"peak_mph": round2(r.speed.peak_mph), "over_invalid_s": round2(r.speed.over_invalid_s), "invalid_over_mph": limits.invalid_over_mph}),
+            json!({"peak_mph": round2(r.speed.peak_mph), "over_invalid_s": round2(r.speed.over_invalid_s), "invalid_over_mph": invalid_over_mph}),
         ));
     }
     let discard = r.discard.as_ref().map(|x| match x {
@@ -873,7 +885,7 @@ fn build<P, R: Resolve<P> + ?Sized>(
         },
         "speed": {"peak_mph": round2(r.speed.peak_mph), "over_penalty_s": round2(r.speed.over_penalty_s),
                   "over_invalid_s": round2(r.speed.over_invalid_s),
-                  "penalty_over_mph": limits.penalty_over_mph, "invalid_over_mph": limits.invalid_over_mph},
+                  "penalty_over_mph": penalty_over_mph, "invalid_over_mph": invalid_over_mph},
         "fuel": {"used_l": fuel.map(round2), "refuels": refuels},
         "rules": rules,
         "integrity": integ,
@@ -1021,10 +1033,10 @@ pub fn bonus_json(b: &Bonus, label: &str) -> Value {
     json!({"bonus_id": b.id, "label": label, "kind": if b.kind == BonusKind::Flat { "flat" } else { "multiplier" }, "amount": b.amount})
 }
 
-/// `distance_by_scale_class` with all five classes.
+/// `distance_by_scale_class` with every class.
 pub fn by_class_json(classes: &[(ScaleClass, f64, f64)]) -> Value {
     let mut out = Map::new();
-    for c in [ScaleClass::City, ScaleClass::Road, ScaleClass::OneToOne, ScaleClass::Nonstandard, ScaleClass::Unknown] {
+    for c in ScaleClass::ALL {
         let (g, w) = classes.iter().find(|x| x.0 == c).map_or((0.0, 0.0), |x| (x.1, x.2));
         out.insert(class_name(c).into(), json!({"world_km": round2(w), "world_mi": mi(w), "game_km": round2(g), "game_mi": mi(g)}));
     }
@@ -1377,7 +1389,7 @@ pub fn summary_json(row: &Row) -> Value {
     out.insert("outcome".into(), outcome.clone().into());
     out.insert("points".into(), row.opt_f("points").map_or(Value::Null, Value::from));
     out.insert("held_points".into(), row.opt_f("held_points").map_or(Value::Null, Value::from));
-    for k in ["world_km", "world_mi", "game_km", "game_mi", "cargo", "source", "destination", "market", "job_type"] {
+    for k in ["world_km", "world_mi", "game_km", "game_mi", "cargo", "source", "destination", "via", "market", "job_type"] {
         out.insert(k.into(), o.remove(k).unwrap_or(Value::Null));
     }
     if matches!(outcome.as_str(), "discarded") {
@@ -1388,7 +1400,7 @@ pub fn summary_json(row: &Row) -> Value {
     out.insert("delivered_at".into(), util::opt_rfc3339(row.opt_i("delivered_at")));
     out.insert("reported_delivered_at".into(), util::opt_rfc3339(row.opt_i("reported_delivered_at")));
     out.insert("multiplayer".into(), o.remove("multiplayer").unwrap_or(Value::Null));
-    for k in ["fuel_used_l", "damage_pct", "income"] {
+    for k in ["fuel_used_l", "damage_pct", "income", "passenger_satisfaction"] {
         out.insert(k.into(), o.remove(k).unwrap_or(Value::Null));
     }
     // Only when false: the fuel readings were beyond any tank (a save edit),

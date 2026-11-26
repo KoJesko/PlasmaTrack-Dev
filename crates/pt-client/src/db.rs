@@ -287,13 +287,27 @@ impl Db {
 
     /// Records a client note (e.g. a profile change) at the current end of
     /// `sess`: it follows the newest plugin frame stored so far. Returns its JSON.
-    pub fn add_note(&mut self, sess: &str, mut note: serde_json::Value, now_ms: i64) -> Result<String> {
+    pub fn add_note(&mut self, sess: &str, note: serde_json::Value, now_ms: i64) -> Result<String> {
+        self.insert_note(sess, note, now_ms, false)
+    }
+
+    /// [`Db::add_note`] for a note that stays on this PC: it is part of the
+    /// local timeline (a rebuild reads it) but never uploaded. A failed coach
+    /// job (owner, 2026-11-25: failed jobs are stored locally only).
+    pub fn add_local_note(&mut self, sess: &str, note: serde_json::Value, now_ms: i64) -> Result<String> {
+        self.insert_note(sess, note, now_ms, true)
+    }
+
+    fn insert_note(&mut self, sess: &str, mut note: serde_json::Value, now_ms: i64, local: bool) -> Result<String> {
         let after: i64 =
             self.conn.query_row("SELECT COALESCE(MAX(seq), 0) FROM frames WHERE sess = ?1", params![sess], |r| r.get(0))?;
         note["sess"] = sess.into();
         note["after_seq"] = after.into();
         let json = note.to_string();
-        self.conn.execute("INSERT INTO notes (sess, after_seq, json, added_ms) VALUES (?1, ?2, ?3, ?4)", params![sess, after, json, now_ms])?;
+        self.conn.execute(
+            "INSERT INTO notes (sess, after_seq, json, added_ms, uploaded) VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![sess, after, json, now_ms, local],
+        )?;
         Ok(json)
     }
 
@@ -509,6 +523,20 @@ mod tests {
         let c = db.next_chunk(S1, 100, usize::MAX).unwrap().unwrap();
         assert_eq!(c.frames.len(), 2, "the late note leads the next chunk");
         assert!(c.frames[0].contains("profile_key"));
+    }
+
+    #[test]
+    fn a_local_note_is_rebuilt_but_never_uploaded() {
+        let mut db = Db::open_in_memory().unwrap();
+        db.store(&[msg(S1, "init", Some(1), ",\"game_id\":\"eut2\""), msg(S1, "sample", Some(2), "")], 1).unwrap();
+        let failed = db.add_local_note(S1, serde_json::json!({"v": 1, "kind": "job_failed", "reason": "extreme acceleration"}), 1).unwrap();
+        assert!(failed.contains("\"after_seq\":2"));
+        db.store(&[msg(S1, "sample", Some(3), "")], 2).unwrap();
+        let c = db.next_chunk(S1, 100, usize::MAX).unwrap().unwrap();
+        assert!(c.frames.iter().all(|f| !f.contains("job_failed")), "not uploaded");
+        assert!(c.note_ids.is_empty());
+        let stream = db.session_stream(S1, i64::MAX).unwrap();
+        assert_eq!(stream.iter().position(|f| f.contains("job_failed")), Some(2), "rebuilt right after seq 2");
     }
 
     #[test]

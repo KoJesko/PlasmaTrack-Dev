@@ -142,7 +142,8 @@ comma-separated outcomes. Each item is a **job summary**:
   "delivered_at": "2026-10-13T21:25:03.512Z",
   "reported_delivered_at": "2026-10-13T21:25:00.070Z",
   "multiplayer": {"kind": "truckersmp", "truckersmp": {"server_id": 4, "account_id": 1234567}},
-  "fuel_used_l": 41.2, "damage_pct": 0.4, "income": 6767, "currency": "EUR"
+  "fuel_used_l": 41.2, "damage_pct": 0.4, "income": 6767, "currency": "EUR",
+  "passenger_satisfaction": null, "via": null
 }
 ```
 
@@ -184,14 +185,58 @@ comma-separated outcomes. Each item is a **job summary**:
   differ by the upload delay, which can be hours if the client was offline.
 - **`market`** is the game's `job.market`, for example `cargo_market`, `freight_market`,
   `quick_job` or `external_contracts` (World of Trucks). `null` for a manual job. A road trip
-  carries its own market (`car_job.market`), for example `dispatch_job`.
-- **`job_type`** is `freight` (a truck job) or `car` (an ATS road trip in a car or pickup, scored
-  the same way). `null` for a manual job, and for jobs scored before 2026-10-16 until re-scored.
+  carries its own market (`car_job.market`), for example `dispatch_job`. A coach job carries
+  `bus_job.market`: `company_job` (a coach line) or `tourist_job` (a tourist trip); treat any
+  other value as an ordinary coach job.
+- **`job_type`** is one of:
+  - `freight`: a truck job;
+  - `car`: an ATS road trip in a car or pickup, scored the same way;
+  - `bus`: an ETS2 coach job (Coaches DLC, from 2026-11-25), see "Coach jobs" below.
+
+  `null` for a manual job, and for jobs scored before 2026-10-16 until re-scored. Treat an
+  unknown value as "other" (API_CONVENTIONS §1).
+- **`passenger_satisfaction`** is set on coach jobs only: how happy the passengers were at the
+  end, from the game's `bus_job.completed`, 0–1 (`1.0` = 100 %). It is `null` for every other
+  job, and for a coach job that has no figure (a game version that does not send it).
 - **`origin`** is `tracked` (recorded by the tracker) or `manual` (submitted through the bot,
   §6). A manual job has:
   - `cargo.id`, `city_id` and `company_id` set to `null`, because only names were typed;
   - `market` set to `null`;
   - `multiplayer.kind` set to `unknown`.
+
+#### Coach jobs (`job_type: "bus"`)
+
+ETS2 coach jobs (Coaches DLC) are tracked from 2026-11-25 (owner). The job summary reads a little
+differently:
+
+- **Stops, not companies.** `source` is the **first stop** and `destination` the **last stop**:
+  `city_id` is the stop's id (`umea`), `city_name` its name (`Umeå`, `Höfn í Hornafirði`),
+  `company_id` the stop's type (`city`; a tourist stop is `viewpoints`) and `company_name` is
+  `""`.
+- **`via`** lists the stops in between, in driving order, in the same shape:
+  `[{"city_id": "scmabodalen", "city_name": "Måbødalen Valley", "company_id": "viewpoints", "company_name": ""}]`.
+  It is `[]` for a coach job with no stop in between, and `null` for every other job. A coach
+  line can have several (a five-stage line has four).
+- **Round trips.** A tourist trip often ends where it began (Umeå → Måbødalen Valley → Umeå), so
+  `source` and `destination` can be the same stop. Show it as a round trip from that stop, with
+  `via`, rather than "Umeå → Umeå": "round trip from Umeå via Måbødalen Valley".
+- **Cargo** is always `{"id": "passengers", "name": "Passengers"}`. A bonus can match the cargo
+  id `passengers`.
+- **`damage_pct`** is `null`: a coach carries no cargo. Use `passenger_satisfaction` instead.
+- **`income`** is the game's revenue for the trip.
+- **Points** (owner, 2026-11-25): the distance points every job gets (1:1 miles ×
+  `points_per_world_mi`, after any speed penalty) **× 1.0725** (the config's
+  `coach_points_factor`) **× `passenger_satisfaction`**. A bonus (`bonus`) then applies on top,
+  as on freight. A trip with every passenger happy scores 7.25 % more than the same distance in a
+  truck; half-happy passengers halve that.
+- **Speed limits** are the coach's own, not the truck's: the speed penalty (0.85×) when sustained
+  over **81 mph** (about 130 km/h, where the game's passengers start screaming), and no points
+  (`invalid`) when sustained over **100 mph**, unless the config sets
+  `[rules.speed.ets2.coach]`. The series (`penalty_over_mph`, `invalid_over_mph`),
+  the admin detail and the notifications (WEBHOOKS §4) quote these limits for a coach job.
+- **Only delivered coach jobs are listed**, like every other job. An abandoned coach job is
+  stored, scores nothing and costs nothing; it never appears here. A job the game failed (for
+  example "extreme acceleration") never leaves the player's PC, so the server never sees it.
 
 ### `GET /api/v1/public/players/{discord_id}/jobs`
 
@@ -230,6 +275,7 @@ The job summary plus:
     "city": {"world_km": 2.81, "world_mi": 1.75, "game_km": 8.43, "game_mi": 5.24},
     "road": {"world_km": 8.57, "world_mi": 5.33, "game_km": 117.27, "game_mi": 72.87},
     "one_to_one": {"world_km": 0.0, "world_mi": 0.0, "game_km": 0.0, "game_mi": 0.0},
+    "multiplayer": {"world_km": 0.0, "world_mi": 0.0, "game_km": 0.0, "game_mi": 0.0},
     "nonstandard": {"world_km": 0.0, "world_mi": 0.0, "game_km": 0.0, "game_mi": 0.0},
     "unknown": {"world_km": 0.0, "world_mi": 0.0, "game_km": 0.0, "game_mi": 0.0}
   },
@@ -314,8 +360,12 @@ The job summary plus:
   valid longitude and latitude.
 - **`counted`:** whether this stretch earned distance (loaded and hitched; any job driving for
   World of Trucks). The empty drive to the pickup is `false`.
-- **`scale_class`:** `city`, `road`, `one_to_one`, `nonstandard` or `unknown`.
-  - Suggested colours: city grey, road blue, one_to_one orange, nonstandard red, unknown dashed.
+- **`scale_class`:** `city`, `road`, `one_to_one`, `multiplayer`, `nonstandard` or `unknown`.
+  - `multiplayer`: a multiplayer session's own scale, not the map's (Convoy holds one scale for
+    the whole session, cities included: ETS2 15.56, ATS 16.34; TrucklineMP holds ATS at 19).
+    Distances are still exact.
+  - Suggested colours: city grey, road blue, one_to_one orange, multiplayer purple, nonstandard
+    red, unknown dashed.
   - **The bot draws modded and 1:1 routes over the vanilla basemap anyway.** A misaligned route
     is itself the visible sign of a modded map.
 - **`local_scale`:** the reported number on driving features; `null` on the other kinds.

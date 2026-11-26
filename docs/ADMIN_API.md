@@ -30,10 +30,15 @@ Oldest first, with `total`. Each item:
   "cargo": {"id": "med_vaccine", "name": "Vaccines"},
   "source": {"city_id": "honningsvag", "city_name": "Honningsvåg"},
   "destination": {"city_id": "bergen", "city_name": "Bergen"},
+  "job_type": "freight", "market": "cargo_market", "via": null,
   "delivered_at": "2026-10-13T21:03:43.006Z", "age_s": 43920,
   "reasons": [{"code": "late_start", "text": "Tracking started after the job was accepted.", "details": {}}]
 }
 ```
+
+- **`job_type`**, **`market`** and **`via`** are as in a job summary (PUBLIC_API §3), so a coach
+  job can be shown as one; `via` items carry only `city_id` and `city_name`, like `source`. All
+  three are `null` on a manual job, and `via` is `null` on every job but a coach job.
 
 ### `GET /api/v1/admin/review-queue/count`
 
@@ -76,7 +81,9 @@ Oldest first, with `total`. Each item:
 
 **Invalid:** `outcome = invalid`. Its reason is `overspeed_invalid` (rule 2), with `peak_mph`,
 `over_invalid_s` and `invalid_over_mph`. A moderator may approve it, for example after falling
-through the map.
+through the map. `invalid_over_mph` is the job's own limit: a road trip's, or a coach job's
+(100 mph, PUBLIC_API §3 "Coach jobs"), where the game's truck limit does not apply. The same goes
+for `penalty_over_mph` and `invalid_over_mph` in the detail's `speed` (§4) and in the series (§5).
 
 ## 3. TruckersMP account flags (PLAN §8, decision 24)
 

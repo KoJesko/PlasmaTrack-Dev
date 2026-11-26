@@ -24,6 +24,12 @@
       "world_km": 2.0,
       "world_mi": 1.24
     },
+    "multiplayer": {
+      "game_km": 0.0,
+      "game_mi": 0.0,
+      "world_km": 0.0,
+      "world_mi": 0.0
+    },
     "nonstandard": {
       "game_km": 0.0,
       "game_mi": 0.0,
@@ -64,6 +70,7 @@
   },
   "origin": "manual",
   "outcome": "pending_review",
+  "passenger_satisfaction": null,
   "planned_distance_km": null,
   "player": {
     "discord_user_id": "123456789012345678",
@@ -85,6 +92,7 @@
     "company_name": "Tradeaux"
   },
   "speed_penalty_applied": false,
+  "via": null,
   "world_km": 22.75,
   "world_mi": 14.14
 }

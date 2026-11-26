@@ -33,6 +33,16 @@ pub fn profile_key_from_line(line: &str) -> Option<String> {
     Some(profile_key(location, hex))
 }
 
+/// What the game says when it fails the player's job: `[player_bus_job] Job
+/// failed due to extreme acceleration (3.08; 0.15; 25.31)` (a coach crash,
+/// ETS2 1.62, 2026-11-20). The SDK sends no event for it. The reason, if the
+/// line is one.
+pub fn job_failure_from_line(line: &str) -> Option<String> {
+    const MARK: &str = "Job failed due to ";
+    let at = line.find(MARK)?;
+    Some(line[at + MARK.len()..].trim().to_string())
+}
+
 /// 16 hex digits of SHA-256 over `"{location}/{HEX}"`: stable per profile,
 /// says nothing about its name.
 pub fn profile_key(location: &str, hex: &str) -> String {
@@ -197,6 +207,9 @@ struct Watched {
     rewrites: Vec<u64>,
     wanted: Option<String>,
     sent: Option<(String, String)>,
+    /// Tails read once: the first read catches up on the log from the game's
+    /// start, whose failures (if any) were before the client ran.
+    caught_up: Vec<bool>,
 }
 
 /// Follows both games' logs and records a `profile` note in the running session
@@ -216,6 +229,7 @@ pub async fn watch(
             rewrites: Vec::new(),
             wanted: None,
             sent: None,
+            caught_up: Vec::new(),
         })
         .collect();
     let mut tick = tokio::time::interval(std::time::Duration::from_millis(250));
@@ -224,7 +238,9 @@ pub async fn watch(
         tick.tick().await;
         for w in games.iter_mut() {
             w.rewrites.resize(w.tails.len(), 0);
-            for (t, seen) in w.tails.iter_mut().zip(w.rewrites.iter_mut()) {
+            w.caught_up.resize(w.tails.len(), false);
+            let mut failures: Vec<String> = Vec::new();
+            for ((t, seen), caught_up) in w.tails.iter_mut().zip(w.rewrites.iter_mut()).zip(w.caught_up.iter_mut()) {
                 let lines = t.poll();
                 if t.rewrites() != *seen {
                     *seen = t.rewrites();
@@ -233,6 +249,13 @@ pub async fn watch(
                 if let Some(key) = lines.iter().rev().find_map(|l| profile_key_from_line(l)) {
                     w.wanted = Some(key);
                 }
+                if *caught_up {
+                    failures.extend(lines.iter().filter_map(|l| job_failure_from_line(l)));
+                }
+                *caught_up = true;
+            }
+            for reason in failures {
+                record_failure(&db, feed.as_ref(), w.game, reason).await;
             }
             let Some(key) = w.wanted.clone() else { continue };
             let now = crate::now_ms();
@@ -265,9 +288,51 @@ pub async fn watch(
     }
 }
 
+/// Records a failed job as a local note in the game's running session: the
+/// local timeline marks the job failed, the server never hears of it.
+async fn record_failure(
+    db: &std::sync::Arc<std::sync::Mutex<crate::db::Db>>,
+    feed: Option<&crate::live::Feed>,
+    game: Game,
+    reason: String,
+) {
+    let now = crate::now_ms();
+    let db2 = db.clone();
+    let game_id = game.sdk_game_id();
+    let r = reason.clone();
+    let note = tokio::task::spawn_blocking(move || -> rusqlite::Result<Option<String>> {
+        let mut db = db2.lock().expect("db");
+        let Some((sess, last_seen)) = db.latest_session(game_id)? else { return Ok(None) };
+        if now - last_seen > ACTIVE_WALL_MS {
+            return Ok(None);
+        }
+        db.add_local_note(&sess, serde_json::json!({"v": 1, "kind": "job_failed", "wall_ms": now, "reason": r}), now).map(Some)
+    })
+    .await;
+    match note {
+        Ok(Ok(Some(json))) => {
+            crate::log!("{game:?} job failed: {reason}");
+            if let Some(f) = feed {
+                f.send(now, vec![json]);
+            }
+        }
+        Ok(Ok(None)) => {}
+        Ok(Err(e)) => crate::log!("cannot record the failed job: {e}"),
+        Err(e) => crate::log!("failed-job task failed: {e}"),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_failed_job_line() {
+        // game.log, 2026-11-20 11:01:38 (the coach sideswipe on the way to Odense).
+        let line = "11:01:38.716 : [player_bus_job] Job failed due to extreme acceleration (3.08; 0.15; 25.31)";
+        assert_eq!(job_failure_from_line(line).as_deref(), Some("extreme acceleration (3.08; 0.15; 25.31)"));
+        assert_eq!(job_failure_from_line("11:01:40.000 : Driver job generation failed"), None);
+    }
 
     const HOME: &str = "00:00:36.178 : Loading save. Type: 0, slot: 0, path: <MEMFILE><UFS>/home/profiles/4E616D65/save/autosave/game.sii";
     const STEAM: &str = "01:07:20.930 : Loading save. Type: 0, slot: 0, path: <MEMFILE><UFS>/steam/profiles/4E616D65/save/autosave/game.sii";

@@ -10,7 +10,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::config::{Config, ReviewAction, ScaleClass};
-use crate::job::JobInfo;
+use crate::job::{JobInfo, JobType};
 use crate::store::{InMemory, Resolve};
 use crate::timeline::{Job, Point, StartKind};
 use crate::units::{exceeds, km_to_mi};
@@ -263,10 +263,17 @@ fn pairs(kept: impl Iterator<Item = Point>) -> impl Iterator<Item = (Point, Poin
     })
 }
 
+/// Was the job played in multiplayer (TruckersMP, a multiplayer mod or
+/// Convoy's time offset), anywhere on its kept route?
+pub fn multiplayer_session<P, R: Resolve<P> + ?Sized>(job: &Job<P>, pts: &R) -> bool {
+    pts.iter(&job.kept).any(|p| p.truckersmp || p.mp_mod.is_some() || p.mp_time_offset != 0)
+}
+
 fn distances<P, R: Resolve<P> + ?Sized>(job: &Job<P>, pts: &R, cfg: &Config) -> Distances {
     let wot = job.info.is_world_of_trucks();
     let vanilla = cfg.map.scale.vanilla(job.game);
     let eps = cfg.rules.distance.odometer_epsilon_km;
+    let mp = multiplayer_session(job, pts);
     let mut d = Distances::default();
     let mut by_scale: Vec<(ScaleClass, f64)> = Vec::new();
     let mut world_by_scale: Vec<(ScaleClass, f64)> = Vec::new();
@@ -275,7 +282,7 @@ fn distances<P, R: Resolve<P> + ?Sized>(job: &Job<P>, pts: &R, cfg: &Config) -> 
         if counted || wot {
             d.tracked_counted_game_km += km;
             d.tracked_counted_world_km += km / scale;
-            let class = vanilla.classify(Some(scale));
+            let class = vanilla.classify_in(Some(scale), mp);
             for (list, v) in [(&mut by_scale, km), (&mut world_by_scale, km / scale)] {
                 match list.iter_mut().find(|(c, _)| *c == class) {
                     Some((_, x)) => *x += v,
@@ -500,6 +507,26 @@ fn pick_bonus(info: &JobInfo, base: f64, ctx: &Context) -> Option<(Bonus, f64)> 
         })
 }
 
+/// Points for a coach job (`bus_job`), from the distance points every job
+/// gets (`base`: accepted 1:1 miles x `points_per_world_mi`, after the rule 5
+/// speed penalty).
+///
+/// The rule (owner, 2026-11-25): `base x factor x satisfaction`, where
+/// `factor` is `rules.coach_points_factor` (1.0725) and `satisfaction` is the
+/// game's `passenger.satisfaction` from `bus_job.completed`, 0 to 1. It is
+/// part of the main scoring: the VTC bonus applies on top, as on freight.
+///
+/// - No satisfaction yet (a job being driven, or a game version that does not
+///   send it) counts as full, so live points show what a perfect trip pays.
+///   Only a delivered job is ever scored for real.
+/// - The value is clamped into 0..=1 (NaN counts as 0), so an odd or forged
+///   number can never pay more than a perfect trip or less than nothing.
+pub fn coach_points(base: f64, satisfaction: Option<f64>, factor: f64) -> f64 {
+    let s = satisfaction.unwrap_or(1.0);
+    let s = if s.is_nan() { 0.0 } else { s.clamp(0.0, 1.0) };
+    base * factor * s
+}
+
 /// Scores a job. Works on any state; only a delivered job gets an outcome
 /// other than `Incomplete`.
 pub fn evaluate(job: &Job, cfg: &Config, ctx: &Context) -> JobResult {
@@ -625,7 +652,13 @@ pub fn evaluate_in<P, R: Resolve<P> + ?Sized>(job: &Job<P>, pts: &R, cfg: &Confi
 
     // Points: rules 5, 6, 7 (bonus on the cargo first tracked after a switch).
     let accepted = if speed.penalty { d.world_mi * r.speed_penalty_factor } else { d.world_mi };
-    let base = accepted * r.points_per_world_mi;
+    let mut base = accepted * r.points_per_world_mi;
+    if job.info.fingerprint.route.job_type == JobType::Bus {
+        // The VTC bonus (below) then applies on top of the coach points, the
+        // same as on freight points (owner, 2026-11-25).
+        let satisfaction = job.delivered.as_ref().and_then(|x| x.passenger_satisfaction);
+        base = coach_points(base, satisfaction, r.coach_points_factor());
+    }
     let (bonus, points_raw) = match pick_bonus(&job.first_info, base, ctx) {
         Some((b, p)) => (Some(b), p),
         None => (None, base),
@@ -680,6 +713,26 @@ pub fn evaluate_in<P, R: Resolve<P> + ?Sized>(job: &Job<P>, pts: &R, cfg: &Confi
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // The owner's coach rule (2026-11-25).
+    #[test]
+    fn coach_points_scale_with_satisfaction() {
+        assert_eq!(coach_points(100.0, Some(1.0), 1.0725), 107.25);
+        assert_eq!(coach_points(100.0, Some(0.5), 1.0725), 53.625);
+        assert_eq!(coach_points(100.0, Some(0.0), 1.0725), 0.0);
+    }
+
+    #[test]
+    fn coach_points_stay_within_the_satisfaction_range() {
+        // Whatever the rule does with odd values, it never pays more than full
+        // satisfaction or less than nothing.
+        let full = coach_points(100.0, Some(1.0), 1.0725);
+        assert!(coach_points(100.0, Some(1.5), 1.0725) <= full);
+        assert!(coach_points(100.0, Some(-0.5), 1.0725) >= 0.0);
+        assert_eq!(coach_points(100.0, Some(f64::NAN), 1.0725), 0.0);
+        // Not completed yet: shown as a perfect trip.
+        assert_eq!(coach_points(100.0, None, 1.0725), full);
+    }
 
     #[test]
     fn glob_matching() {

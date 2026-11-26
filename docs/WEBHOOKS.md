@@ -151,6 +151,18 @@ A DM for one player (PLAN decision 16).
   offline).
 - **`title` and `text`** are player-safe English, ready to send. The bot may use its own wording
   per `kind` instead.
+- **Limits in `text`** are the job's own (PUBLIC_API §3): the game's truck limits for freight, a
+  road trip's for `car`, and a coach job's for `bus` (penalty over 81 mph, invalid over 100 mph by
+  default). `text` starts with the job's cargo name, which is `Passengers` on a coach job:
+
+  ```json
+  {"kind": "speed_penalty_activated", "title": "Speed penalty",
+   "text": "Passengers: you drove over 81 mph for too long. This job's distance now counts at 0.85×."}
+  ```
+
+  The event carries no `job_type` or limits of its own. A bot writing its own text reads the job
+  (`GET /public/jobs/{job_id}`) for `job_type`, or uses `text` as given; it must never assume the
+  truck limits.
 - **DMs closed:** the bot stores the notice for that Discord user (its own design, CONTRACT
   §6). The server is not told.
 
