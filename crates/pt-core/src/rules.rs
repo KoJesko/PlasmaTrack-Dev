@@ -506,23 +506,18 @@ fn pick_bonus(info: &JobInfo, base: f64, ctx: &Context) -> Option<(Bonus, f64)> 
 ///
 /// The rule (owner, 2026-11-25): `base x factor x satisfaction`, where
 /// `factor` is `rules.coach_points_factor` (1.0725) and `satisfaction` is the
-/// game's `passenger.satisfaction` from `bus_job.completed`, 0 to 1.
+/// game's `passenger.satisfaction` from `bus_job.completed`, 0 to 1. It is
+/// part of the main scoring: the VTC bonus applies on top, as on freight.
 ///
-/// TODO(Ari): write the rule. Decisions it makes:
-/// - `satisfaction` is `None` until the job is completed (tracking, cancelled,
-///   failed), and could be missing on a completed job from an older or newer
-///   game version. Score it as 1.0 (full), 0.0 (nothing) or `base` unchanged?
-///   Only completed jobs ever get an outcome other than Incomplete, but live
-///   jobs show these points while being driven.
-/// - Clamp `satisfaction` into 0..=1? The game has only sent 0..1 so far
-///   (1.0 on the 2026-11-23 Reykjavík → Höfn job), but it is a float.
-/// - 1.0725 x 1.0 is more than a freight job of the same distance: intended
-///   (coach driving is harder), or cap the result at `base`?
-///
-/// Placeholder until then: `base` unchanged, so coach jobs score like freight.
+/// - No satisfaction yet (a job being driven, or a game version that does not
+///   send it) counts as full, so live points show what a perfect trip pays.
+///   Only a delivered job is ever scored for real.
+/// - The value is clamped into 0..=1 (NaN counts as 0), so an odd or forged
+///   number can never pay more than a perfect trip or less than nothing.
 pub fn coach_points(base: f64, satisfaction: Option<f64>, factor: f64) -> f64 {
-    let _ = (satisfaction, factor);
-    base
+    let s = satisfaction.unwrap_or(1.0);
+    let s = if s.is_nan() { 0.0 } else { s.clamp(0.0, 1.0) };
+    base * factor * s
 }
 
 /// Scores a job. Works on any state; only a delivered job gets an outcome
@@ -712,10 +707,8 @@ pub fn evaluate_in<P, R: Resolve<P> + ?Sized>(job: &Job<P>, pts: &R, cfg: &Confi
 mod tests {
     use super::*;
 
-    // Ari's coach rule (TODO(Ari) on `coach_points`). Remove the #[ignore]s
-    // once it is written; the last test depends on the choices made there.
+    // The owner's coach rule (2026-11-25).
     #[test]
-    #[ignore = "TODO(Ari): coach_points is a placeholder"]
     fn coach_points_scale_with_satisfaction() {
         assert_eq!(coach_points(100.0, Some(1.0), 1.0725), 107.25);
         assert_eq!(coach_points(100.0, Some(0.5), 1.0725), 53.625);
@@ -723,13 +716,15 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "TODO(Ari): coach_points is a placeholder"]
     fn coach_points_stay_within_the_satisfaction_range() {
         // Whatever the rule does with odd values, it never pays more than full
         // satisfaction or less than nothing.
         let full = coach_points(100.0, Some(1.0), 1.0725);
         assert!(coach_points(100.0, Some(1.5), 1.0725) <= full);
         assert!(coach_points(100.0, Some(-0.5), 1.0725) >= 0.0);
+        assert_eq!(coach_points(100.0, Some(f64::NAN), 1.0725), 0.0);
+        // Not completed yet: shown as a perfect trip.
+        assert_eq!(coach_points(100.0, None, 1.0725), full);
     }
 
     #[test]

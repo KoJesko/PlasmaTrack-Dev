@@ -367,7 +367,7 @@ fn coach_abandons_duplicate_accepts_and_a_delivery() {
     assert!(close(r.result.distances.tracked_whole_game_km, 392.47, 0.02));
     assert_eq!(r.result.outcome, Outcome::Valid, "{:?}", r.result.review);
     no_clock_flags(r);
-    // Distance points x the coach rule (rules.rs `coach_points`, TODO(Ari)).
+    // Distance points x the coach rule (rules.rs `coach_points`).
     let cfg = sample_config();
     let base = r.result.accepted_world_mi * cfg.rules.points_per_world_mi;
     assert!(close(base, 15.373, 0.001));
