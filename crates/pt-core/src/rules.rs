@@ -263,10 +263,17 @@ fn pairs(kept: impl Iterator<Item = Point>) -> impl Iterator<Item = (Point, Poin
     })
 }
 
+/// Was the job played in multiplayer (TruckersMP, a multiplayer mod or
+/// Convoy's time offset), anywhere on its kept route?
+pub fn multiplayer_session<P, R: Resolve<P> + ?Sized>(job: &Job<P>, pts: &R) -> bool {
+    pts.iter(&job.kept).any(|p| p.truckersmp || p.mp_mod.is_some() || p.mp_time_offset != 0)
+}
+
 fn distances<P, R: Resolve<P> + ?Sized>(job: &Job<P>, pts: &R, cfg: &Config) -> Distances {
     let wot = job.info.is_world_of_trucks();
     let vanilla = cfg.map.scale.vanilla(job.game);
     let eps = cfg.rules.distance.odometer_epsilon_km;
+    let mp = multiplayer_session(job, pts);
     let mut d = Distances::default();
     let mut by_scale: Vec<(ScaleClass, f64)> = Vec::new();
     let mut world_by_scale: Vec<(ScaleClass, f64)> = Vec::new();
@@ -275,7 +282,7 @@ fn distances<P, R: Resolve<P> + ?Sized>(job: &Job<P>, pts: &R, cfg: &Config) -> 
         if counted || wot {
             d.tracked_counted_game_km += km;
             d.tracked_counted_world_km += km / scale;
-            let class = vanilla.classify(Some(scale));
+            let class = vanilla.classify_in(Some(scale), mp);
             for (list, v) in [(&mut by_scale, km), (&mut world_by_scale, km / scale)] {
                 match list.iter_mut().find(|(c, _)| *c == class) {
                     Some((_, x)) => *x += v,

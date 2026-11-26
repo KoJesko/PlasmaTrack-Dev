@@ -27,7 +27,7 @@ fn upload_score_and_read_a_real_delivery() {
     assert_eq!(j["game"], "ats");
     assert_eq!(j["player"]["discord_user_id"], PLAYER);
     assert_eq!(j["multiplayer"]["kind"], "singleplayer");
-    assert_eq!(j["distance_by_scale_class"].as_object().unwrap().len(), 5);
+    assert_eq!(j["distance_by_scale_class"].as_object().unwrap().len(), 6, "city, road, one_to_one, multiplayer, nonstandard, unknown");
     assert!(j["distance_by_scale_class"]["road"]["world_mi"].as_f64().unwrap() > 0.0);
     assert!(j["source"]["city_name"].as_str().is_some_and(|s| !s.is_empty()), "{j}");
     assert!(j["delivered_at"].as_str().unwrap().ends_with('Z'));

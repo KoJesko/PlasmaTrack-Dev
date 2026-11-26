@@ -14,6 +14,12 @@
           "world_km": 2.82,
           "world_mi": 1.75
         },
+        "multiplayer": {
+          "game_km": 0.0,
+          "game_mi": 0.0,
+          "world_km": 0.0,
+          "world_mi": 0.0
+        },
         "nonstandard": {
           "game_km": 0.0,
           "game_mi": 0.0,
@@ -63,6 +69,12 @@
           "game_mi": 24.9,
           "world_km": 13.35,
           "world_mi": 8.3
+        },
+        "multiplayer": {
+          "game_km": 0.0,
+          "game_mi": 0.0,
+          "world_km": 0.0,
+          "world_mi": 0.0
         },
         "nonstandard": {
           "game_km": 0.0,

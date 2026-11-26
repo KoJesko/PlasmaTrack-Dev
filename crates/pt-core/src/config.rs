@@ -307,8 +307,25 @@ pub enum ScaleClass {
     City,
     Road,
     OneToOne,
+    /// A multiplayer session's own scale: Convoy holds one scale for the whole
+    /// session, cities included (ETS2 15.56, ATS 16.34; owner, 2026-11-25:
+    /// SCS's oversight), and TrucklineMP holds ATS at 19. The odometer still
+    /// counts 3D distance x that scale, so 1:1 distances stay exact.
+    Multiplayer,
     Nonstandard,
     Unknown,
+}
+
+impl ScaleClass {
+    /// Every class, in the order the API lists them.
+    pub const ALL: [ScaleClass; 6] = [
+        ScaleClass::City,
+        ScaleClass::Road,
+        ScaleClass::OneToOne,
+        ScaleClass::Multiplayer,
+        ScaleClass::Nonstandard,
+        ScaleClass::Unknown,
+    ];
 }
 
 impl VanillaScale {
@@ -318,6 +335,13 @@ impl VanillaScale {
     }
 
     pub fn classify(&self, local_scale: Option<f64>) -> ScaleClass {
+        self.classify_in(local_scale, false)
+    }
+
+    /// [`Self::classify`] for a job played in multiplayer (TruckersMP, a
+    /// multiplayer mod or Convoy): a scale the map does not use is then the
+    /// session's own, [`ScaleClass::Multiplayer`], not nonstandard.
+    pub fn classify_in(&self, local_scale: Option<f64>, multiplayer: bool) -> ScaleClass {
         let Some(s) = local_scale else { return ScaleClass::Unknown };
         if s == self.city_local_scale {
             ScaleClass::City
@@ -325,6 +349,8 @@ impl VanillaScale {
             ScaleClass::Road
         } else if s == 1.0 {
             ScaleClass::OneToOne
+        } else if multiplayer {
+            ScaleClass::Multiplayer
         } else {
             ScaleClass::Nonstandard
         }
@@ -623,6 +649,15 @@ mod tests {
         assert_eq!(ats.classify(Some(1.0)), ScaleClass::OneToOne);
         assert_eq!(ats.classify(Some(10.0)), ScaleClass::Nonstandard);
         assert_eq!(ats.classify(None), ScaleClass::Unknown);
+        // Multiplayer sessions (2026-11-25): Convoy 16.34 (ATS) / 15.56
+        // (ETS2), TrucklineMP ATS 19. The map's own scales keep their class.
+        assert_eq!(ats.classify_in(Some(16.34), true), ScaleClass::Multiplayer);
+        assert_eq!(ets2.classify_in(Some(15.560001), true), ScaleClass::Multiplayer);
+        assert_eq!(ats.classify_in(Some(19.0), true), ScaleClass::Multiplayer);
+        assert_eq!(ats.classify_in(Some(20.0), true), ScaleClass::Road);
+        assert_eq!(ats.classify_in(Some(3.0), true), ScaleClass::City);
+        assert_eq!(ats.classify_in(Some(1.0), true), ScaleClass::OneToOne);
+        assert_eq!(ats.classify_in(Some(16.34), false), ScaleClass::Nonstandard);
     }
 
     #[test]

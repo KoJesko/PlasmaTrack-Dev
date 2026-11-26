@@ -560,6 +560,7 @@ pub fn class_name(c: ScaleClass) -> &'static str {
         ScaleClass::City => "city",
         ScaleClass::Road => "road",
         ScaleClass::OneToOne => "one_to_one",
+        ScaleClass::Multiplayer => "multiplayer",
         ScaleClass::Nonstandard => "nonstandard",
         ScaleClass::Unknown => "unknown",
     }
@@ -754,7 +755,7 @@ fn build<P, R: Resolve<P> + ?Sized>(
     let names = &job.info.names;
     let d = &r.distances;
     let mut by_class = Map::new();
-    for c in [ScaleClass::City, ScaleClass::Road, ScaleClass::OneToOne, ScaleClass::Nonstandard, ScaleClass::Unknown] {
+    for c in ScaleClass::ALL {
         let g = d.game_km_by_scale.iter().find(|(k, _)| *k == c).map_or(0.0, |(_, v)| *v);
         let w = d.world_km_by_scale.iter().find(|(k, _)| *k == c).map_or(0.0, |(_, v)| *v);
         by_class.insert(
@@ -1032,10 +1033,10 @@ pub fn bonus_json(b: &Bonus, label: &str) -> Value {
     json!({"bonus_id": b.id, "label": label, "kind": if b.kind == BonusKind::Flat { "flat" } else { "multiplier" }, "amount": b.amount})
 }
 
-/// `distance_by_scale_class` with all five classes.
+/// `distance_by_scale_class` with every class.
 pub fn by_class_json(classes: &[(ScaleClass, f64, f64)]) -> Value {
     let mut out = Map::new();
-    for c in [ScaleClass::City, ScaleClass::Road, ScaleClass::OneToOne, ScaleClass::Nonstandard, ScaleClass::Unknown] {
+    for c in ScaleClass::ALL {
         let (g, w) = classes.iter().find(|x| x.0 == c).map_or((0.0, 0.0), |x| (x.1, x.2));
         out.insert(class_name(c).into(), json!({"world_km": round2(w), "world_mi": mi(w), "game_km": round2(g), "game_mi": mi(g)}));
     }

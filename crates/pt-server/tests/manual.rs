@@ -257,7 +257,7 @@ fn history_spans_both_games_and_stats_break_down() {
     let ats = &p["stats"]["ats"];
     assert_eq!(ats["outcomes"]["valid"], 1);
     assert_eq!(ats["outcomes"]["rejected"], 0);
-    let classes: f64 = ["city", "road", "one_to_one", "nonstandard", "unknown"].iter().map(|c| ats["distance_by_scale_class"][c]["world_km"].as_f64().unwrap()).sum();
+    let classes: f64 = ["city", "road", "one_to_one", "multiplayer", "nonstandard", "unknown"].iter().map(|c| ats["distance_by_scale_class"][c]["world_km"].as_f64().unwrap()).sum();
     assert!((classes - ats["world_km"].as_f64().unwrap()).abs() < 0.05, "{classes} vs {}", ats["world_km"]);
     assert_eq!(p["stats"]["ets2"]["outcomes"]["pending_review"], 1);
     assert_eq!(p["stats"]["ets2"]["distance_by_scale_class"]["road"]["world_km"], 0.0, "pending jobs do not count");
