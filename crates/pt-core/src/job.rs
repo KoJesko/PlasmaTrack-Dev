@@ -126,6 +126,11 @@ pub struct Stop {
 /// The `cargo_id` of every coach job (it carries no cargo of its own).
 pub const BUS_CARGO_ID: &str = "passengers";
 
+/// More stages than any coach job has (the longest seen has 5). The count
+/// comes from the upload, so it is capped: a forged `bus.stages.count` can
+/// never make the stop lookups or `via` grow with it.
+pub const MAX_BUS_STAGES: u32 = 64;
+
 /// An attribute of one index (a coach stop), e.g. `destination_stop.id[3]`.
 fn indexed<'a>(attrs: &'a [Attr], name: &str, index: u32) -> Option<&'a Value> {
     attrs.iter().find(|a| a.name == name && a.index.unwrap_or(0) == index).map(|a| &a.value)
@@ -198,7 +203,18 @@ impl JobInfo {
     fn from_bus_config(game: Game, attrs: &[Attr]) -> Option<JobInfo> {
         let s = |k: &str, i: u32| indexed(attrs, k, i).and_then(Value::as_str).unwrap_or_default().to_string();
         let u = |k: &str| attr(attrs, k).and_then(Value::as_u64);
-        let last = u("bus.stages.count").unwrap_or(1).max(1) as u32 - 1;
+        let count = u("bus.stages.count").map_or(1, |c| u32::try_from(c).unwrap_or(MAX_BUS_STAGES).clamp(1, MAX_BUS_STAGES));
+        let last = count - 1;
+        // The stops in between: only the stage destinations actually sent,
+        // never one per claimed stage.
+        let mut between: Vec<u32> = attrs
+            .iter()
+            .filter(|a| matches!(a.name.as_str(), "destination_stop.id" | "destination_stop.name" | "destination_stop.type"))
+            .map(|a| a.index.unwrap_or(0))
+            .filter(|i| *i < last)
+            .collect();
+        between.sort_unstable();
+        between.dedup();
         Some(JobInfo {
             fingerprint: Fingerprint {
                 route: RouteKey {
@@ -230,7 +246,8 @@ impl JobInfo {
                 source_company: String::new(),
                 destination_city: s("destination_stop.name", last),
                 destination_company: String::new(),
-                via: (0..last)
+                via: between
+                    .into_iter()
                     .map(|i| Stop { id: s("destination_stop.id", i), name: s("destination_stop.name", i), kind: s("destination_stop.type", i) })
                     .collect(),
             },
@@ -358,6 +375,29 @@ mod tests {
             }
         }
         v
+    }
+
+    /// A forged stage count (4 billion, or u64::MAX, which `as u32` used to
+    /// truncate) is capped and builds `via` only from the stops really sent.
+    #[test]
+    fn a_huge_coach_stage_count_is_capped_and_via_holds_only_stops_sent() {
+        for count in [json!(4_000_000_000u64), json!(u64::MAX)] {
+            let mut attrs = coach(0, None);
+            attrs.retain(|x| x.name != "bus.stages.count");
+            attrs.push(a("bus.stages.count", count));
+            let t = std::time::Instant::now();
+            let info = JobInfo::from_config_of(Game::Ets2, JobType::Bus, &attrs).unwrap();
+            assert!(t.elapsed() < std::time::Duration::from_millis(100));
+            let via: Vec<_> = info.names.via.iter().map(|v| v.id.as_str()).collect();
+            assert_eq!(via, ["hofn", "akureyri"], "only the two stops present");
+            // The last stop would be stage 63, which was never sent.
+            assert_eq!(info.fingerprint.route.destination_city, "");
+        }
+        // A real two-stage job: one stop in between, the last stop found.
+        let info = JobInfo::from_config_of(Game::Ets2, JobType::Bus, &coach(0, None)).unwrap();
+        assert_eq!(info.names.via.iter().map(|v| v.name.as_str()).collect::<Vec<_>>(), ["Höfn í Hornafirði"]);
+        assert_eq!(info.fingerprint.route.destination_city, "akureyri");
+        assert_eq!(MAX_BUS_STAGES, 64);
     }
 
     #[test]
