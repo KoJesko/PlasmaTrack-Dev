@@ -275,7 +275,6 @@ The job summary plus:
     "city": {"world_km": 2.81, "world_mi": 1.75, "game_km": 8.43, "game_mi": 5.24},
     "road": {"world_km": 8.57, "world_mi": 5.33, "game_km": 117.27, "game_mi": 72.87},
     "one_to_one": {"world_km": 0.0, "world_mi": 0.0, "game_km": 0.0, "game_mi": 0.0},
-    "multiplayer": {"world_km": 0.0, "world_mi": 0.0, "game_km": 0.0, "game_mi": 0.0},
     "nonstandard": {"world_km": 0.0, "world_mi": 0.0, "game_km": 0.0, "game_mi": 0.0},
     "unknown": {"world_km": 0.0, "world_mi": 0.0, "game_km": 0.0, "game_mi": 0.0}
   },
@@ -360,12 +359,11 @@ The job summary plus:
   valid longitude and latitude.
 - **`counted`:** whether this stretch earned distance (loaded and hitched; any job driving for
   World of Trucks). The empty drive to the pickup is `false`.
-- **`scale_class`:** `city`, `road`, `one_to_one`, `multiplayer`, `nonstandard` or `unknown`.
-  - `multiplayer`: a multiplayer session's own scale, not the map's (Convoy holds one scale for
-    the whole session, cities included: ETS2 15.56, ATS 16.34; TrucklineMP holds ATS at 19).
-    Distances are still exact.
-  - Suggested colours: city grey, road blue, one_to_one orange, multiplayer purple, nonstandard
-    red, unknown dashed.
+- **`scale_class`:** `city`, `road`, `one_to_one`, `nonstandard` or `unknown`.
+  - On a multiplayer job, a session-wide scale reads as `road` (Convoy holds one scale for the
+    whole session, cities included: ETS2 15.56, ATS 16.34; TrucklineMP holds ATS at 19). It only
+    paces time; distances are exact.
+  - Suggested colours: city grey, road blue, one_to_one orange, nonstandard red, unknown dashed.
   - **The bot draws modded and 1:1 routes over the vanilla basemap anyway.** A misaligned route
     is itself the visible sign of a modded map.
 - **`local_scale`:** the reported number on driving features; `null` on the other kinds.

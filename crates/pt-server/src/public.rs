@@ -137,7 +137,7 @@ pub async fn stats<H: Host>(h: &H, user_id: &str, g: Game) -> ApiResult<Value> {
             outcomes.insert(row.s("outcome"), json!(row.i("n")));
         }
     }
-    const CLASSES: [&str; 6] = ["city", "road", "one_to_one", "multiplayer", "nonstandard", "unknown"];
+    const CLASSES: [&str; 5] = ["city", "road", "one_to_one", "nonstandard", "unknown"];
     let sums: Vec<String> = CLASSES
         .iter()
         .flat_map(|c| {

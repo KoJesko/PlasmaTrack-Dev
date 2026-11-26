@@ -494,17 +494,17 @@ fn a_singleplayer_tourist_round_trip() {
 }
 
 /// Convoy holds one scale for the whole session, cities included (15.56 in
-/// ETS2; owner, 2026-11-25: SCS's oversight). That is the session's own
-/// scale, `multiplayer`, not a modded `nonstandard` one, and the 1:1 distance
-/// is still the odometer over that same scale.
+/// ETS2; owner, 2026-11-25: SCS's oversight). It only paces time, so it reads
+/// as the normal road scale, not a modded `nonstandard` one, and the 1:1
+/// distance is still the odometer over that same scale.
 #[test]
-fn convoy_distance_is_the_multiplayer_scale_class() {
+fn convoy_distance_reads_as_the_normal_road_scale() {
     use pt_core::config::ScaleClass;
     let jobs = run("ets2-convoy-quick-job.jsonl.gz");
     let d = &jobs[0].result.distances;
     let km = |c: ScaleClass| d.game_km_by_scale.iter().find(|(k, _)| *k == c).map_or(0.0, |(_, v)| *v);
-    assert!(km(ScaleClass::Multiplayer) > 0.0, "{:?}", d.game_km_by_scale);
+    assert!(km(ScaleClass::Road) > 0.0, "{:?}", d.game_km_by_scale);
     assert_eq!(km(ScaleClass::Nonstandard), 0.0);
     let total: f64 = d.game_km_by_scale.iter().map(|(_, v)| v).sum();
-    assert!(km(ScaleClass::Multiplayer) / total > 0.95, "{:?}", d.game_km_by_scale);
+    assert!(km(ScaleClass::Road) / total > 0.95, "{:?}", d.game_km_by_scale);
 }

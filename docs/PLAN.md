@@ -587,11 +587,11 @@ The contracts are `docs/API_CONVENTIONS.md`, `docs/PUBLIC_API.md`, `docs/ADMIN_A
   - `city` = 3;
   - `road` = a vanilla road scale (ATS 20; ETS2 19, and 15 on UK roads);
   - `one_to_one` = 1, a 1:1 mod;
-  - `multiplayer` = any other value on a multiplayer job (TruckersMP, a multiplayer mod or Convoy): the session's own scale. Convoy holds one scale for the whole session, cities included (ETS2 15.56, ATS 16.34; owner 2026-11-25: SCS's oversight), and TrucklineMP holds ATS at 19. The odometer counts 3D distance × that scale, so 1:1 distances stay exact;
+  - on a multiplayer job (TruckersMP, a multiplayer mod or Convoy), any other value is the session's own scale and reads as `road`. Convoy holds one scale for the whole session, cities included (ETS2 15.56, ATS 16.34; owner 2026-11-25: SCS's oversight), and TrucklineMP holds ATS at 19. It only paces time: a job's game km match its planned km, and the odometer counts 3D distance × that scale, so 1:1 distances stay exact;
   - `nonstandard` = any other value in singleplayer, a modded scale;
   - `unknown` = not reported.
   
-  Suggested colours: city grey, road blue, one_to_one orange, multiplayer purple, nonstandard red, unknown dashed. The vanilla values per game live in config, not in code.
+  Suggested colours: city grey, road blue, one_to_one orange, nonstandard red, unknown dashed. The vanilla values per game live in config, not in code.
 - **Modded maps are drawn anyway.** Routes are always overlaid on the vanilla base map, even when the coordinates do not line up. A misaligned route is itself the visible sign of a 1:1 or modded map. Scale never sends a job to review on its own; moderators see it on the map and in the job detail (distance per `scale_class`).
 - Reverted material is never exposed publicly.
 - **TruckersMP accounts (decision 24):**
