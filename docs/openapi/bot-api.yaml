@@ -1075,10 +1075,12 @@
                   "job_id":
                     "type": "string"
                   "job_type":
+                    "description": "freight (truck), car (ATS road trip) or bus (ETS2 coach job); null for manual jobs. Treat unknown values as other (API_CONVENTIONS §1). PUBLIC_API §3."
                     "type":
                     - "string"
                     - "null"
                   "market":
+                    "description": "The game's market. Freight: job.market (cargo_market, freight_market, quick_job, external_contracts...). Road trip: car_job.market. Coach: bus_job.market, company_job (a coach line) or tourist_job (a tourist trip, often a round trip). Null for manual jobs. PUBLIC_API §3."
                     "type":
                     - "string"
                     - "null"
@@ -1103,6 +1105,9 @@
                   "overrides":
                     "properties": {}
                     "type": "object"
+                  "passenger_satisfaction":
+                    "description": "Coach jobs (job_type bus) only: the passengers' satisfaction at the end, 0-1 (show as a percentage). Coach points = distance points x the coach factor (1.0725) x this, then any bonus. Null for every other job and until the coach job is completed. PUBLIC_API §3."
+                    "type": "null"
                   "planned_distance_km":
                     "type":
                     - "integer"
@@ -3692,8 +3697,10 @@
                   "job_id":
                     "type": "string"
                   "job_type":
+                    "description": "freight (truck), car (ATS road trip) or bus (ETS2 coach job); null for manual jobs. Treat unknown values as other (API_CONVENTIONS §1). PUBLIC_API §3."
                     "type": "null"
                   "market":
+                    "description": "The game's market. Freight: job.market (cargo_market, freight_market, quick_job, external_contracts...). Road trip: car_job.market. Coach: bus_job.market, company_job (a coach line) or tourist_job (a tourist trip, often a round trip). Null for manual jobs. PUBLIC_API §3."
                     "type": "null"
                   "multiplayer":
                     "properties":
@@ -3706,6 +3713,9 @@
                     "type": "string"
                   "outcome":
                     "type": "string"
+                  "passenger_satisfaction":
+                    "description": "Coach jobs (job_type bus) only: the passengers' satisfaction at the end, 0-1 (show as a percentage). Coach points = distance points x the coach factor (1.0725) x this, then any bonus. Null for every other job and until the coach job is completed. PUBLIC_API §3."
+                    "type": "null"
                   "planned_distance_km":
                     "type": "null"
                   "player":
@@ -3993,7 +4003,9 @@
                     - "null"
                     - "object"
                   "damage_pct":
-                    "type": "number"
+                    "type":
+                    - "number"
+                    - "null"
                   "delivered_at":
                     "format": "date-time"
                     "type": "string"
@@ -4091,10 +4103,12 @@
                   "job_id":
                     "type": "string"
                   "job_type":
+                    "description": "freight (truck), car (ATS road trip) or bus (ETS2 coach job); null for manual jobs. Treat unknown values as other (API_CONVENTIONS §1). PUBLIC_API §3."
                     "type":
                     - "string"
                     - "null"
                   "market":
+                    "description": "The game's market. Freight: job.market (cargo_market, freight_market, quick_job, external_contracts...). Road trip: car_job.market. Coach: bus_job.market, company_job (a coach line) or tourist_job (a tourist trip, often a round trip). Null for manual jobs. PUBLIC_API §3."
                     "type":
                     - "string"
                     - "null"
@@ -4116,6 +4130,11 @@
                     "type": "string"
                   "outcome":
                     "type": "string"
+                  "passenger_satisfaction":
+                    "description": "Coach jobs (job_type bus) only: the passengers' satisfaction at the end, 0-1 (show as a percentage). Coach points = distance points x the coach factor (1.0725) x this, then any bonus. Null for every other job and until the coach job is completed. PUBLIC_API §3."
+                    "type":
+                    - "null"
+                    - "number"
                   "planned_distance_km":
                     "type":
                     - "integer"
@@ -4686,10 +4705,12 @@
                         "job_id":
                           "type": "string"
                         "job_type":
+                          "description": "freight (truck), car (ATS road trip) or bus (ETS2 coach job); null for manual jobs. Treat unknown values as other (API_CONVENTIONS §1). PUBLIC_API §3."
                           "type":
                           - "null"
                           - "string"
                         "market":
+                          "description": "The game's market. Freight: job.market (cargo_market, freight_market, quick_job, external_contracts...). Road trip: car_job.market. Coach: bus_job.market, company_job (a coach line) or tourist_job (a tourist trip, often a round trip). Null for manual jobs. PUBLIC_API §3."
                           "type":
                           - "null"
                           - "string"
@@ -4711,6 +4732,9 @@
                           "type": "string"
                         "outcome":
                           "type": "string"
+                        "passenger_satisfaction":
+                          "description": "Coach jobs (job_type bus) only: the passengers' satisfaction at the end, 0-1 (show as a percentage). Coach points = distance points x the coach factor (1.0725) x this, then any bonus. Null for every other job and until the coach job is completed. PUBLIC_API §3."
+                          "type": "null"
                         "points":
                           "type":
                           - "number"
@@ -5101,8 +5125,10 @@
                         "job_id":
                           "type": "string"
                         "job_type":
+                          "description": "freight (truck), car (ATS road trip) or bus (ETS2 coach job); null for manual jobs. Treat unknown values as other (API_CONVENTIONS §1). PUBLIC_API §3."
                           "type": "string"
                         "market":
+                          "description": "The game's market. Freight: job.market (cargo_market, freight_market, quick_job, external_contracts...). Road trip: car_job.market. Coach: bus_job.market, company_job (a coach line) or tourist_job (a tourist trip, often a round trip). Null for manual jobs. PUBLIC_API §3."
                           "type": "string"
                         "multiplayer":
                           "properties":
@@ -5120,6 +5146,9 @@
                           "type": "string"
                         "outcome":
                           "type": "string"
+                        "passenger_satisfaction":
+                          "description": "Coach jobs (job_type bus) only: the passengers' satisfaction at the end, 0-1 (show as a percentage). Coach points = distance points x the coach factor (1.0725) x this, then any bonus. Null for every other job and until the coach job is completed. PUBLIC_API §3."
+                          "type": "null"
                         "points":
                           "type": "null"
                         "reported_delivered_at":

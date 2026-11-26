@@ -379,10 +379,11 @@ fn max_points(req: &Request) -> ApiResult<usize> {
 pub async fn series_json<H: Host>(h: &H, row: &Row, max_points: usize, public: bool) -> ApiResult<Value> {
     let (job, _) = load_job(h, &row.s("job_id")).await?;
     let cfg = config::scoring(h).await?.cfg;
-    let limits = cfg.rules.speed.limits(job.game);
+    // The job's own limits: a road trip's or a coach's.
+    let (penalty_over_mph, invalid_over_mph) = cfg.rules.speed.limits_for(job.game, job.info.fingerprint.route.job_type);
     let (Some(first), Some(last)) = (job.kept.first(), job.kept.last()) else {
         return Ok(json!({"job_id": row.s("job_id"), "game": row.s("game"), "bucket_s": 0.0,
-            "penalty_over_mph": limits.penalty_over_mph, "invalid_over_mph": limits.invalid_over_mph,
+            "penalty_over_mph": penalty_over_mph, "invalid_over_mph": invalid_over_mph,
             "points": [], "windows": [], "markers": []}));
     };
     let span = (last.wall_ms - first.wall_ms).max(1);
@@ -475,7 +476,7 @@ pub async fn series_json<H: Host>(h: &H, row: &Row, max_points: usize, public: b
     };
     Ok(json!({
         "job_id": row.s("job_id"), "game": row.s("game"), "bucket_s": r2(bucket_ms / 1000.0),
-        "penalty_over_mph": limits.penalty_over_mph, "invalid_over_mph": limits.invalid_over_mph,
+        "penalty_over_mph": penalty_over_mph, "invalid_over_mph": invalid_over_mph,
         "points": points, "windows": windows, "markers": markers,
     }))
 }

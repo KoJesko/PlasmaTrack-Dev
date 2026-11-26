@@ -61,6 +61,7 @@
   },
   "origin": "tracked",
   "outcome": "valid",
+  "passenger_satisfaction": null,
   "planned_distance_km": 70,
   "player": {
     "discord_user_id": "123456789012345678",

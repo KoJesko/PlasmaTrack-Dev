@@ -29,6 +29,7 @@
       },
       "origin": "manual",
       "outcome": "approved",
+      "passenger_satisfaction": null,
       "points": 14.4,
       "reported_delivered_at": "2026-10-14T08:20:00.000Z",
       "source": {
@@ -72,6 +73,7 @@
       },
       "origin": "tracked",
       "outcome": "pending_review",
+      "passenger_satisfaction": null,
       "points": null,
       "reported_delivered_at": "2026-10-14T01:29:53.859Z",
       "source": {
@@ -116,6 +118,7 @@
       },
       "origin": "tracked",
       "outcome": "approved",
+      "passenger_satisfaction": null,
       "points": 90.3,
       "reported_delivered_at": "2026-10-14T01:03:43.006Z",
       "source": {

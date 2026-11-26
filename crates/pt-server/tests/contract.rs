@@ -122,6 +122,30 @@ fn infer(v: &Value) -> Value {
     }
 }
 
+/// Field notes the examples cannot show (the Markdown stays authoritative):
+/// added to every inferred property of that name, after merging.
+const FIELD_NOTES: &[(&str, &str)] = &[
+    ("job_type", "freight (truck), car (ATS road trip) or bus (ETS2 coach job); null for manual jobs. Treat unknown values as other (API_CONVENTIONS §1). PUBLIC_API §3."),
+    ("market", "The game's market. Freight: job.market (cargo_market, freight_market, quick_job, external_contracts...). Road trip: car_job.market. Coach: bus_job.market, company_job (a coach line) or tourist_job (a tourist trip, often a round trip). Null for manual jobs. PUBLIC_API §3."),
+    ("passenger_satisfaction", "Coach jobs (job_type bus) only: the passengers' satisfaction at the end, 0-1 (show as a percentage). Coach points = distance points x the coach factor (1.0725) x this, then any bonus. Null for every other job and until the coach job is completed. PUBLIC_API §3."),
+];
+
+fn described(mut s: Value) -> Value {
+    if let Some(props) = s.get_mut("properties").and_then(Value::as_object_mut) {
+        for (k, v) in props.iter_mut() {
+            let mut d = described(std::mem::take(v));
+            if let Some((_, note)) = FIELD_NOTES.iter().find(|(name, _)| name == k) {
+                d["description"] = (*note).into();
+            }
+            *v = d;
+        }
+    }
+    if let Some(items) = s.get_mut("items") {
+        *items = described(std::mem::take(items));
+    }
+    s
+}
+
 fn types(s: &Value) -> Vec<Value> {
     match &s["type"] {
         Value::Array(a) => a.clone(),
@@ -335,6 +359,15 @@ fn scenario(t: &TestHost) -> (Vec<(Call, Value)>, BTreeMap<String, Value>) {
     r.call("admin_audit", "Audit", "The audit log, newest first", "GET", "/api/v1/admin/audit", &format!("/api/v1/admin/audit?job_id={pending}"), None, Admin, 200);
     r.call("error_unauthorized", "Public", "", "GET", "/api/v1/public/{game}/leaderboard", "/api/v1/public/ets2/leaderboard?cursor=", None, Player, 401);
 
+    // A coach job (ETS2 Coaches DLC): a singleplayer tourist round trip, by a
+    // third player, last so that no example above changes.
+    let coach = link_other(t, "567890123456789012", "Coach Driver");
+    upload(t, &coach, &fixture("ets2-coach-tourist-job-sp.jsonl.gz"), 2000);
+    let id = t.q("SELECT user_id FROM users WHERE discord_user_id = '567890123456789012'")[0]["user_id"].as_str().unwrap().to_string();
+    block_on(t.scorer(&id, Game::Ets2).process(t)).unwrap();
+    let bus = job(&format!("SELECT job_id FROM jobs WHERE user_id = '{id}'"));
+    r.call("public_job_coach", "Public", "", "GET", "/api/v1/public/jobs/{job_id}", &format!("/api/v1/public/jobs/{bus}"), None, Read, 200);
+
     // Webhook bodies, one per type the scenario produced.
     let mut hooks = BTreeMap::new();
     for row in t.q("SELECT type, body FROM webhook_outbox ORDER BY created_at, event_id") {
@@ -410,7 +443,7 @@ fn openapi(calls: &[(Call, Value)], hooks: &BTreeMap<String, Value>) -> Value {
             let schema = if c.status >= 400 {
                 json!({"$ref": "#/components/schemas/Error"})
             } else {
-                schemas[&(c.template.to_string(), c.method.to_lowercase(), c.status)].clone()
+                described(schemas[&(c.template.to_string(), c.method.to_lowercase(), c.status)].clone())
             };
             let media = if c.template.ends_with("/route") && c.status == 200 { "application/geo+json" } else { "application/json" };
             op["responses"][&status] = json!({"description": format!("See docs/examples/{}.json", c.name),
@@ -429,7 +462,7 @@ fn openapi(calls: &[(Call, Value)], hooks: &BTreeMap<String, Value>) -> Value {
                 {"name": "X-PlasmaTrack-Event-Id", "in": "header", "required": true, "schema": {"type": "string"}},
                 {"name": "X-PlasmaTrack-Signature", "in": "header", "required": true, "schema": {"type": "string"},
                  "description": "t=<unix seconds>,v1=<hex HMAC-SHA256 of \"{t}.{raw body}\">[,v1=…]"}],
-            "requestBody": {"content": {"application/json": {"schema": infer(body),
+            "requestBody": {"content": {"application/json": {"schema": described(infer(body)),
                 "examples": {"example": {"externalValue": format!("../examples/webhook_{}.json", ty.replace('.', "_"))}}}}},
             "responses": {"202": {"description": "Queued by the bot"}}}}));
     }

@@ -31,6 +31,7 @@ fn upload_score_and_read_a_real_delivery() {
     assert!(j["distance_by_scale_class"]["road"]["world_mi"].as_f64().unwrap() > 0.0);
     assert!(j["source"]["city_name"].as_str().is_some_and(|s| !s.is_empty()), "{j}");
     assert!(j["delivered_at"].as_str().unwrap().ends_with('Z'));
+    assert_eq!((j["job_type"].as_str(), j["passenger_satisfaction"].clone()), (Some("freight"), Value::Null), "only coaches have one");
     for hidden in ["reasons", "detail", "segments", "timeline"] {
         assert!(j.get(hidden).is_none(), "{hidden} must stay admin-only");
     }
@@ -101,6 +102,36 @@ fn haulmp_jobs_are_labelled_and_left_out_of_the_singleplayer_division() {
     let a = t.call(t.admin("GET", &format!("/api/v1/admin/jobs/{job_id}"))).body_json();
     let reason = a["reasons"].as_array().unwrap().iter().find(|r| r["code"] == "singleplayer_division_multiplayer_mod").cloned();
     assert_eq!(reason.map(|r| r["details"].clone()), Some(json!({"kind": "haulmp", "name": "HaulMP"})), "{a}");
+}
+
+/// A coach job (ETS2 Coaches DLC) as the bot reads it: `job_type` `bus`, the
+/// game's market, first stop to last stop (a tourist round trip ends where it
+/// began), the passengers' satisfaction, and the coach speed limits (81 / 100
+/// mph) wherever limits are shown.
+#[test]
+fn coach_jobs_read_as_coach_jobs() {
+    let t = TestHost::new();
+    publish(&t);
+    let token = link(&t);
+    upload(&t, &token, &fixture("ets2-coach-tourist-job-sp.jsonl.gz"), 2000);
+    assert_eq!(score(&t, Game::Ets2).jobs_stored, 1);
+    let job_id = t.q("SELECT job_id FROM jobs")[0]["job_id"].as_str().unwrap().to_string();
+    let j = t.call(t.bot("GET", &format!("/api/v1/public/jobs/{job_id}"))).body_json();
+    assert_eq!((j["outcome"].as_str(), j["job_type"].as_str(), j["market"].as_str()), (Some("valid"), Some("bus"), Some("tourist_job")), "{j}");
+    assert_eq!(j["cargo"], json!({"id": "passengers", "name": "Passengers"}));
+    assert_eq!(j["source"], json!({"city_id": "umea", "city_name": "Umeå", "company_id": "city", "company_name": ""}));
+    assert_eq!(j["destination"], j["source"], "a round trip");
+    assert_eq!(j["passenger_satisfaction"], 1.0);
+    assert_eq!(j["speed_penalty_applied"], false);
+    // The list carries it too.
+    let l = t.call(t.bot("GET", &format!("/api/v1/public/ets2/players/{PLAYER}/jobs"))).body_json();
+    assert_eq!(l["items"][0]["passenger_satisfaction"], 1.0, "{l}");
+
+    // The coach limits, not the ETS2 truck limits (100 / 150 mph).
+    let a = t.call(t.admin("GET", &format!("/api/v1/admin/jobs/{job_id}"))).body_json();
+    assert_eq!((a["speed"]["penalty_over_mph"].as_f64(), a["speed"]["invalid_over_mph"].as_f64()), (Some(81.0), Some(100.0)), "{}", a["speed"]);
+    let s = t.call(t.bot("GET", &format!("/api/v1/public/jobs/{job_id}/series?max_points=20"))).body_json();
+    assert_eq!((s["penalty_over_mph"].as_f64(), s["invalid_over_mph"].as_f64()), (Some(81.0), Some(100.0)));
 }
 
 #[test]

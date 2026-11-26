@@ -801,6 +801,13 @@ fn build<P, R: Resolve<P> + ?Sized>(
         // Only on such jobs, so other jobs' stored summaries stay the same.
         summary["fuel_readable"] = false.into();
     }
+    if route.job_type == JobType::Bus {
+        // Coach jobs only, for the same reason; `summary_json` gives every
+        // other job `null`. The value the scoring used (`coach_points`):
+        // clamped into 0..=1, NaN as 0; `null` until `bus_job.completed`.
+        let s = job.delivered.as_ref().and_then(|x| x.passenger_satisfaction);
+        summary["passenger_satisfaction"] = s.map(|s| if s.is_nan() { 0.0 } else { s.clamp(0.0, 1.0) }).into();
+    }
 
     // Reasons: review reasons, then invalid and discard.
     let mut reasons: Vec<Value> = r.review.iter().map(|x| reason(x.code(), review_details(x, job, cfg))).collect();
@@ -809,11 +816,12 @@ fn build<P, R: Resolve<P> + ?Sized>(
         let failed: Vec<Value> = trace_list.iter().filter(|c| c["ok"] == false).cloned().collect();
         reasons.push(reason("trace_check", json!({"checks": failed})));
     }
-    let limits = cfg.rules.speed.limits(job.game);
+    // The job's own limits: a road trip's or a coach's (`limits_for`).
+    let (penalty_over_mph, invalid_over_mph) = cfg.rules.speed.limits_for(job.game, route.job_type);
     if r.speed.invalid {
         reasons.push(reason(
             "overspeed_invalid",
-            json!({"peak_mph": round2(r.speed.peak_mph), "over_invalid_s": round2(r.speed.over_invalid_s), "invalid_over_mph": limits.invalid_over_mph}),
+            json!({"peak_mph": round2(r.speed.peak_mph), "over_invalid_s": round2(r.speed.over_invalid_s), "invalid_over_mph": invalid_over_mph}),
         ));
     }
     let discard = r.discard.as_ref().map(|x| match x {
@@ -873,7 +881,7 @@ fn build<P, R: Resolve<P> + ?Sized>(
         },
         "speed": {"peak_mph": round2(r.speed.peak_mph), "over_penalty_s": round2(r.speed.over_penalty_s),
                   "over_invalid_s": round2(r.speed.over_invalid_s),
-                  "penalty_over_mph": limits.penalty_over_mph, "invalid_over_mph": limits.invalid_over_mph},
+                  "penalty_over_mph": penalty_over_mph, "invalid_over_mph": invalid_over_mph},
         "fuel": {"used_l": fuel.map(round2), "refuels": refuels},
         "rules": rules,
         "integrity": integ,
@@ -1388,7 +1396,7 @@ pub fn summary_json(row: &Row) -> Value {
     out.insert("delivered_at".into(), util::opt_rfc3339(row.opt_i("delivered_at")));
     out.insert("reported_delivered_at".into(), util::opt_rfc3339(row.opt_i("reported_delivered_at")));
     out.insert("multiplayer".into(), o.remove("multiplayer").unwrap_or(Value::Null));
-    for k in ["fuel_used_l", "damage_pct", "income"] {
+    for k in ["fuel_used_l", "damage_pct", "income", "passenger_satisfaction"] {
         out.insert(k.into(), o.remove(k).unwrap_or(Value::Null));
     }
     // Only when false: the fuel readings were beyond any tank (a save edit),

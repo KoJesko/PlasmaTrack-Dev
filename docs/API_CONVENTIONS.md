@@ -276,3 +276,22 @@ These answer the bot's open questions "(Q)". **The project owner confirmed all o
   stored as delivered keeps its outcome, points and data, and sends no `job.scored` and no
   `player.notification` again. New rules apply to jobs not stored yet, to jobs still being
   driven, and to jobs a moderator recalculates (ADMIN_API §8) or edits.
+- 2026-11-25 (owner): ETS2 coach jobs (Coaches DLC) are tracked and scored (PUBLIC_API §3,
+  "Coach jobs").
+  - **New `job_type` value `bus`**, next to `freight` and `car`. Its `market` is `bus_job.market`:
+    `company_job` (a coach line) or `tourist_job` (a tourist trip).
+  - **`source` / `destination`** are the first and last stop (`company_name` is `""`,
+    `company_id` the stop type). A tourist round trip has the same stop at both ends.
+  - **New field `passenger_satisfaction`** on every job summary and detail: 0–1 on a coach job,
+    `null` on every other job. Cargo is `passengers` / `Passengers` and `damage_pct` is `null`.
+  - **Points:** distance points × 1.0725 (`coach_points_factor`) × `passenger_satisfaction`, then
+    the bonus on top.
+  - **Speed limits:** a coach gets the penalty over 81 mph and is invalid over 100 mph
+    (`[rules.speed.ets2.coach]` to change). The speed-penalty and invalid-delivery notifications
+    (WEBHOOKS §4) quote these. The admin detail's `speed`, the `overspeed_invalid` reason and both
+    series now give the job's own limits for road trips and coach jobs too; before, they always
+    gave the game's truck limits.
+  - **Abandoned** coach jobs score nothing and cost nothing; **failed** ones (game.log) stay on the
+    player's PC. Neither is listed.
+  - New example `docs/examples/public_job_coach.json`; `bot-api.yaml` describes `job_type`,
+    `market` and `passenger_satisfaction`.
