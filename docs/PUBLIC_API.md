@@ -585,6 +585,9 @@ Bot token.
 ```
 
 - **Which setup:** the newest offered release that has one.
+- **`platform=linux`:** the newest unrevoked Linux package (`…-linux-x86_64.tar.gz`). Linux
+  releases have no update, so they are never "offered". There is no Linux uninstaller link
+  (`uninstall.sh` is in the package).
 - **The link** works for **one hour** and needs no token. Show it privately. After it expires
   the server answers `403` ("Ask the Discord bot for a new one").
 - **Accounts:** it does not create the player.

@@ -1,6 +1,6 @@
 # Client updates
 
-PlasmaTrack keeps itself up to date. Players install once with PlasmaTrack Setup; after that,
+On Windows, PlasmaTrack keeps itself up to date (Linux: see "Linux" below). Players install once with PlasmaTrack Setup; after that,
 every new release installs itself the next time ETS2 and ATS are both closed.
 
 ## What the player sees
@@ -115,6 +115,7 @@ roles as for using the bot.
 | What | Who may download it |
 |---|---|
 | Setup program | Whoever holds a personal link, valid for one hour |
+| Linux package (`.tar.gz`) | Whoever holds a personal link, valid for one hour |
 | Update files (`.gz`) | A client with a player token |
 | Uninstaller (`PlasmaTrack-Uninstall.exe`) | Anyone, at `/dl/uninstall` |
 
@@ -135,3 +136,48 @@ Setup's Uninstall button and `plasmatrack-client uninstall` do the same.
 
 **SmartScreen.** Neither program is code-signed, so Windows SmartScreen warns on first run. Updates
 downloaded by the client do not trigger SmartScreen.
+
+A release's `installer` is served through the personal link whatever its extension. The server
+matches the file against the release row, so a Linux `.tar.gz` is not treated as an update file.
+
+## Linux
+
+Linux players (ETS2/ATS under Proton) get a package, not a setup program:
+`PlasmaTrack-<version>-linux-x86_64.tar.gz`, from `/download platform:linux`.
+
+**Players must run the published client.** Rule 0 compares the client binary's SHA-256 with the
+published releases. A client they build themselves has another hash, so its jobs are discarded
+(`integrity`), and discarded jobs cannot be approved.
+
+The package holds the stripped client, the Windows release's `plasmatrack.dll`, the shipped
+config, a systemd user unit, `install.sh` and `uninstall.sh` (`packaging/linux/`).
+- `install.sh` takes the server URL and token, writes the config (0600), copies the plugin into
+  every game found and enables the user service. Running a newer package's `install.sh` upgrades.
+- `uninstall.sh` stops the service and removes the plugin and program; `--delete-data` also
+  removes local data and the token.
+- **No self-update**, so a Linux release has no update manifest and is never offered. It is
+  downloadable as soon as it is published. To withdraw one, revoke it (ADMIN_API §11). Jobs
+  from a revoked release are discarded from the revocation's effective time.
+- **The native Linux game build is not covered.** `plasmatrack.so` currently exports no symbols,
+  so the package leaves it out; play with Proton.
+
+### Publishing a Linux release
+
+Publish the Windows release of that version first: the package takes its plugin DLL from
+`installer/payload`.
+
+1. Deploy the server, if it changed (docs/SERVER.md).
+2. Build once: `scripts/package-linux.sh`. It builds the client in a Docker container on an old
+   distribution (needs Docker) and refuses a binary that needs a glibc newer than 2.35.
+3. Publish to test with the upload, then to production without it:
+
+   ```sh
+   node scripts/publish-linux.mjs --env test --url https://plasmatrack-server-test.jansherremway.workers.dev \
+     --actor <admin Discord ID> --upload --notes "What changed, for players"
+   ```
+
+   It registers the hashes from the package itself, publishes the config only if the server does
+   not have it, and downloads the package through a personal link to check it.
+
+Keep `installer/dist/linux-<version>/`: a published release cannot change, and a rebuild may not
+give the same bytes. A fix needs a new version.

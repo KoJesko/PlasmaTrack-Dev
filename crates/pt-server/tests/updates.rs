@@ -207,3 +207,68 @@ fn an_update_must_be_signed_complete_and_match_the_release() {
     // All good.
     assert_eq!(publish(&t, "0.2.0", &b, json!({})).status, 201);
 }
+
+/// A Linux package in the bucket and its release: no update, nothing offered.
+fn publish_linux(t: &TestHost, version: &str) -> (String, Response) {
+    let name = format!("PlasmaTrack-{version}-linux-x86_64.tar.gz");
+    t.releases.borrow_mut().insert(format!("linux/{version}/{name}"), b"package".to_vec());
+    t.advance(1000);
+    let r = t.call(t.admin("POST", "/api/v1/admin/releases").with_json(&json!({
+        "release_version": version, "platform": "linux", "installer": name, "offer": false, "reason": "Linux package",
+        "files": [{"role": "client_binary", "path_pattern": "*/plasmatrack-client", "sha256": "ab".repeat(32)}],
+    })));
+    (name, r)
+}
+
+#[test]
+fn a_linux_package_is_downloaded_through_a_personal_link() {
+    let t = TestHost::new();
+    assert_eq!(t.call(t.bot("GET", "/api/v1/players/555/client-download?platform=linux")).status, 404);
+    let (name, r) = publish_linux(&t, "0.2.6");
+    assert_eq!(r.status, 201, "{}", r.body_json());
+    assert_eq!((r.body_json()["installer"].as_str(), r.body_json()["offered"].as_bool()), (Some(name.as_str()), Some(false)));
+
+    let d = t.call(t.bot("GET", "/api/v1/players/555/client-download?platform=linux")).body_json();
+    assert_eq!((d["version"].as_str(), d["file_name"].as_str(), d["bytes"].as_u64()), (Some("0.2.6"), Some(name.as_str()), Some(7)));
+    let url = d["url"].as_str().unwrap().trim_start_matches("https://pt.example").to_string();
+    let f = anyone(&t, &url);
+    assert_eq!(f.status, 200, "{}", f.body_json());
+    assert_eq!(header(&f, STREAM_HEADER), Some(format!("linux/0.2.6/{name}").as_str()));
+    assert_eq!(header(&f, "content-type"), Some("application/gzip"));
+    assert!(header(&f, "content-disposition").unwrap().contains(&name));
+    assert_eq!(header(&f, "cache-control"), Some("private, no-store"));
+    // Without the link: refused, and a player token does not replace it.
+    let bare = format!("/dl/releases/linux/0.2.6/{name}");
+    assert_eq!(anyone(&t, &bare).status, 403);
+    assert_eq!(client(&t, &bare).status, 403);
+    // Another .gz in the same folder is still an update file.
+    t.releases.borrow_mut().insert("linux/0.2.6/plasmatrack-client.gz".into(), b"x".to_vec());
+    assert_eq!(anyone(&t, "/dl/releases/linux/0.2.6/plasmatrack-client.gz").status, 401);
+
+    let l = t.call(t.bot("GET", "/api/v1/public/client?platform=linux")).body_json();
+    assert_eq!((l["version"].as_str(), l["installer"]["file_name"].as_str()), (Some("0.2.6"), Some(name.as_str())));
+    assert_eq!(l["uninstaller"], Value::Null, "uninstall.sh is inside the package");
+    assert_eq!(anyone(&t, "/dl/uninstall/linux").status, 404);
+    assert_eq!(client(&t, "/api/v1/client/update?platform=linux&version=0.1.0").body_json()["update"], Value::Null);
+    assert_eq!(t.call(t.bot("GET", "/api/v1/players/555/client-download")).status, 404, "not a Windows release");
+
+    // Revoking withdraws it.
+    t.advance(1000);
+    let r = t.call(t.admin("POST", "/api/v1/admin/revocations").with_json(&json!({"target": {"kind": "release", "id": "rel_0_2_6_linux"}, "reason": "Bad build"})));
+    assert_eq!(r.status, 201, "{}", r.body_json());
+    assert_eq!(t.call(t.bot("GET", "/api/v1/players/555/client-download?platform=linux")).status, 404);
+}
+
+#[test]
+fn installer_names_follow_the_platform() {
+    let t = TestHost::new();
+    for (platform, name) in [("linux", "x.gz"), ("linux", "x.exe"), ("windows", "x.tar.gz"), ("windows", "PlasmaTrack-Uninstall.exe")] {
+        t.releases.borrow_mut().insert(format!("{platform}/0.2.6/{name}"), b"x".to_vec());
+        t.advance(1000);
+        let r = t.call(t.admin("POST", "/api/v1/admin/releases").with_json(&json!({
+            "release_version": "0.2.6", "platform": platform, "installer": name, "reason": "Bad name",
+            "files": [{"role": "client_binary", "path_pattern": "*/x", "sha256": "ab".repeat(32)}],
+        })));
+        assert_eq!(r.status, 422, "{platform} {name}: {}", r.body_json());
+    }
+}

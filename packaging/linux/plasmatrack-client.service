@@ -1,0 +1,11 @@
+[Unit]
+Description=PlasmaTrack client (receives the ETS2/ATS plugin's telemetry, uploads jobs)
+
+[Service]
+ExecStart="%h/.local/share/plasmatrack/bin/plasmatrack-client" run
+ExecStop="%h/.local/share/plasmatrack/bin/plasmatrack-client" stop
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=default.target

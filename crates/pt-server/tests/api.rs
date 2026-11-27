@@ -451,3 +451,34 @@ fn signed_links_are_refused_without_a_download_secret() {
         assert_eq!(r.status, 403, "{p}: {}", r.body_json());
     }
 }
+
+/// Rule 0 for a Linux player: the published client binary and the Windows
+/// plugin under Proton pass; a self-built client stays discarded.
+#[test]
+fn a_linux_client_passes_only_with_the_published_binary() {
+    use pt_core::upload::ManifestEntry;
+    let published = "cc33".repeat(16);
+    for (sha, expected, outcome) in [(published.clone(), "ok", false), ("dd44".repeat(16), "unmatched", true)] {
+        let t = TestHost::new();
+        publish(&t);
+        t.advance(1000);
+        let r = t.call(t.admin("POST", "/api/v1/admin/releases").with_json(&json!({
+            "release_version": "0.2.6", "platform": "linux", "reason": "Linux package",
+            "files": [{"role": "client_binary", "path_pattern": "*/plasmatrack-client", "sha256": published}]})));
+        assert_eq!(r.status, 201, "{}", r.body_json());
+        // The plugin is the same DLL the Windows release lists, in a Proton library.
+        let steam = "/home/x/.local/share/Steam/steamapps/common/American Truck Simulator/bin/win_x64/plugins/plasmatrack.dll";
+        let manifest = vec![
+            ManifestEntry { role: "plugin".into(), path: steam.into(), sha256: PLUGIN_SHA.into() },
+            ManifestEntry { role: "client_binary".into(), path: "/home/x/.local/share/plasmatrack/bin/plasmatrack-client".into(), sha256: sha },
+        ];
+        let token = link(&t);
+        upload_with(&t, &token, &fixture("ats-chicago-clean-delivery.jsonl.gz"), 400, manifest);
+        assert_eq!(score(&t, Game::Ats).jobs_stored, 1);
+        let job_id = t.q("SELECT job_id FROM jobs")[0]["job_id"].as_str().unwrap().to_string();
+        let d = t.call(t.admin("GET", &format!("/api/v1/admin/jobs/{job_id}"))).body_json();
+        assert_eq!(d["integrity"]["manifest_result"], expected, "{}", d["integrity"]);
+        assert_eq!(d["integrity"]["manifest"][0]["matched_release"], "rel_0_1_0_windows");
+        assert_eq!(d["outcome"] == "discarded", outcome, "{d}");
+    }
+}

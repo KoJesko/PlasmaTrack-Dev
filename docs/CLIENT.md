@@ -29,8 +29,9 @@ plasmatrack-client run
 Both can be overridden with `--config PATH` and `--data-dir PATH`.
 
 On Linux the config is written owner-only (0600), since it holds the player token (0.2.6).
-Linux has no installer or self-update: run `plasmatrack-client run` yourself, for example as a
-systemd user service. The Windows plugin DLL runs under Proton and reaches the native client
+Linux players install the published package (`/download platform:linux`; docs/UPDATES.md,
+"Linux"), which runs the client as a systemd user service. A self-built client's jobs are
+discarded (rule 0). There is no self-update. The Windows plugin DLL runs under Proton and reaches the native client
 over loopback.
 
 **Only `[local]` may be edited per driver.** Every other key must match a config version the

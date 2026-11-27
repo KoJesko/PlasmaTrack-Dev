@@ -1,6 +1,7 @@
 # Installing the plugin
 
-On Windows, **PlasmaTrack Setup** (`installer/README.md`) does these steps. So does
+On Windows, **PlasmaTrack Setup** (`installer/README.md`) does these steps. On Linux, the
+release package's `install.sh` does (docs/UPDATES.md, "Linux"). So does
 `plasmatrack-client install-plugin --plugin PATH` on any OS. This page is the manual
 route, and the reference for where things go.
 
