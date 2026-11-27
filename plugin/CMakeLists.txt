@@ -50,7 +50,9 @@ if(WIN32)
     target_link_options(plasmatrack_telemetry PRIVATE -static-libgcc -static-libstdc++)
   endif()
 else()
-  target_compile_options(plasmatrack_telemetry PRIVATE -fvisibility=hidden)
+  # The version script alone limits the exports. No -fvisibility=hidden: the SDK
+  # headers declare the entry points without a visibility attribute, and a version
+  # script cannot export a symbol the compiler has already hidden.
   target_link_options(plasmatrack_telemetry PRIVATE
     -static-libstdc++ -static-libgcc
     "-Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/plasmatrack.map")

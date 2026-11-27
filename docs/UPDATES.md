@@ -158,8 +158,8 @@ config, a systemd user unit, `install.sh` and `uninstall.sh` (`packaging/linux/`
 - **No self-update**, so a Linux release has no update manifest and is never offered. It is
   downloadable as soon as it is published. To withdraw one, revoke it (ADMIN_API §11). Jobs
   from a revoked release are discarded from the revocation's effective time.
-- **The native Linux game build is not covered.** `plasmatrack.so` currently exports no symbols,
-  so the package leaves it out; play with Proton.
+- **The native Linux game build is not covered.** The package leaves `plasmatrack.so` out: it is
+  untested in a real native game and needs an old-glibc build (docs/BUILD.md). Play with Proton.
 
 ### Publishing a Linux release
 

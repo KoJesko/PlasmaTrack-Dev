@@ -76,7 +76,9 @@ scripts/build-plugin.sh linux     # plugin/build-linux/plasmatrack.so
 
 - Exports are restricted to the two SDK entry points (`plugin/plasmatrack.map`).
 - libstdc++ and libgcc are linked statically.
-- **Not yet verified** for the same reason as the cross-build.
+- The unit tests and the fake-game harness pass. **Not yet verified** in a real native game.
+- The `.so` needs at least the glibc of the machine that built it, so a release build needs an
+  old-glibc image. It is not part of the Linux release package.
 
 ## Release checklist (plugin)
 
