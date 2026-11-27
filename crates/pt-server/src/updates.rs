@@ -2,7 +2,8 @@
 //! signed update manifest is offered to clients; its files, the setup program
 //! and the uninstaller are in the release bucket. Only the uninstaller is
 //! public: updates need a player token, the setup a personal link the bot asks
-//! for (owner, 2026-10-15: only some Discord roles may download the tracker). The server checks the signature when the
+//! for (owner, 2026-10-15: only some Discord roles may download the tracker). Linux has no self-update: a Linux release
+//! is a package (`.tar.gz`) behind the same personal link, with no update. The server checks the signature when the
 //! release is published but cannot sign anything itself: the key stays with the
 //! maintainer, and clients verify again before installing.
 
@@ -42,8 +43,13 @@ pub async fn check<H: Host>(h: &H, body: &Value, version: &str, platform: &str, 
     }
     let installer = text("installer");
     if let Some(name) = &installer {
-        if !file_name_ok(name) || !name.to_ascii_lowercase().ends_with(".exe") && platform == "windows" {
-            return Err(invalid("installer", "a file name such as PlasmaTrack-Setup-0.2.0.exe".into()));
+        let (suffix, example) = match platform {
+            "linux" => (".tar.gz", "PlasmaTrack-0.2.0-linux-x86_64.tar.gz"),
+            _ => (".exe", "PlasmaTrack-Setup-0.2.0.exe"),
+        };
+        // The uninstaller is public, so a setup program must not take its name.
+        if !file_name_ok(name) || !name.to_ascii_lowercase().ends_with(suffix) || name == UNINSTALLER {
+            return Err(invalid("installer", format!("a file name such as {example}")));
         }
         let key = format!("{platform}/{version}/{name}");
         if h.release_size(&key).await?.is_none() {
@@ -109,13 +115,15 @@ pub fn release_extras(r: &Row) -> Value {
     })
 }
 
-/// Offered releases for a platform that nothing revokes (a scheduled
+/// Releases for a platform matching `filter` that nothing revokes (a scheduled
 /// revocation counts: a release on its way out is not handed out), newest first.
-async fn offered<H: Host>(h: &H, platform: &str) -> ApiResult<Vec<Row>> {
+async fn releases<H: Host>(h: &H, platform: &str, filter: &str) -> ApiResult<Vec<Row>> {
     let mut rows = h
         .all(
-            "SELECT * FROM releases WHERE platform = ?1 AND offered = 1 AND update_manifest IS NOT NULL
-             AND release_id NOT IN (SELECT target_id FROM revocations WHERE target_kind = 'release' AND cancelled_at IS NULL)",
+            &format!(
+                "SELECT * FROM releases WHERE platform = ?1 AND {filter}
+                 AND release_id NOT IN (SELECT target_id FROM revocations WHERE target_kind = 'release' AND cancelled_at IS NULL)"
+            ),
             params![platform],
         )
         .await?;
@@ -123,8 +131,18 @@ async fn offered<H: Host>(h: &H, platform: &str) -> ApiResult<Vec<Row>> {
     Ok(rows)
 }
 
+/// Releases whose update is pushed to clients.
+const OFFERED: &str = "offered = 1 AND update_manifest IS NOT NULL";
+
+/// Releases new players may download: the offered ones, and Linux packages,
+/// which have no update to offer (revoke one to withdraw it).
+async fn downloadable<H: Host>(h: &H, platform: &str) -> ApiResult<Vec<Row>> {
+    let filter = format!("({OFFERED} OR (platform = 'linux' AND update_manifest IS NULL AND installer IS NOT NULL))");
+    releases(h, platform, &filter).await
+}
+
 async fn newest<H: Host>(h: &H, platform: &str) -> ApiResult<Option<Row>> {
-    Ok(offered(h, platform).await?.into_iter().next())
+    Ok(downloadable(h, platform).await?.into_iter().next())
 }
 
 fn platform_of(req: &Request) -> ApiResult<String> {
@@ -142,7 +160,7 @@ pub async fn client_update<H: Host>(h: &H, req: &Request) -> ApiResult<Response>
     auth::player(h, req).await?;
     let platform = platform_of(req)?;
     let current = req.q("version").and_then(update::parse_version).ok_or_else(|| ApiError::bad_request("version is like 0.2.1"))?;
-    let offer = newest(h, &platform).await?.filter(|r| update::parse_version(&r.s("release_version")) > Some(current));
+    let offer = releases(h, &platform, OFFERED).await?.into_iter().next().filter(|r| update::parse_version(&r.s("release_version")) > Some(current));
     let body = match offer {
         Some(r) => json!({"update": {
             "release_id": r.s("release_id"),
@@ -173,10 +191,10 @@ fn release_sig<H: Host>(h: &H, key: &str, exp_s: i64) -> String {
     util::hex(&util::hmac_sha256(h.settings().download_secret.as_bytes(), format!("release.{key}.{exp_s}").as_bytes()))
 }
 
-/// The newest offered release whose folder holds the file `name` picks, with
+/// The newest downloadable release whose folder holds the file `name` picks, with
 /// that file's name and size.
 async fn newest_with<H: Host>(h: &H, platform: &str, name: impl Fn(&Row) -> Option<String>) -> ApiResult<Option<(Row, String, u64)>> {
-    for r in offered(h, platform).await? {
+    for r in downloadable(h, platform).await? {
         if let Some(n) = name(&r) {
             if let Some(size) = h.release_size(&format!("{platform}/{}/{n}", r.s("release_version"))).await? {
                 return Ok(Some((r, n, size)));
@@ -266,11 +284,27 @@ pub fn content_type(key: &str) -> &'static str {
     }
 }
 
+/// Whether `key` is the `installer` of a published release. Decided by the
+/// release row, not the extension: a Linux package ends in `.gz` like the
+/// update files do.
+async fn is_installer<H: Host>(h: &H, key: &str) -> ApiResult<bool> {
+    let mut parts = key.splitn(3, '/');
+    let (Some(platform), Some(version), Some(name)) = (parts.next(), parts.next(), parts.next()) else { return Ok(false) };
+    Ok(store::one(
+        h,
+        "SELECT 1 AS x FROM releases WHERE platform = ?1 AND release_version = ?2 AND installer = ?3",
+        params![platform, version, name],
+    )
+    .await?
+    .is_some())
+}
+
 /// `GET /dl/releases/{platform}/{version}/{path}`. Who may download what:
-/// - update files (`.gz`): a client with a player token;
+/// - a release's `installer` (setup program or Linux package): a personal link
+///   from [`client_download`];
+/// - other `.gz` files (update files): a client with a player token;
 /// - the uninstaller: anyone;
-/// - anything else (the setup program): a personal link from
-///   [`client_download`].
+/// - anything else: a personal link.
 ///
 /// The answer names the object in [`STREAM_HEADER`] with an empty body: the
 /// Worker streams it (setup programs are large), and the native tests read
@@ -278,7 +312,8 @@ pub fn content_type(key: &str) -> &'static str {
 pub async fn file<H: Host>(h: &H, req: &Request, parts: &[&str]) -> ApiResult<Response> {
     let key = release_key(parts).ok_or_else(|| ApiError::not_found("file"))?;
     let name = key.rsplit('/').next().unwrap_or_default().to_string();
-    let cache = if key.ends_with(".gz") {
+    let update_file = key.ends_with(".gz") && !is_installer(h, &key).await?;
+    let cache = if update_file {
         auth::player(h, req).await?;
         "private, max-age=86400"
     } else if name == UNINSTALLER {
@@ -297,7 +332,7 @@ pub async fn file<H: Host>(h: &H, req: &Request, parts: &[&str]) -> ApiResult<Re
     };
     h.release_size(&key).await?.ok_or_else(|| ApiError::not_found("file"))?;
     let mut r = Response::bytes(200, content_type(&key), Vec::new()).with_header("cache-control", cache).with_header(STREAM_HEADER, &key);
-    if !key.ends_with(".gz") {
+    if !update_file {
         r = r.with_header("content-disposition", &format!("attachment; filename=\"{name}\""));
     }
     Ok(r)

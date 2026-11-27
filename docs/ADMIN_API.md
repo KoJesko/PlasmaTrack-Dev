@@ -455,7 +455,7 @@ does not need to send them.
 | Field | Meaning |
 |---|---|
 | `update` | `{"manifest": "<text>", "signature": "<hex>"}`: the release's files, signed with the release key. |
-| `installer` | File name of the setup program in the release bucket, such as `PlasmaTrack-Setup-0.2.0.exe`. |
+| `installer` | File name in the release bucket of what new players download: `PlasmaTrack-Setup-0.2.0.exe` (`windows`, `.exe`) or `PlasmaTrack-0.2.6-linux-x86_64.tar.gz` (`linux`, `.tar.gz`). A Linux release has no `update` (`scripts/publish-linux.mjs`). |
 | `notes` | What changed, for players: at most 2000 characters. |
 | `offer` | Offer the update to clients now. Defaults to `true` when `update` is given. |
 
