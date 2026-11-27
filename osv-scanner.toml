@@ -1,0 +1,6 @@
+# Known advisories that can't be fixed yet. ignoreUntil forces a re-check.
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2026-0543"
+ignoreUntil = 2027-03-01
+reason = "chrono unmaintained notice; no fixed release; pulled in transitively by the worker crate"
